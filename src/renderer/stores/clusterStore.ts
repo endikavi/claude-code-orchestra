@@ -1,0 +1,320 @@
+import { create } from 'zustand';
+import type {
+  ClusterConfig,
+  ClusterStatus,
+  ClusterState,
+  ClusterNode,
+  GlobalProject,
+  GlobalInstance,
+  RemoteInstanceRequest,
+} from '@shared/types/cluster';
+import type { ClaudeInstance } from '@shared/types';
+
+interface ClusterStoreState {
+  // Configuration
+  config: ClusterConfig | null;
+  status: ClusterStatus | null;
+
+  // Cluster state
+  nodes: ClusterNode[];
+  localNodeId: string;
+  globalProjects: GlobalProject[];
+  globalInstances: GlobalInstance[];
+
+  // Connection state
+  isConnected: boolean;
+  isLoading: boolean;
+  error: string | null;
+
+  // Actions
+  loadConfig: () => Promise<void>;
+  updateConfig: (config: Partial<ClusterConfig>) => Promise<void>;
+  loadStatus: () => Promise<void>;
+  startCluster: () => Promise<void>;
+  stopCluster: () => Promise<void>;
+  generateSecret: () => Promise<string | null>;
+  loadGlobalProjects: () => Promise<void>;
+  loadGlobalInstances: () => Promise<void>;
+  createRemoteInstance: (request: RemoteInstanceRequest) => Promise<ClaudeInstance | null>;
+  sendRemoteInput: (instanceId: string, nodeId: string, input: string) => Promise<void>;
+  killRemoteInstance: (instanceId: string, nodeId: string) => Promise<void>;
+
+  // State updates from events
+  handleStateChanged: (state: ClusterState) => void;
+  handleNodeJoined: (node: ClusterNode) => void;
+  handleNodeLeft: (nodeId: string) => void;
+  handleConnected: () => void;
+  handleDisconnected: () => void;
+  handleError: (error: string) => void;
+
+  // Setup listeners
+  setupListeners: () => () => void;
+
+  // Selectors
+  getNodeById: (nodeId: string) => ClusterNode | undefined;
+  getProjectsByNode: (nodeId: string) => GlobalProject[];
+  getInstancesByNode: (nodeId: string) => GlobalInstance[];
+  isClusterEnabled: () => boolean;
+  isPrimary: () => boolean;
+  isSecondary: () => boolean;
+}
+
+export const useClusterStore = create<ClusterStoreState>((set, get) => ({
+  config: null,
+  status: null,
+  nodes: [],
+  localNodeId: '',
+  globalProjects: [],
+  globalInstances: [],
+  isConnected: false,
+  isLoading: false,
+  error: null,
+
+  loadConfig: async () => {
+    try {
+      const config = await window.electronAPI.cluster.getConfig();
+      set({ config, localNodeId: config.nodeId });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load cluster config' });
+    }
+  },
+
+  updateConfig: async (updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const config = await window.electronAPI.cluster.updateConfig(updates);
+      set({ config, isLoading: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to update cluster config',
+        isLoading: false,
+      });
+    }
+  },
+
+  loadStatus: async () => {
+    try {
+      const status = await window.electronAPI.cluster.getStatus();
+      set({
+        status,
+        isConnected: status.connected,
+        nodes: status.nodes,
+        localNodeId: status.localNodeId,
+      });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load cluster status' });
+    }
+  },
+
+  startCluster: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await window.electronAPI.cluster.start();
+      if (result.success && result.status) {
+        set({
+          status: result.status,
+          isConnected: result.status.connected,
+          nodes: result.status.nodes,
+          isLoading: false,
+        });
+      } else {
+        set({ error: result.error || 'Failed to start cluster', isLoading: false });
+      }
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to start cluster',
+        isLoading: false,
+      });
+    }
+  },
+
+  stopCluster: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await window.electronAPI.cluster.stop();
+      if (result.success) {
+        set({
+          isConnected: false,
+          nodes: [],
+          globalProjects: [],
+          globalInstances: [],
+          isLoading: false,
+        });
+      } else {
+        set({ error: result.error || 'Failed to stop cluster', isLoading: false });
+      }
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to stop cluster',
+        isLoading: false,
+      });
+    }
+  },
+
+  generateSecret: async () => {
+    try {
+      const result = await window.electronAPI.cluster.generateSecret();
+      if (result.success && result.secret) {
+        // Reload config to get the new secret
+        await get().loadConfig();
+        return result.secret;
+      }
+      return null;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to generate secret' });
+      return null;
+    }
+  },
+
+  loadGlobalProjects: async () => {
+    try {
+      const globalProjects = await window.electronAPI.cluster.getGlobalProjects();
+      set({ globalProjects });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load global projects' });
+    }
+  },
+
+  loadGlobalInstances: async () => {
+    try {
+      const globalInstances = await window.electronAPI.cluster.getGlobalInstances();
+      set({ globalInstances });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load global instances' });
+    }
+  },
+
+  createRemoteInstance: async (request) => {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await window.electronAPI.cluster.createRemoteInstance(request);
+      set({ isLoading: false });
+      if (result.success && result.data) {
+        // Reload global instances
+        await get().loadGlobalInstances();
+        return result.data;
+      }
+      set({ error: result.error || 'Failed to create remote instance' });
+      return null;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to create remote instance',
+        isLoading: false,
+      });
+      return null;
+    }
+  },
+
+  sendRemoteInput: async (instanceId, nodeId, input) => {
+    try {
+      await window.electronAPI.cluster.sendRemoteInput(instanceId, nodeId, input);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to send remote input' });
+    }
+  },
+
+  killRemoteInstance: async (instanceId, nodeId) => {
+    try {
+      await window.electronAPI.cluster.killRemoteInstance(instanceId, nodeId);
+      // Reload global instances
+      await get().loadGlobalInstances();
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to kill remote instance' });
+    }
+  },
+
+  handleStateChanged: (state) => {
+    set({
+      nodes: state.nodes,
+      localNodeId: state.localNodeId,
+    });
+    // Reload global data
+    void get().loadGlobalProjects();
+    void get().loadGlobalInstances();
+  },
+
+  handleNodeJoined: (node) => {
+    set((state) => ({
+      nodes: [...state.nodes.filter((n) => n.id !== node.id), node],
+    }));
+    // Reload global data
+    void get().loadGlobalProjects();
+    void get().loadGlobalInstances();
+  },
+
+  handleNodeLeft: (nodeId) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => (n.id === nodeId ? { ...n, status: 'offline' as const } : n)),
+    }));
+    // Reload global data
+    void get().loadGlobalProjects();
+    void get().loadGlobalInstances();
+  },
+
+  handleConnected: () => {
+    set({ isConnected: true, error: null });
+    // Reload status and global data
+    void get().loadStatus();
+    void get().loadGlobalProjects();
+    void get().loadGlobalInstances();
+  },
+
+  handleDisconnected: () => {
+    set({ isConnected: false });
+  },
+
+  handleError: (error) => {
+    set({ error });
+  },
+
+  setupListeners: () => {
+    const {
+      handleStateChanged,
+      handleNodeJoined,
+      handleNodeLeft,
+      handleConnected,
+      handleDisconnected,
+      handleError,
+    } = get();
+
+    const unsubStateChanged = window.electronAPI.cluster.onStateChanged(handleStateChanged);
+    const unsubNodeJoined = window.electronAPI.cluster.onNodeJoined(handleNodeJoined);
+    const unsubNodeLeft = window.electronAPI.cluster.onNodeLeft(handleNodeLeft);
+    const unsubConnected = window.electronAPI.cluster.onConnected(handleConnected);
+    const unsubDisconnected = window.electronAPI.cluster.onDisconnected(handleDisconnected);
+    const unsubError = window.electronAPI.cluster.onError(handleError);
+
+    return () => {
+      unsubStateChanged();
+      unsubNodeJoined();
+      unsubNodeLeft();
+      unsubConnected();
+      unsubDisconnected();
+      unsubError();
+    };
+  },
+
+  getNodeById: (nodeId) => {
+    return get().nodes.find((n) => n.id === nodeId);
+  },
+
+  getProjectsByNode: (nodeId) => {
+    return get().globalProjects.filter((p) => p.nodeId === nodeId);
+  },
+
+  getInstancesByNode: (nodeId) => {
+    return get().globalInstances.filter((i) => i.nodeId === nodeId);
+  },
+
+  isClusterEnabled: () => {
+    return get().config?.enabled ?? false;
+  },
+
+  isPrimary: () => {
+    return get().config?.role === 'primary';
+  },
+
+  isSecondary: () => {
+    return get().config?.role === 'secondary';
+  },
+}));

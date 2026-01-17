@@ -1,0 +1,59 @@
+// Type declarations for the Electron API exposed via preload
+// This is imported automatically by TypeScript
+
+import type {
+  Project,
+  ClaudeInstance,
+  ClaudeModel,
+  InstanceMode,
+  ClaudeSettings,
+  McpServer,
+  InstanceStatus,
+  StreamMessage,
+} from '@shared/types';
+
+declare global {
+  interface Window {
+    electronAPI: {
+      project: {
+        create: (data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Project>;
+        update: (project: Project) => Promise<Project>;
+        delete: (id: string) => Promise<void>;
+        getAll: () => Promise<Project[]>;
+        getById: (id: string) => Promise<Project | null>;
+      };
+      instance: {
+        create: (config: {
+          projectId: string;
+          model: ClaudeModel;
+          mode: InstanceMode;
+          planMode?: boolean;
+        }) => Promise<ClaudeInstance>;
+        kill: (id: string) => Promise<void>;
+        sendInput: (id: string, input: string) => Promise<void>;
+        getAll: () => Promise<ClaudeInstance[]>;
+        getByProject: (projectId: string) => Promise<ClaudeInstance[]>;
+        resize: (id: string, cols: number, rows: number) => void;
+        onOutput: (callback: (instanceId: string, data: StreamMessage) => void) => () => void;
+        onStatus: (callback: (instanceId: string, status: InstanceStatus) => void) => () => void;
+        onError: (callback: (instanceId: string, error: string) => void) => () => void;
+        onExit: (callback: (instanceId: string, code: number) => void) => () => void;
+        onRawOutput: (callback: (instanceId: string, data: string) => void) => () => void;
+      };
+      config: {
+        getClaudeSettings: () => Promise<ClaudeSettings | null>;
+        getMcpServers: () => Promise<McpServer[]>;
+      };
+      window: {
+        minimize: () => void;
+        maximize: () => void;
+        close: () => void;
+      };
+      dialog: {
+        selectDirectory: () => Promise<string | null>;
+      };
+    };
+  }
+}
+
+export {};
