@@ -965,6 +965,24 @@ export class ClusterManager extends EventEmitter {
         this.sendToRenderer('instance:rawOutput', instanceId, data);
       }
     });
+
+    this.clientSocket.on('instance:error', (instanceId, nodeId, error) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer('instance:error', instanceId, error);
+      }
+    });
+
+    this.clientSocket.on('instance:exit', (instanceId, nodeId, code) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer('instance:exit', instanceId, code);
+      }
+    });
+
+    this.clientSocket.on('instance:sessionId', (instanceId, nodeId, sessionId) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer('instance:sessionId', instanceId, sessionId);
+      }
+    });
   }
 
   /**
@@ -1309,6 +1327,38 @@ export class ClusterManager extends EventEmitter {
   private sendToRenderer(channel: string, ...args: unknown[]): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, ...args);
+    }
+  }
+
+  /**
+   * Forward instance event to primary node for distribution
+   * Called by ProcessManager when instance events occur on secondary nodes
+   */
+  public forwardInstanceEvent(event: string, instanceId: string, data: unknown): void {
+    if (!this.clientSocket?.connected) {
+      return;
+    }
+
+    // Emit the event to primary node
+    switch (event) {
+      case 'output':
+        this.clientSocket.emit('instance:output', instanceId, data as StreamMessage);
+        break;
+      case 'status':
+        this.clientSocket.emit('instance:status', instanceId, data as InstanceStatus);
+        break;
+      case 'error':
+        this.clientSocket.emit('instance:error', instanceId, data as string);
+        break;
+      case 'exit':
+        this.clientSocket.emit('instance:exit', instanceId, data as number);
+        break;
+      case 'rawOutput':
+        this.clientSocket.emit('instance:rawOutput', instanceId, data as string);
+        break;
+      case 'sessionId':
+        this.clientSocket.emit('instance:sessionId', instanceId, data as string);
+        break;
     }
   }
 

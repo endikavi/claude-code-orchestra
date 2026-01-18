@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useClusterStore } from '../../stores/clusterStore';
 import { useConversationStore } from '../../stores/conversationStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
@@ -22,6 +24,7 @@ export function MainContent() {
   const { t } = useTranslation();
   const { selectedProjectId } = useProjectStore();
   const { selectedInstanceId, getInstancesByProject, selectedShellId } = useInstanceStore();
+  const { globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { viewingConversation } = useConversationStore();
   const {
     viewMode,
@@ -37,7 +40,24 @@ export function MainContent() {
   } = useUIStore();
   const isMobile = useIsMobile();
 
-  const projectInstances = selectedProjectId ? getInstancesByProject(selectedProjectId) : [];
+  // Get instances from local or global instances
+  const projectInstances = useMemo(() => {
+    if (!selectedProjectId) return [];
+
+    // Get local instances for this project
+    const local = getInstancesByProject(selectedProjectId);
+
+    // If cluster is connected, also get global instances for this project
+    if (clusterConnected) {
+      const global = globalInstances.filter((i) => i.projectId === selectedProjectId && !i.isLocal);
+      // Combine, avoiding duplicates (prefer local if same id)
+      const localIds = new Set(local.map((i) => i.id));
+      return [...local, ...global.filter((i) => !localIds.has(i.id))];
+    }
+
+    return local;
+  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances]);
+
   const hasInstances = projectInstances.length > 0;
   const isViewingHistory = viewMode === 'structured' && viewingConversation !== null;
 

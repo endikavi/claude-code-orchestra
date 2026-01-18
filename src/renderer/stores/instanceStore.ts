@@ -150,6 +150,15 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         conversationId?: string;
       } & ClaudeInstance;
 
+      // Check if this is a remote instance placeholder (id: 'pending')
+      // Remote instances are created on another node and will appear via cluster state updates
+      if (instance.id === 'pending') {
+        set({ isLoading: false });
+        // Don't add placeholder to local instances - the real instance will appear
+        // in globalInstances when the cluster state updates
+        return instance;
+      }
+
       // Initialize output storage
       const outputs = new Map(get().outputs);
       outputs.set(instance.id, {

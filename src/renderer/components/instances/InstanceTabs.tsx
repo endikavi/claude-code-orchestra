@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
-import type { InstanceStatus, ShellInstanceStatus } from '@shared/types';
+import type { InstanceStatus, ShellInstanceStatus, ClaudeInstance } from '@shared/types';
 
 export function InstanceTabs() {
   const { selectedProjectId, getSelectedProject } = useProjectStore();
@@ -17,11 +18,41 @@ export function InstanceTabs() {
     getShellsByProject,
     killShellInstance,
   } = useInstanceStore();
+  const { globalProjects, globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { setShowInstanceModal } = useUIStore();
   const isMobile = useIsMobile();
 
-  const project = getSelectedProject();
-  const instances = selectedProjectId ? getInstancesByProject(selectedProjectId) : [];
+  // Get project from local or global projects
+  const project = useMemo(() => {
+    // First try local project
+    const localProject = getSelectedProject();
+    if (localProject) return localProject;
+
+    // If cluster is connected, try global projects
+    if (clusterConnected && selectedProjectId) {
+      return globalProjects.find((p) => p.id === selectedProjectId);
+    }
+    return undefined;
+  }, [getSelectedProject, clusterConnected, selectedProjectId, globalProjects]);
+
+  // Get instances from local or global instances
+  const instances = useMemo((): ClaudeInstance[] => {
+    if (!selectedProjectId) return [];
+
+    // Get local instances for this project
+    const local = getInstancesByProject(selectedProjectId);
+
+    // If cluster is connected, also get global instances for this project
+    if (clusterConnected) {
+      const global = globalInstances.filter((i) => i.projectId === selectedProjectId && !i.isLocal);
+      // Combine, avoiding duplicates (prefer local if same id)
+      const localIds = new Set(local.map((i) => i.id));
+      return [...local, ...global.filter((i) => !localIds.has(i.id))];
+    }
+
+    return local;
+  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances]);
+
   const shells = selectedProjectId ? getShellsByProject(selectedProjectId) : [];
 
   return (

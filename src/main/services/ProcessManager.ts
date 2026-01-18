@@ -24,6 +24,14 @@ async function getWebServerModule() {
   return webServerModule;
 }
 
+let clusterManagerModule: typeof import('./ClusterManager') | null = null;
+async function getClusterManagerModule() {
+  if (!clusterManagerModule) {
+    clusterManagerModule = await import('./ClusterManager');
+  }
+  return clusterManagerModule;
+}
+
 export class ProcessManager extends EventEmitter {
   private instances: Map<string, ClaudeInstance> = new Map();
   private shellInstances: Map<string, ShellInstance> = new Map();
@@ -199,6 +207,7 @@ export class ProcessManager extends EventEmitter {
 
       this.sendToRenderer(IPC_CHANNELS.INSTANCE_OUTPUT, instance.id, message);
       this.sendToWebServer('output', instance.id, message);
+      this.sendToCluster('output', instance.id, message);
 
       // Persist message to conversation if linked (for web clients)
       const conversationId = this.instanceConversations.get(instance.id);
@@ -215,6 +224,7 @@ export class ProcessManager extends EventEmitter {
     instance.on('status', (status: InstanceStatus) => {
       this.sendToRenderer(IPC_CHANNELS.INSTANCE_STATUS, instance.id, status);
       this.sendToWebServer('status', instance.id, status);
+      this.sendToCluster('status', instance.id, status);
 
       // Update conversation status if linked
       const conversationId = this.instanceConversations.get(instance.id);
@@ -230,11 +240,13 @@ export class ProcessManager extends EventEmitter {
     instance.on('error', (error: string) => {
       this.sendToRenderer(IPC_CHANNELS.INSTANCE_ERROR, instance.id, error);
       this.sendToWebServer('error', instance.id, error);
+      this.sendToCluster('error', instance.id, error);
     });
 
     instance.on('exit', (code: number) => {
       this.sendToRenderer(IPC_CHANNELS.INSTANCE_EXIT, instance.id, code);
       this.sendToWebServer('exit', instance.id, code);
+      this.sendToCluster('exit', instance.id, code);
 
       // Mark conversation as completed on exit
       const conversationId = this.instanceConversations.get(instance.id);
@@ -254,11 +266,13 @@ export class ProcessManager extends EventEmitter {
 
       this.sendToRenderer(IPC_CHANNELS.INSTANCE_RAW_OUTPUT, instance.id, data);
       this.sendToWebServer('rawOutput', instance.id, data);
+      this.sendToCluster('rawOutput', instance.id, data);
     });
 
     instance.on('sessionId', (sessionId: string) => {
       this.sendToRenderer(IPC_CHANNELS.INSTANCE_SESSION_ID, instance.id, sessionId);
       this.sendToWebServer('sessionId', instance.id, sessionId);
+      this.sendToCluster('sessionId', instance.id, sessionId);
 
       // Update conversation with sessionId if linked
       const conversationId = this.instanceConversations.get(instance.id);
@@ -310,6 +324,30 @@ export class ProcessManager extends EventEmitter {
       })
       .catch(() => {
         // WebServer not available, ignore
+      });
+  }
+
+  /**
+   * Send instance events to cluster for distribution to other nodes
+   * Only sends when running as secondary node connected to primary
+   */
+  private sendToCluster(event: string, instanceId: string, data: unknown): void {
+    getClusterManagerModule()
+      .then(({ getClusterManager }) => {
+        const clusterManager = getClusterManager();
+        const config = clusterManager.getConfig();
+
+        // Only forward events if we're a secondary node connected to primary
+        if (config.role !== 'secondary' || !clusterManager.isConnected()) {
+          return;
+        }
+
+        // Forward the event to primary via the cluster socket
+        // The primary will then broadcast to all nodes including itself
+        clusterManager.forwardInstanceEvent(event, instanceId, data);
+      })
+      .catch(() => {
+        // ClusterManager not available, ignore
       });
   }
 
