@@ -74,6 +74,7 @@ export const IPC_CHANNELS = {
   CLUSTER_CREATE_REMOTE_INSTANCE: 'cluster:createRemoteInstance',
   CLUSTER_SEND_REMOTE_INPUT: 'cluster:sendRemoteInput',
   CLUSTER_KILL_REMOTE_INSTANCE: 'cluster:killRemoteInstance',
+  CLUSTER_CREATE_REMOTE_SHELL: 'cluster:createRemoteShell',
 
   // Cluster events (main -> renderer)
   CLUSTER_STATE_CHANGED: 'cluster:stateChanged',

@@ -484,6 +484,20 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   );
 
+  // Create shell on remote node
+  ipcMain.handle(
+    IPC_CHANNELS.CLUSTER_CREATE_REMOTE_SHELL,
+    (_event, nodeId: string, projectId: string) => {
+      try {
+        clusterManager.createRemoteShell(nodeId, projectId);
+        return { success: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, error: message };
+      }
+    }
+  );
+
   // ==================== UI Settings Handlers ====================
   const uiSettingsStore = UISettingsStore.getInstance();
 

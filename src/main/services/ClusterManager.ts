@@ -490,6 +490,58 @@ export class ClusterManager extends EventEmitter {
         }
       });
 
+      // Handle cross-node instance creation request from secondary nodes
+      socket.on('instance:createRequest', (request: RemoteInstanceRequest) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          console.log(
+            `[ClusterManager] Received createRequest from ${connectedNodeId} for node ${request.nodeId}`
+          );
+
+          // Route to the correct node
+          if (request.nodeId === this.localNodeId) {
+            // Create locally on primary
+            const processManager = getProcessManager();
+            processManager.createInstance({
+              projectId: request.projectId,
+              model: request.model,
+              mode: request.mode,
+              planMode: request.planMode,
+            });
+            // Update local node state and broadcast to all nodes
+            this.updateLocalNodeState();
+            this.broadcastClusterState();
+          } else {
+            // Forward to target secondary node
+            this.sendClusterCommand(
+              request.nodeId,
+              'instance:create',
+              request,
+              Date.now().toString()
+            );
+          }
+        }
+      });
+
+      // Handle shell creation request from secondary nodes
+      socket.on('shell:createRequest', (nodeId: string, projectId: string) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          console.log(
+            `[ClusterManager] Received shell:createRequest from ${connectedNodeId} for node ${nodeId}`
+          );
+
+          if (nodeId === this.localNodeId) {
+            // Create shell locally on primary
+            const processManager = getProcessManager();
+            processManager.createShellInstance(projectId);
+          } else {
+            // Forward to target secondary node
+            this.sendClusterCommand(nodeId, 'shell:create', projectId, Date.now().toString());
+          }
+        }
+      });
+
       // Handle disconnect
       socket.on('disconnect', () => {
         const disconnectedNodeId = this.clusterSockets.get(socket.id);
@@ -595,6 +647,19 @@ export class ClusterManager extends EventEmitter {
     };
 
     this.nodes.set(this.localNodeId, localNode);
+  }
+
+  /**
+   * Update local node state with current projects and instances
+   */
+  private updateLocalNodeState(): void {
+    const localNode = this.nodes.get(this.localNodeId);
+    if (localNode) {
+      const processManager = getProcessManager();
+      localNode.projects = this.dataStore.getAllProjects();
+      localNode.instances = processManager.getAllInstances();
+      localNode.lastSeen = Date.now();
+    }
   }
 
   /**
@@ -871,6 +936,15 @@ export class ClusterManager extends EventEmitter {
     this.clientSocket.on('instance:resize', (instanceId, cols, rows) => {
       const processManager = getProcessManager();
       processManager.resizeInstance(instanceId, cols, rows);
+    });
+
+    // Handle shell creation command from primary
+    this.clientSocket.on('shell:create', (projectId, _requestId) => {
+      console.log('[ClusterManager] Received shell:create command for project', projectId);
+      const processManager = getProcessManager();
+      processManager.createShellInstance(projectId);
+      // Notify primary of state change
+      this.sendStateUpdate();
     });
 
     // Handle forwarded instance events (from other nodes)
@@ -1160,13 +1234,47 @@ export class ClusterManager extends EventEmitter {
 
     // If we're secondary and request is for another node, forward to primary
     if (config.role === 'secondary' && this.clientSocket?.connected) {
-      // Request primary to route to correct node
-      // For now, this is not implemented - would need additional protocol
-      console.warn('[ClusterManager] Cross-node instance creation not yet implemented');
-      return null;
+      // Send request to primary to route to correct node
+      console.log(
+        '[ClusterManager] Sending instance:createRequest to primary for node',
+        request.nodeId
+      );
+      this.clientSocket.emit('instance:createRequest', request);
+      return null; // Instance will be created asynchronously
     }
 
+    console.warn('[ClusterManager] Cannot create instance: not connected to cluster');
     return null;
+  }
+
+  /**
+   * Create shell on remote node (routing to correct node)
+   */
+  public createRemoteShell(nodeId: string, projectId: string): void {
+    const config = this.getConfig();
+
+    // If it's a local project or we're standalone, create locally
+    if (nodeId === this.localNodeId || config.role === 'standalone') {
+      const processManager = getProcessManager();
+      processManager.createShellInstance(projectId);
+      return;
+    }
+
+    // If we're primary, send command to secondary node
+    if (config.role === 'primary' && this.serverRunning) {
+      console.log('[ClusterManager] Sending shell:create to node', nodeId);
+      this.sendClusterCommand(nodeId, 'shell:create', projectId, Date.now().toString());
+      return;
+    }
+
+    // If we're secondary, forward request to primary
+    if (config.role === 'secondary' && this.clientSocket?.connected) {
+      console.log('[ClusterManager] Sending shell:createRequest to primary for node', nodeId);
+      this.clientSocket.emit('shell:createRequest', nodeId, projectId);
+      return;
+    }
+
+    console.warn('[ClusterManager] Cannot create remote shell: not connected to cluster');
   }
 
   /**

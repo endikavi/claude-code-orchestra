@@ -295,6 +295,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     killRemoteInstance: (instanceId: string, nodeId: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLUSTER_KILL_REMOTE_INSTANCE, instanceId, nodeId),
 
+    createRemoteShell: (
+      nodeId: string,
+      projectId: string
+    ): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLUSTER_CREATE_REMOTE_SHELL, nodeId, projectId),
+
     // Event listeners
     onStateChanged: (callback: (state: ClusterState) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, state: ClusterState) => callback(state);
@@ -571,6 +577,10 @@ declare global {
           input: string
         ) => Promise<{ success: boolean }>;
         killRemoteInstance: (instanceId: string, nodeId: string) => Promise<{ success: boolean }>;
+        createRemoteShell: (
+          nodeId: string,
+          projectId: string
+        ) => Promise<{ success: boolean; error?: string }>;
         onStateChanged: (callback: (state: ClusterState) => void) => () => void;
         onNodeJoined: (callback: (node: ClusterNode) => void) => () => void;
         onNodeLeft: (callback: (nodeId: string) => void) => () => void;
