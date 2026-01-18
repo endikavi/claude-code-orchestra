@@ -289,5 +289,13 @@
     "validJson": "Valid JSON",
     "emptyContent": "Content cannot be empty",
     "format": "Format JSON"
+  },
+  "structuredChat": {
+    "placeholder": "Type a message to Claude...",
+    "disabledPlaceholder": "Waiting for Claude...",
+    "hint": "Press Enter to send, Shift+Enter for new line",
+    "permissionRequired": "Permission required",
+    "accept": "Accept (Y)",
+    "reject": "Reject (N)"
   }
 }

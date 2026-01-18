@@ -96,6 +96,7 @@ export class ProcessManager extends EventEmitter {
 
     // Notify web clients of state change
     this.broadcastStateUpdate();
+    this.emit('instanceCreated', instance.id);
 
     return instance.toJSON();
   }
@@ -132,6 +133,7 @@ export class ProcessManager extends EventEmitter {
 
     // Notify web clients of state change
     this.broadcastStateUpdate();
+    this.emit('instanceCreated', instance.id);
 
     return instance.toJSON();
   }
@@ -205,26 +207,33 @@ export class ProcessManager extends EventEmitter {
       // Store in buffer for late-connecting clients
       this.addToOutputBuffer(instance.id, message);
 
-      this.sendToRenderer(IPC_CHANNELS.INSTANCE_OUTPUT, instance.id, message);
-      this.sendToWebServer('output', instance.id, message);
-      this.sendToCluster('output', instance.id, message);
-
       // Persist message to conversation if linked (for web clients)
+      // Persist BEFORE broadcasting to ensure data consistency
       const conversationId = this.instanceConversations.get(instance.id);
       if (conversationId) {
-        this.dataStore.addMessage({
-          conversationId,
-          type: message.type,
-          content: JSON.stringify(message),
-          costUsd: message.cost_usd,
-        });
+        try {
+          this.dataStore.addMessage({
+            conversationId,
+            type: message.type,
+            content: JSON.stringify(message),
+            costUsd: message.cost_usd,
+          });
+        } catch (error) {
+          console.error(
+            `[ProcessManager] Failed to persist message for conversation ${conversationId}:`,
+            error
+          );
+          this.emit('persistenceError', instance.id, message, error);
+        }
       }
+
+      // Broadcast to all destinations after persistence
+      this.broadcastInstanceEvent('output', instance.id, message);
     });
 
     instance.on('status', (status: InstanceStatus) => {
-      this.sendToRenderer(IPC_CHANNELS.INSTANCE_STATUS, instance.id, status);
-      this.sendToWebServer('status', instance.id, status);
-      this.sendToCluster('status', instance.id, status);
+      // Broadcast to all destinations
+      this.broadcastInstanceEvent('status', instance.id, status);
 
       // Update conversation status if linked
       const conversationId = this.instanceConversations.get(instance.id);
@@ -238,15 +247,12 @@ export class ProcessManager extends EventEmitter {
     });
 
     instance.on('error', (error: string) => {
-      this.sendToRenderer(IPC_CHANNELS.INSTANCE_ERROR, instance.id, error);
-      this.sendToWebServer('error', instance.id, error);
-      this.sendToCluster('error', instance.id, error);
+      this.broadcastInstanceEvent('error', instance.id, error);
     });
 
     instance.on('exit', (code: number) => {
-      this.sendToRenderer(IPC_CHANNELS.INSTANCE_EXIT, instance.id, code);
-      this.sendToWebServer('exit', instance.id, code);
-      this.sendToCluster('exit', instance.id, code);
+      // Broadcast to all destinations
+      this.broadcastInstanceEvent('exit', instance.id, code);
 
       // Mark conversation as completed on exit
       const conversationId = this.instanceConversations.get(instance.id);
@@ -254,25 +260,23 @@ export class ProcessManager extends EventEmitter {
         this.dataStore.updateConversation(conversationId, { status: 'completed' });
       }
 
-      // Clean up instance buffers after a short delay to allow final messages to be processed
-      setTimeout(() => {
-        this.cleanupInstance(instance.id);
-      }, 5000);
+      // Clean up instance listeners and buffers immediately
+      // The exit event is fired after all output has been processed
+      instance.removeAllListeners();
+      this.cleanupInstance(instance.id);
     });
 
     instance.on('rawOutput', (data: string) => {
       // Store in buffer for late-connecting clients
       this.addToRawOutputBuffer(instance.id, data);
 
-      this.sendToRenderer(IPC_CHANNELS.INSTANCE_RAW_OUTPUT, instance.id, data);
-      this.sendToWebServer('rawOutput', instance.id, data);
-      this.sendToCluster('rawOutput', instance.id, data);
+      // Broadcast to all destinations
+      this.broadcastInstanceEvent('rawOutput', instance.id, data);
     });
 
     instance.on('sessionId', (sessionId: string) => {
-      this.sendToRenderer(IPC_CHANNELS.INSTANCE_SESSION_ID, instance.id, sessionId);
-      this.sendToWebServer('sessionId', instance.id, sessionId);
-      this.sendToCluster('sessionId', instance.id, sessionId);
+      // Broadcast to all destinations
+      this.broadcastInstanceEvent('sessionId', instance.id, sessionId);
 
       // Update conversation with sessionId if linked
       const conversationId = this.instanceConversations.get(instance.id);
@@ -280,6 +284,34 @@ export class ProcessManager extends EventEmitter {
         this.dataStore.updateConversation(conversationId, { sessionId });
       }
     });
+  }
+
+  /**
+   * Broadcast an instance event to all destinations (renderer, webserver, cluster)
+   * Centralizes the triple-broadcast pattern used throughout instance event handling
+   */
+  private broadcastInstanceEvent(
+    event: 'output' | 'status' | 'error' | 'exit' | 'rawOutput' | 'sessionId' | 'terminalTitle',
+    instanceId: string,
+    data: unknown
+  ): void {
+    // Map event types to IPC channels
+    const channelMap: Record<string, string> = {
+      output: IPC_CHANNELS.INSTANCE_OUTPUT,
+      status: IPC_CHANNELS.INSTANCE_STATUS,
+      error: IPC_CHANNELS.INSTANCE_ERROR,
+      exit: IPC_CHANNELS.INSTANCE_EXIT,
+      rawOutput: IPC_CHANNELS.INSTANCE_RAW_OUTPUT,
+      sessionId: IPC_CHANNELS.INSTANCE_SESSION_ID,
+      terminalTitle: IPC_CHANNELS.INSTANCE_TERMINAL_TITLE,
+    };
+
+    const channel = channelMap[event];
+    if (channel) {
+      this.sendToRenderer(channel, instanceId, data);
+    }
+    this.sendToWebServer(event, instanceId, data);
+    this.sendToCluster(event, instanceId, data);
   }
 
   /**
@@ -408,12 +440,7 @@ export class ProcessManager extends EventEmitter {
    * Set terminal title for an instance and broadcast to all clients
    */
   setInstanceTitle(id: string, title: string): void {
-    // Broadcast to renderer (in case other windows need it)
-    this.sendToRenderer(IPC_CHANNELS.INSTANCE_TERMINAL_TITLE, id, title);
-    // Broadcast to web clients
-    this.sendToWebServer('terminalTitle', id, title);
-    // Broadcast to cluster
-    this.sendToCluster('terminalTitle', id, title);
+    this.broadcastInstanceEvent('terminalTitle', id, title);
   }
 
   /**
@@ -519,11 +546,10 @@ export class ProcessManager extends EventEmitter {
     shell.on('exit', (code: number) => {
       this.sendToRenderer(IPC_CHANNELS.SHELL_EXIT, shell.id, code);
 
-      // Clean up after a short delay
-      setTimeout(() => {
-        this.shellInstances.delete(shell.id);
-        this.shellOutputs.delete(shell.id);
-      }, 5000);
+      // Clean up shell listeners and buffers immediately
+      shell.removeAllListeners();
+      this.shellInstances.delete(shell.id);
+      this.shellOutputs.delete(shell.id);
     });
 
     shell.on('error', (error: string) => {
@@ -622,6 +648,7 @@ export class ProcessManager extends EventEmitter {
     this.instances.delete(id);
     this.instanceOutputs.delete(id);
     this.instanceConversations.delete(id);
+    this.emit('instanceRemoved', id);
   }
 
   /**

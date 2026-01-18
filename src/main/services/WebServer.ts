@@ -43,6 +43,7 @@ export class WebServer extends EventEmitter {
   private currentPort: number = DEFAULT_REMOTE_PORT;
   private authenticatedSockets: Map<string, string> = new Map(); // socketId -> sessionId
   private clusterStateHandler: (() => void) | null = null;
+  private processManagerHandler: (() => void) | null = null;
 
   private constructor() {
     super();
@@ -866,29 +867,6 @@ export class WebServer extends EventEmitter {
         this.authenticatedSockets.delete(socket.id);
       });
     });
-
-    // Subscribe to ProcessManager events
-    this.setupProcessManagerListeners();
-  }
-
-  // Note: Cluster functionality has been moved to ClusterManager with its own server
-
-  /**
-   * Setup listeners for ProcessManager events to broadcast to web clients
-   */
-  private setupProcessManagerListeners(): void {
-    const processManager = getProcessManager();
-
-    // Remove existing listeners to prevent duplicates
-    processManager.removeAllListeners('webserver:output');
-    processManager.removeAllListeners('webserver:status');
-    processManager.removeAllListeners('webserver:error');
-    processManager.removeAllListeners('webserver:exit');
-    processManager.removeAllListeners('webserver:rawOutput');
-    processManager.removeAllListeners('webserver:sessionId');
-
-    // Note: ProcessManager needs to be modified to emit these events
-    // For now, we'll intercept via the existing event system
   }
 
   /**
@@ -976,6 +954,12 @@ export class WebServer extends EventEmitter {
     const localProjects = dataStore.getAllProjects();
     const localInstances = processManager.getAllInstances();
 
+    // Get active conversations (those linked to running instances)
+    const activeConversations = this.getActiveConversations(
+      processManager.getAllInstanceConversations(),
+      dataStore
+    );
+
     // Check if cluster is enabled and get global projects/instances
     const clusterConfig = clusterManager.getConfig();
     if (clusterConfig.enabled) {
@@ -986,7 +970,7 @@ export class WebServer extends EventEmitter {
       return {
         projects: globalProjects,
         instances: globalInstances,
-        conversations: [], // Will be populated per-project on demand
+        conversations: activeConversations,
         outputs: processManager.getAllInstanceOutputs(),
         instanceConversations: processManager.getAllInstanceConversations(),
       };
@@ -995,10 +979,37 @@ export class WebServer extends EventEmitter {
     return {
       projects: localProjects,
       instances: localInstances,
-      conversations: [], // Will be populated per-project on demand
+      conversations: activeConversations,
       outputs: processManager.getAllInstanceOutputs(), // Include output buffers for late-connecting clients
       instanceConversations: processManager.getAllInstanceConversations(), // Include instance-conversation mappings
     };
+  }
+
+  /**
+   * Get active conversations linked to running instances
+   */
+  private getActiveConversations(
+    instanceConversations: Record<string, string>,
+    dataStore: DataStore
+  ): import('@shared/types').Conversation[] {
+    const conversations: import('@shared/types').Conversation[] = [];
+    const seen = new Set<string>();
+
+    for (const conversationId of Object.values(instanceConversations)) {
+      if (seen.has(conversationId)) continue;
+      seen.add(conversationId);
+
+      try {
+        const conversation = dataStore.getConversationById(conversationId);
+        if (conversation) {
+          conversations.push(conversation);
+        }
+      } catch (error) {
+        console.error(`[WebServer] Failed to get conversation ${conversationId}:`, error);
+      }
+    }
+
+    return conversations;
   }
 
   /**
@@ -1055,6 +1066,14 @@ export class WebServer extends EventEmitter {
         };
         clusterManager.on('stateChanged', this.clusterStateHandler);
 
+        // Subscribe to ProcessManager instance changes to broadcast to web clients
+        const processManager = getProcessManager();
+        this.processManagerHandler = () => {
+          this.broadcastStateUpdate();
+        };
+        processManager.on('instanceCreated', this.processManagerHandler);
+        processManager.on('instanceRemoved', this.processManagerHandler);
+
         this.emit('started', port);
         resolve();
       });
@@ -1100,6 +1119,14 @@ export class WebServer extends EventEmitter {
         const clusterManager = getClusterManager();
         clusterManager.off('stateChanged', this.clusterStateHandler);
         this.clusterStateHandler = null;
+      }
+
+      // Unsubscribe from ProcessManager events
+      if (this.processManagerHandler) {
+        const processManager = getProcessManager();
+        processManager.off('instanceCreated', this.processManagerHandler);
+        processManager.off('instanceRemoved', this.processManagerHandler);
+        this.processManagerHandler = null;
       }
 
       // Clear all sessions

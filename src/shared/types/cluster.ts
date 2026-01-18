@@ -110,6 +110,10 @@ export interface NodeRegistrationResponse {
 export interface ClusterState {
   nodes: ClusterNode[];
   localNodeId: string;
+  /** Monotonically increasing version number for state ordering */
+  version: number;
+  /** Unix timestamp when state was generated */
+  timestamp: number;
 }
 
 // ==================== WebSocket Event Types ====================

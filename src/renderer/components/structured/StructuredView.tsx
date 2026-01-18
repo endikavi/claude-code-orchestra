@@ -1,4 +1,7 @@
+import { useRef, useEffect } from 'react';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { ChatInput } from './ChatInput';
+import { PermissionBar } from './PermissionBar';
 import type { StreamMessage, ContentBlock } from '@shared/types';
 
 interface StructuredViewProps {
@@ -9,41 +12,66 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
   const { getInstanceOutput, getSelectedInstance } = useInstanceStore();
   const output = getInstanceOutput(instanceId);
   const instance = getSelectedInstance();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [output?.messages.length]);
+
+  const status = instance?.status || 'starting';
+  const showPermissionBar = status === 'needs_permission';
 
   if (!output || output.messages.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-500">
-        <div className="text-center">
-          <SpinnerIcon className="w-8 h-8 mx-auto mb-3 animate-spin text-gray-400 dark:text-gray-600" />
-          <p>Waiting for output...</p>
+      <div className="h-full flex flex-col">
+        <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-500">
+          <div className="text-center">
+            <SpinnerIcon className="w-8 h-8 mx-auto mb-3 animate-spin text-gray-400 dark:text-gray-600" />
+            <p>Waiting for output...</p>
+          </div>
         </div>
+        {/* Show chat input even when waiting */}
+        {!showPermissionBar && <ChatInput instanceId={instanceId} status={status} />}
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
-      {/* Instance info */}
-      {instance && (
-        <div className="bg-white/50 dark:bg-gray-800 rounded-lg p-4 border border-claude-tan/30 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Instance</span>
-            <StatusBadge status={instance.status} />
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
-            <div>Model: {instance.model}</div>
-            <div>Mode: {instance.mode}</div>
-            <div className="truncate" title={instance.prompt}>
-              Prompt: {instance.prompt}
+    <div className="h-full flex flex-col">
+      {/* Messages - scrollable area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Instance info */}
+        {instance && (
+          <div className="bg-white/50 dark:bg-gray-800 rounded-lg p-4 border border-claude-tan/30 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Instance</span>
+              <StatusBadge status={instance.status} />
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+              <div>Model: {instance.model}</div>
+              <div>Mode: {instance.mode}</div>
+              <div className="truncate" title={instance.prompt}>
+                Prompt: {instance.prompt}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Messages */}
-      {output.messages.map((message, index) => (
-        <MessageCard key={index} message={message} />
-      ))}
+        {/* Messages */}
+        {output.messages.map((message, index) => (
+          <MessageCard key={index} message={message} />
+        ))}
+
+        {/* Scroll anchor */}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Permission bar - shown when needs_permission */}
+      {showPermissionBar && <PermissionBar instanceId={instanceId} />}
+
+      {/* Chat input - shown when not needs_permission */}
+      {!showPermissionBar && <ChatInput instanceId={instanceId} status={status} />}
     </div>
   );
 }
@@ -181,6 +209,7 @@ function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string }> = {
     starting: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
     running: { bg: 'bg-green-500/20', text: 'text-green-400' },
+    waiting_input: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
     needs_permission: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
     tool_executing: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
     completed: { bg: 'bg-gray-500/20', text: 'text-gray-400' },

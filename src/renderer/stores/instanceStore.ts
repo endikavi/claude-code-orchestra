@@ -12,6 +12,10 @@ import type {
 } from '@shared/types';
 import { useConversationStore } from './conversationStore';
 
+// Buffer limits to prevent memory issues
+const MAX_MESSAGES_PER_INSTANCE = 1000;
+const MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
+
 /**
  * Type guard to validate if an object is a valid StreamMessage
  */
@@ -386,9 +390,15 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       rawOutput: '',
     };
 
+    // Add message and trim if over limit
+    let messages = [...existing.messages, message];
+    if (messages.length > MAX_MESSAGES_PER_INSTANCE) {
+      messages = messages.slice(-MAX_MESSAGES_PER_INSTANCE);
+    }
+
     outputs.set(id, {
       ...existing,
-      messages: [...existing.messages, message],
+      messages,
     });
 
     set({ outputs });
@@ -415,9 +425,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         messages: [],
         rawOutput: '',
       };
+
+      // Append and trim if over limit
+      let rawOutput = existing.rawOutput + data;
+      if (rawOutput.length > MAX_RAW_OUTPUT_SIZE) {
+        rawOutput = rawOutput.slice(-MAX_RAW_OUTPUT_SIZE);
+      }
+
       outputs.set(id, {
         ...existing,
-        rawOutput: existing.rawOutput + data,
+        rawOutput,
       });
       return { outputs };
     });
@@ -694,9 +711,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         shellId: id,
         rawOutput: '',
       };
+
+      // Append and trim if over limit
+      let rawOutput = existing.rawOutput + data;
+      if (rawOutput.length > MAX_RAW_OUTPUT_SIZE) {
+        rawOutput = rawOutput.slice(-MAX_RAW_OUTPUT_SIZE);
+      }
+
       shellOutputs.set(id, {
         ...existing,
-        rawOutput: existing.rawOutput + data,
+        rawOutput,
       });
       return { shellOutputs };
     });

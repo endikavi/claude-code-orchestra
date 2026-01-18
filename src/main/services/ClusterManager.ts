@@ -28,6 +28,79 @@ const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const RECONNECT_INTERVAL = 5000; // 5 seconds
 const CONNECTION_TIMEOUT = 10000; // 10 seconds
 
+// Broadcast debounce settings
+const BROADCAST_DEBOUNCE_MS = 100; // 100ms debounce
+const BROADCAST_MAX_WAIT_MS = 500; // Max 2 broadcasts/second
+
+// Node limits to prevent unbounded growth
+const MAX_NODES = 100;
+
+/**
+ * Debounce utility with maxWait support
+ */
+function debounce<T extends (...args: unknown[]) => void>(
+  fn: T,
+  delay: number,
+  options?: { maxWait?: number }
+): T & { cancel: () => void; flush: () => void } {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let lastCallTime: number | null = null;
+  let lastArgs: unknown[] | null = null;
+
+  const maxWait = options?.maxWait;
+
+  const invoke = () => {
+    if (lastArgs) {
+      fn(...lastArgs);
+      lastArgs = null;
+      lastCallTime = null;
+    }
+  };
+
+  const debounced = ((...args: unknown[]) => {
+    lastArgs = args;
+    const now = Date.now();
+
+    if (lastCallTime === null) {
+      lastCallTime = now;
+    }
+
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    // Check if maxWait has been exceeded
+    if (maxWait && now - lastCallTime >= maxWait) {
+      invoke();
+      lastCallTime = now;
+    } else {
+      timeoutId = setTimeout(() => {
+        invoke();
+        timeoutId = null;
+      }, delay);
+    }
+  }) as T & { cancel: () => void; flush: () => void };
+
+  debounced.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    lastArgs = null;
+    lastCallTime = null;
+  };
+
+  debounced.flush = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    invoke();
+  };
+
+  return debounced;
+}
+
 /**
  * Timing-safe string comparison to prevent timing attacks
  */
@@ -52,6 +125,8 @@ export class ClusterManager extends EventEmitter {
   private nodes: Map<string, ClusterNode> = new Map();
   private localNodeId: string = '';
   private config: ClusterConfig | null = null;
+  private stateVersion: number = 0;
+  private lastReceivedVersion: number = 0;
 
   // Server (when acting as primary)
   private httpServer: HttpServer | null = null;
@@ -59,6 +134,10 @@ export class ClusterManager extends EventEmitter {
     null;
   private clusterSockets: Map<string, string> = new Map(); // socketId -> nodeId
   private serverRunning: boolean = false;
+
+  // Pending states for nodes that sent state:update before completing registration
+  private pendingStates: Map<string, { projects: Project[]; instances: ClaudeInstance[] }> =
+    new Map();
 
   // Client socket (when acting as secondary)
   private clientSocket: ClientSocket<
@@ -70,10 +149,20 @@ export class ClusterManager extends EventEmitter {
   private isConnecting: boolean = false;
   private intentionalDisconnect: boolean = false;
 
+  // Debounced broadcast function
+  private debouncedBroadcast: (() => void) & { cancel: () => void; flush: () => void };
+
   private constructor() {
     super();
     this.dataStore = DataStore.getInstance();
     this.loadConfig();
+
+    // Initialize debounced broadcast
+    this.debouncedBroadcast = debounce(
+      () => this.broadcastClusterStateImmediate(),
+      BROADCAST_DEBOUNCE_MS,
+      { maxWait: BROADCAST_MAX_WAIT_MS }
+    );
   }
 
   public static getInstance(): ClusterManager {
@@ -187,6 +276,9 @@ export class ClusterManager extends EventEmitter {
     // Mark as intentional disconnect to prevent reconnection
     this.intentionalDisconnect = true;
 
+    // Cancel any pending debounced broadcasts
+    this.debouncedBroadcast.cancel();
+
     // Stop heartbeat
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -208,9 +300,10 @@ export class ClusterManager extends EventEmitter {
     // Stop server (primary mode)
     await this.stopServer();
 
-    // Clear nodes
+    // Clear nodes and pending states
     this.nodes.clear();
     this.clusterSockets.clear();
+    this.pendingStates.clear();
 
     this.emit('stopped');
     this.sendToRenderer('cluster:disconnected');
@@ -438,6 +531,14 @@ export class ClusterManager extends EventEmitter {
         if (connectedNodeId) {
           // handleNodeStateUpdate calls broadcastClusterState which emits to all nodes
           this.handleNodeStateUpdate(connectedNodeId, state);
+        } else {
+          // Node not yet registered - store pending state
+          // Extract nodeId from handshake auth
+          const nodeId = (socket.handshake.auth as { nodeId?: string }).nodeId;
+          if (nodeId) {
+            console.log(`[ClusterManager] Storing pending state for unregistered node: ${nodeId}`);
+            this.pendingStates.set(nodeId, state);
+          }
         }
       });
 
@@ -706,6 +807,12 @@ export class ClusterManager extends EventEmitter {
 
     // Check if node already exists
     const existingNode = this.nodes.get(request.nodeId);
+
+    // Check node limit (excluding reconnections of existing nodes)
+    if (!existingNode && this.nodes.size >= MAX_NODES) {
+      console.log(`[ClusterManager] Node registration rejected: max nodes (${MAX_NODES}) reached`);
+      return { success: false, error: `Maximum number of nodes (${MAX_NODES}) reached` };
+    }
     if (existingNode && request.nodeId !== this.localNodeId) {
       existingNode.status = 'online';
       existingNode.projects = request.projects;
@@ -730,6 +837,14 @@ export class ClusterManager extends EventEmitter {
       console.log(`[ClusterManager] Node ${request.nodeName} joined the cluster`);
       this.emit('nodeJoined', newNode);
       this.sendToRenderer('cluster:nodeJoined', newNode);
+    }
+
+    // Process any pending state updates for this node
+    const pendingState = this.pendingStates.get(request.nodeId);
+    if (pendingState) {
+      console.log(`[ClusterManager] Processing pending state for node: ${request.nodeId}`);
+      this.handleNodeStateUpdate(request.nodeId, pendingState);
+      this.pendingStates.delete(request.nodeId);
     }
 
     // Broadcast updated state
@@ -1176,16 +1291,30 @@ export class ClusterManager extends EventEmitter {
    * Get current cluster state
    */
   public getClusterState(): ClusterState {
+    // Increment version on each state request (for broadcasts)
+    this.stateVersion++;
     return {
       nodes: Array.from(this.nodes.values()),
       localNodeId: this.localNodeId,
+      version: this.stateVersion,
+      timestamp: Date.now(),
     };
   }
 
   /**
    * Update cluster state from primary
+   * Ignores states with version <= last received version to prevent race conditions
    */
   private updateClusterState(state: ClusterState): void {
+    // Ignore older or same-version states (race condition prevention)
+    if (state.version <= this.lastReceivedVersion) {
+      console.log(
+        `[ClusterManager] Ignoring stale state: received v${state.version}, already have v${this.lastReceivedVersion}`
+      );
+      return;
+    }
+
+    this.lastReceivedVersion = state.version;
     this.nodes.clear();
     state.nodes.forEach((node) => {
       this.nodes.set(node.id, node);
@@ -1196,9 +1325,17 @@ export class ClusterManager extends EventEmitter {
   }
 
   /**
-   * Broadcast cluster state to all connected nodes and local renderer
+   * Broadcast cluster state to all connected nodes and local renderer (debounced)
+   * Multiple calls within BROADCAST_DEBOUNCE_MS will be coalesced
    */
   private broadcastClusterState(): void {
+    this.debouncedBroadcast();
+  }
+
+  /**
+   * Immediate broadcast without debouncing (called by debounced function)
+   */
+  private broadcastClusterStateImmediate(): void {
     const state = this.getClusterState();
 
     console.log('[ClusterManager] broadcastClusterState - nodes:', state.nodes.length);
