@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
   INSTANCE_CREATE: 'instance:create',
   INSTANCE_KILL: 'instance:kill',
   INSTANCE_SEND_INPUT: 'instance:sendInput',
+  INSTANCE_SET_TITLE: 'instance:setTitle',
   INSTANCE_GET_ALL: 'instance:getAll',
   INSTANCE_GET_BY_PROJECT: 'instance:getByProject',
 
@@ -21,6 +22,7 @@ export const IPC_CHANNELS = {
   INSTANCE_EXIT: 'instance:exit',
   INSTANCE_RAW_OUTPUT: 'instance:rawOutput',
   INSTANCE_SESSION_ID: 'instance:sessionId',
+  INSTANCE_TERMINAL_TITLE: 'instance:terminalTitle',
   INSTANCE_RESUME: 'instance:resume',
   INSTANCE_SYNC: 'instance:sync', // Sync all instances to renderer (for remote updates)
 
@@ -75,6 +77,7 @@ export const IPC_CHANNELS = {
   CLUSTER_SEND_REMOTE_INPUT: 'cluster:sendRemoteInput',
   CLUSTER_KILL_REMOTE_INSTANCE: 'cluster:killRemoteInstance',
   CLUSTER_CREATE_REMOTE_SHELL: 'cluster:createRemoteShell',
+  CLUSTER_RESIZE_REMOTE_INSTANCE: 'cluster:resizeRemoteInstance',
 
   // Cluster events (main -> renderer)
   CLUSTER_STATE_CHANGED: 'cluster:stateChanged',

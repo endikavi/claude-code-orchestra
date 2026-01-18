@@ -171,6 +171,10 @@ export function connectSocket(): void {
     triggerEvent('instance:sessionId', instanceId, sessionId);
   });
 
+  socket.on('instance:terminalTitle', (instanceId: string, title: string) => {
+    triggerEvent('instance:terminalTitle', instanceId, title);
+  });
+
   socket.on('session:kicked', (reason: string) => {
     // Session terminated by server - important to log for user awareness
     // eslint-disable-next-line no-console
@@ -414,6 +418,10 @@ export const webAPI = {
 
     onSessionId: (callback: (instanceId: string, sessionId: string) => void): (() => void) => {
       return addEventListener('instance:sessionId', callback);
+    },
+
+    onTerminalTitle: (callback: (instanceId: string, title: string) => void): (() => void) => {
+      return addEventListener('instance:terminalTitle', callback);
     },
 
     // Web clients receive sync via socket 'sync:state' event, this is a no-op for compatibility

@@ -473,6 +473,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   setupListeners: () => {
     const {
       updateInstanceStatus,
+      updateTerminalTitle,
       addInstanceOutput,
       addRawOutput,
       setInstanceError,
@@ -506,6 +507,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     const unsubSessionId = window.electronAPI.instance.onSessionId((id, sessionId) => {
       handleSessionId(id, sessionId);
+    });
+
+    const unsubTerminalTitle = window.electronAPI.instance.onTerminalTitle((id, title) => {
+      updateTerminalTitle(id, title);
     });
 
     // Instance sync listener (for updates from web clients or other sources)
@@ -550,6 +555,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       unsubExit();
       unsubRaw();
       unsubSessionId();
+      unsubTerminalTitle();
       unsubSync();
       unsubShellRawOutput();
       unsubShellStatus();

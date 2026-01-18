@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Terminal, ITheme } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
 import 'xterm/css/xterm.css';
 
@@ -64,9 +65,34 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const { sendInput, getInstanceOutput, updateTerminalTitle } = useInstanceStore();
+  const {
+    globalInstances,
+    sendRemoteInput,
+    resizeRemoteInstance,
+    isConnected: clusterConnected,
+  } = useClusterStore();
   const theme = useUIStore((state) => state.theme);
 
   const output = getInstanceOutput(instanceId);
+
+  // Check if instance is remote (belongs to another node)
+  const remoteInstance = clusterConnected
+    ? globalInstances.find((i) => i.id === instanceId && !i.isLocal)
+    : null;
+
+  // Smart send input that routes to local or remote based on instance location
+  const handleSendInput = useCallback(
+    async (id: string, data: string) => {
+      if (remoteInstance) {
+        // Remote instance - send through cluster
+        await sendRemoteInput(id, remoteInstance.nodeId, data);
+      } else {
+        // Local instance - send directly
+        await sendInput(id, data);
+      }
+    },
+    [remoteInstance, sendRemoteInput, sendInput]
+  );
 
   // Safe fit function that won't throw
   const safeFit = () => {
@@ -95,8 +121,9 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     const currentInstanceId = instanceId;
     const currentTheme = theme;
     const currentOutput = output;
-    const currentSendInput = sendInput;
+    const currentHandleSendInput = handleSendInput;
     const currentUpdateTitle = updateTerminalTitle;
+    const currentRemoteInstance = remoteInstance;
 
     // Wait for container to have dimensions before initializing terminal
     // This prevents xterm.js "dimensions" errors
@@ -144,17 +171,38 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
       initTimer = setTimeout(() => {
         animationFrameId = requestAnimationFrame(() => {
           safeFit();
+
+          // Send initial resize after fit to sync remote PTY with client dimensions
+          if (xtermRef.current) {
+            const { cols, rows } = xtermRef.current;
+            if (currentRemoteInstance) {
+              void resizeRemoteInstance(
+                currentInstanceId,
+                currentRemoteInstance.nodeId,
+                cols,
+                rows
+              );
+            } else {
+              window.electronAPI.instance.resize(currentInstanceId, cols, rows);
+            }
+          }
         });
       }, 100);
 
       // Handle user input
       terminal.onData((data) => {
-        void currentSendInput(currentInstanceId, data);
+        void currentHandleSendInput(currentInstanceId, data);
       });
 
       // Handle resize
       terminal.onResize(({ cols, rows }) => {
-        window.electronAPI.instance.resize(currentInstanceId, cols, rows);
+        if (currentRemoteInstance) {
+          // Remote instance - resize through cluster
+          void resizeRemoteInstance(currentInstanceId, currentRemoteInstance.nodeId, cols, rows);
+        } else {
+          // Local instance - resize directly
+          window.electronAPI.instance.resize(currentInstanceId, cols, rows);
+        }
       });
 
       // Handle terminal title changes (set by Claude CLI via ANSI escape sequences)

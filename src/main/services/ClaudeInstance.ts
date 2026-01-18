@@ -244,6 +244,8 @@ export class ClaudeInstance extends EventEmitter {
 
     // Log the detected path for debugging
     console.log(`[ClaudeInstance] Using Claude CLI at: ${claudePath}`);
+    console.log(`[ClaudeInstance] Project path: ${this.projectPath}`);
+    console.log(`[ClaudeInstance] Args:`, args);
 
     // On Windows, if we found a .cmd file, use cmd.exe to run it
     // Otherwise spawn directly
@@ -268,6 +270,7 @@ export class ClaudeInstance extends EventEmitter {
     }
 
     try {
+      console.log(`[ClaudeInstance] Spawning pty with shell: ${shell}, args:`, shellArgs);
       // Use full process.env to ensure PATH includes Node.js and other required tools
       // The claude.cmd script needs node to be available
       this.ptyProcess = pty.spawn(shell, shellArgs, {
@@ -282,8 +285,10 @@ export class ClaudeInstance extends EventEmitter {
         } as Record<string, string>,
       });
 
+      console.log(`[ClaudeInstance] PTY process spawned successfully, PID:`, this.ptyProcess.pid);
       this._status = 'starting';
       this.emit('status', this._status);
+      console.log(`[ClaudeInstance] Status set to starting, listeners set up`);
 
       this.ptyProcess.onData((data: string) => {
         // Emit raw data for terminal view
@@ -326,6 +331,7 @@ export class ClaudeInstance extends EventEmitter {
         this.ptyProcess = null;
       });
     } catch (error) {
+      console.error(`[ClaudeInstance] Error spawning process:`, error);
       this._status = 'error';
       this._error = error instanceof Error ? error.message : 'Failed to start process';
       this.emit('status', this._status);

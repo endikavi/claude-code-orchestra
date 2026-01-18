@@ -123,6 +123,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.INSTANCE_SESSION_ID, listener);
     },
 
+    onTerminalTitle: (callback: (instanceId: string, title: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, instanceId: string, title: string) =>
+        callback(instanceId, title);
+      ipcRenderer.on(IPC_CHANNELS.INSTANCE_TERMINAL_TITLE, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.INSTANCE_TERMINAL_TITLE, listener);
+    },
+
+    setTitle: (id: string, title: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_SET_TITLE, id, title),
+
     onSync: (callback: (instances: ClaudeInstance[]) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, instances: ClaudeInstance[]) =>
         callback(instances);
@@ -300,6 +310,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       projectId: string
     ): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLUSTER_CREATE_REMOTE_SHELL, nodeId, projectId),
+
+    resizeRemoteInstance: (
+      instanceId: string,
+      nodeId: string,
+      cols: number,
+      rows: number
+    ): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(
+        IPC_CHANNELS.CLUSTER_RESIZE_REMOTE_INSTANCE,
+        instanceId,
+        nodeId,
+        cols,
+        rows
+      ),
 
     // Event listeners
     onStateChanged: (callback: (state: ClusterState) => void) => {
@@ -484,7 +508,9 @@ declare global {
         onExit: (callback: (instanceId: string, code: number) => void) => () => void;
         onRawOutput: (callback: (instanceId: string, data: string) => void) => () => void;
         onSessionId: (callback: (instanceId: string, sessionId: string) => void) => () => void;
+        onTerminalTitle: (callback: (instanceId: string, title: string) => void) => () => void;
         onSync: (callback: (instances: ClaudeInstance[]) => void) => () => void;
+        setTitle: (id: string, title: string) => Promise<void>;
       };
       conversation: {
         create: (data: {
@@ -581,6 +607,12 @@ declare global {
           nodeId: string,
           projectId: string
         ) => Promise<{ success: boolean; error?: string }>;
+        resizeRemoteInstance: (
+          instanceId: string,
+          nodeId: string,
+          cols: number,
+          rows: number
+        ) => Promise<{ success: boolean }>;
         onStateChanged: (callback: (state: ClusterState) => void) => () => void;
         onNodeJoined: (callback: (node: ClusterNode) => void) => () => void;
         onNodeLeft: (callback: (nodeId: string) => void) => () => void;

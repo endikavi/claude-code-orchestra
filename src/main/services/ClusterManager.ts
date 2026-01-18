@@ -490,6 +490,14 @@ export class ClusterManager extends EventEmitter {
         }
       });
 
+      socket.on('instance:terminalTitle', (instanceId: string, title: string) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('terminalTitle', connectedNodeId, instanceId, title);
+          socket.broadcast.emit('instance:terminalTitle', instanceId, connectedNodeId, title);
+        }
+      });
+
       // Handle cross-node instance creation request from secondary nodes
       socket.on('instance:createRequest', (request: RemoteInstanceRequest) => {
         const connectedNodeId = this.clusterSockets.get(socket.id);
@@ -519,6 +527,24 @@ export class ClusterManager extends EventEmitter {
               request,
               Date.now().toString()
             );
+          }
+        }
+      });
+
+      // Handle resize request from secondary nodes (route to correct node)
+      socket.on('instance:resizeRequest', (instanceId, nodeId, cols, rows) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          console.log(
+            `[ClusterManager] Received resizeRequest from ${connectedNodeId} for node ${nodeId}`
+          );
+
+          if (nodeId === this.localNodeId) {
+            // Resize locally on primary
+            getProcessManager().resizeInstance(instanceId, cols, rows);
+          } else {
+            // Forward to target secondary node
+            this.sendClusterCommand(nodeId, 'instance:resize', instanceId, cols, rows);
           }
         }
       });
@@ -983,6 +1009,12 @@ export class ClusterManager extends EventEmitter {
         this.sendToRenderer('instance:sessionId', instanceId, sessionId);
       }
     });
+
+    this.clientSocket.on('instance:terminalTitle', (instanceId, nodeId, title) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer('instance:terminalTitle', instanceId, title);
+      }
+    });
   }
 
   /**
@@ -1322,6 +1354,38 @@ export class ClusterManager extends EventEmitter {
   }
 
   /**
+   * Resize instance (routing to correct node)
+   */
+  public resizeRemoteInstance(
+    instanceId: string,
+    nodeId: string,
+    cols: number,
+    rows: number
+  ): void {
+    const config = this.getConfig();
+
+    // If it's a local instance, resize directly
+    if (nodeId === this.localNodeId) {
+      getProcessManager().resizeInstance(instanceId, cols, rows);
+      return;
+    }
+
+    // If we're primary, send command to the target secondary node
+    if (config.role === 'primary' && this.serverRunning) {
+      this.sendClusterCommand(nodeId, 'instance:resize', instanceId, cols, rows);
+      return;
+    }
+
+    // If we're secondary, ask primary to route the resize
+    if (config.role === 'secondary' && this.clientSocket?.connected) {
+      this.clientSocket.emit('instance:resizeRequest', instanceId, nodeId, cols, rows);
+      return;
+    }
+
+    console.warn('[ClusterManager] Cannot resize instance: not connected to cluster');
+  }
+
+  /**
    * Send message to renderer process
    */
   private sendToRenderer(channel: string, ...args: unknown[]): void {
@@ -1358,6 +1422,9 @@ export class ClusterManager extends EventEmitter {
         break;
       case 'sessionId':
         this.clientSocket.emit('instance:sessionId', instanceId, data as string);
+        break;
+      case 'terminalTitle':
+        this.clientSocket.emit('instance:terminalTitle', instanceId, data as string);
         break;
     }
   }

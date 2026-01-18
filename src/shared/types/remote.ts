@@ -35,6 +35,7 @@ export interface ServerToClientEvents {
   'instance:exit': (instanceId: string, code: number) => void;
   'instance:rawOutput': (instanceId: string, data: string) => void;
   'instance:sessionId': (instanceId: string, sessionId: string) => void;
+  'instance:terminalTitle': (instanceId: string, title: string) => void;
   'sync:state': (state: SyncState) => void;
   'session:kicked': (reason: string) => void;
 }

@@ -38,6 +38,12 @@ interface ClusterStoreState {
   createRemoteInstance: (request: RemoteInstanceRequest) => Promise<ClaudeInstance | null>;
   sendRemoteInput: (instanceId: string, nodeId: string, input: string) => Promise<void>;
   killRemoteInstance: (instanceId: string, nodeId: string) => Promise<void>;
+  resizeRemoteInstance: (
+    instanceId: string,
+    nodeId: string,
+    cols: number,
+    rows: number
+  ) => Promise<void>;
 
   // State updates from events
   handleStateChanged: (state: ClusterState) => void;
@@ -235,6 +241,14 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
       await get().loadGlobalInstances();
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to kill remote instance' });
+    }
+  },
+
+  resizeRemoteInstance: async (instanceId, nodeId, cols, rows) => {
+    try {
+      await window.electronAPI.cluster.resizeRemoteInstance(instanceId, nodeId, cols, rows);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to resize remote instance' });
     }
   },
 

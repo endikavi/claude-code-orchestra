@@ -141,6 +141,11 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     processManager.sendInput(validated.id, validated.input);
   });
 
+  // Set terminal title and broadcast to web clients and cluster
+  ipcMain.handle(IPC_CHANNELS.INSTANCE_SET_TITLE, (_event, id: string, title: string) => {
+    processManager.setInstanceTitle(id, title);
+  });
+
   ipcMain.handle(IPC_CHANNELS.INSTANCE_GET_ALL, () => {
     return processManager.getAllInstances();
   });
@@ -495,6 +500,15 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         const message = error instanceof Error ? error.message : 'Unknown error';
         return { success: false, error: message };
       }
+    }
+  );
+
+  // Resize remote instance
+  ipcMain.handle(
+    IPC_CHANNELS.CLUSTER_RESIZE_REMOTE_INSTANCE,
+    (_event, instanceId: string, nodeId: string, cols: number, rows: number) => {
+      clusterManager.resizeRemoteInstance(instanceId, nodeId, cols, rows);
+      return { success: true };
     }
   );
 

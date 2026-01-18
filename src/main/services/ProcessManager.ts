@@ -320,6 +320,9 @@ export class ProcessManager extends EventEmitter {
           case 'sessionId':
             webServer.broadcastInstanceSessionId(instanceId, data as string);
             break;
+          case 'terminalTitle':
+            webServer.broadcastInstanceTerminalTitle(instanceId, data as string);
+            break;
         }
       })
       .catch(() => {
@@ -399,6 +402,18 @@ export class ProcessManager extends EventEmitter {
     if (instance) {
       instance.sendInput(input);
     }
+  }
+
+  /**
+   * Set terminal title for an instance and broadcast to all clients
+   */
+  setInstanceTitle(id: string, title: string): void {
+    // Broadcast to renderer (in case other windows need it)
+    this.sendToRenderer(IPC_CHANNELS.INSTANCE_TERMINAL_TITLE, id, title);
+    // Broadcast to web clients
+    this.sendToWebServer('terminalTitle', id, title);
+    // Broadcast to cluster
+    this.sendToCluster('terminalTitle', id, title);
   }
 
   /**

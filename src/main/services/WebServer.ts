@@ -875,6 +875,15 @@ export class WebServer extends EventEmitter {
   }
 
   /**
+   * Broadcast instance terminal title to web clients
+   */
+  public broadcastInstanceTerminalTitle(instanceId: string, title: string): void {
+    if (this.io) {
+      this.io.emit('instance:terminalTitle', instanceId, title);
+    }
+  }
+
+  /**
    * Broadcast full state update to all clients
    */
   public broadcastStateUpdate(): void {

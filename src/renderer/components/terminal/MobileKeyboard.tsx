@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useClusterStore } from '../../stores/clusterStore';
 
 interface MobileKeyboardProps {
   instanceId: string;
@@ -9,11 +10,26 @@ interface MobileKeyboardProps {
 export function MobileKeyboard({ instanceId }: MobileKeyboardProps) {
   const { t } = useTranslation();
   const { sendInput } = useInstanceStore();
+  const { globalInstances, sendRemoteInput, isConnected: clusterConnected } = useClusterStore();
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleKey = (key: string) => {
-    void sendInput(instanceId, key);
-  };
+  // Check if instance is remote (belongs to another node)
+  const remoteInstance = clusterConnected
+    ? globalInstances.find((i) => i.id === instanceId && !i.isLocal)
+    : null;
+
+  const handleKey = useCallback(
+    (key: string) => {
+      if (remoteInstance) {
+        // Remote instance - send through cluster
+        void sendRemoteInput(instanceId, remoteInstance.nodeId, key);
+      } else {
+        // Local instance - send directly
+        void sendInput(instanceId, key);
+      }
+    },
+    [instanceId, remoteInstance, sendRemoteInput, sendInput]
+  );
 
   // Key codes
   const KEYS = {
