@@ -435,11 +435,8 @@ export class ClusterManager extends EventEmitter {
       socket.on('state:update', (state) => {
         const connectedNodeId = this.clusterSockets.get(socket.id);
         if (connectedNodeId) {
+          // handleNodeStateUpdate calls broadcastClusterState which emits to all nodes
           this.handleNodeStateUpdate(connectedNodeId, state);
-
-          // Broadcast updated cluster state to all nodes
-          const clusterState = this.getClusterState();
-          this.io?.emit('cluster:state', clusterState);
         }
       });
 
@@ -811,6 +808,11 @@ export class ClusterManager extends EventEmitter {
       if (response.success && response.clusterState) {
         this.updateClusterState(response.clusterState);
         console.log('[ClusterManager] Successfully registered with primary');
+
+        // Ensure local node is in the nodes map and send initial state
+        this.addLocalNode();
+        // Send our current projects to the primary to ensure sync
+        this.sendStateUpdate();
       }
     });
 
@@ -971,8 +973,6 @@ export class ClusterManager extends EventEmitter {
 
     if (config.role === 'primary' && this.serverRunning) {
       // If primary, broadcast updated state to all connected nodes
-      const state = this.getClusterState();
-      this.io?.emit('cluster:state', state);
       this.broadcastClusterState();
     } else if (config.role === 'secondary' && this.clientSocket?.connected) {
       // If secondary, send state update to primary
@@ -1044,10 +1044,16 @@ export class ClusterManager extends EventEmitter {
   }
 
   /**
-   * Broadcast cluster state to all connected nodes (primary only)
+   * Broadcast cluster state to all connected nodes and local renderer
    */
   private broadcastClusterState(): void {
     const state = this.getClusterState();
+
+    // Emit to all connected Socket.io clients (when acting as primary)
+    if (this.io && this.serverRunning) {
+      this.io.emit('cluster:state', state);
+    }
+
     this.emit('stateChanged', state);
     this.sendToRenderer('cluster:stateChanged', state);
   }

@@ -13,6 +13,7 @@ import { getClusterManager } from '../services/ClusterManager';
 import { ConfigReader } from '../services/ConfigReader';
 import { ClaudeSessionImporter } from '../services/ClaudeSessionImporter';
 import { UISettingsStore, type UISettings } from '../services/UISettingsStore';
+import { ShellDetector } from '../services/ShellDetector';
 import QRCode from 'qrcode';
 import type { Project, ClaudeModel, InstanceMode, ConversationStatus } from '@shared/types';
 import type { RemoteConfig } from '@shared/types/remote';
@@ -520,7 +521,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Get available shells on the system
   ipcMain.handle(IPC_CHANNELS.SHELL_GET_AVAILABLE, () => {
-    const { ShellDetector } = require('../services/ShellDetector');
     return ShellDetector.getInstance().getAvailableShells();
   });
 

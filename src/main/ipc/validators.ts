@@ -162,7 +162,9 @@ export const validators = {
       path: validatedPath,
       description: typeof obj.description === 'string' ? obj.description : undefined,
       color: typeof obj.color === 'string' ? obj.color : undefined,
+      hostname: typeof obj.hostname === 'string' ? obj.hostname : undefined,
       skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
+      preferredShell: typeof obj.preferredShell === 'string' ? obj.preferredShell : undefined,
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
     };

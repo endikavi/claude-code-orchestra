@@ -336,9 +336,15 @@ export class DataStore {
     `);
 
     const result = stmt.run({
-      ...updatedProject,
+      id: updatedProject.id,
+      name: updatedProject.name,
+      path: updatedProject.path,
+      description: updatedProject.description ?? null,
+      color: updatedProject.color ?? null,
+      hostname: updatedProject.hostname ?? null,
       skipPermissions: updatedProject.skipPermissions ? 1 : 0,
       preferredShell: updatedProject.preferredShell ?? null,
+      updatedAt: updatedProject.updatedAt,
     });
     if (result.changes === 0) {
       throw new Error(`Project with id ${project.id} not found`);
