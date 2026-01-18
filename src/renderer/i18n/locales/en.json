@@ -20,6 +20,7 @@
     "terminal": "Terminal",
     "structured": "Structured",
     "settings": "Settings",
+    "home": "Go to home",
     "switchToTerminal": "Switch to terminal view",
     "switchToStructured": "Switch to structured view",
     "switchToLight": "Switch to light mode",

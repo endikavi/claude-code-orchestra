@@ -23,7 +23,12 @@ import { ModeToggleButton } from '../terminal/ModeToggleButton';
 export function MainContent() {
   const { t } = useTranslation();
   const { selectedProjectId } = useProjectStore();
-  const { selectedInstanceId, getInstancesByProject, selectedShellId } = useInstanceStore();
+  const {
+    instances: allInstances,
+    selectedInstanceId,
+    getInstancesByProject,
+    selectedShellId,
+  } = useInstanceStore();
   const { globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { viewingConversation } = useConversationStore();
   const {
@@ -56,7 +61,8 @@ export function MainContent() {
     }
 
     return local;
-  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances]);
+    // Note: allInstances is included to trigger recalculation when instances change
+  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances, allInstances]);
 
   const hasInstances = projectInstances.length > 0;
   const isViewingHistory = viewMode === 'structured' && viewingConversation !== null;
@@ -104,7 +110,11 @@ export function MainContent() {
       {/* Modals */}
       {showProjectModal && <ProjectModal onClose={() => setShowProjectModal(false)} />}
       {showInstanceModal && selectedProjectId && (
-        <InstanceModal projectId={selectedProjectId} onClose={() => setShowInstanceModal(false)} />
+        <InstanceModal
+          projectId={selectedProjectId}
+          viewMode={viewMode}
+          onClose={() => setShowInstanceModal(false)}
+        />
       )}
       {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
       {showLocalSettingsModal && localSettingsProjectPath && (

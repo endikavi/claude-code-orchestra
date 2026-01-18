@@ -187,6 +187,7 @@ export const validators = {
     projectId: string;
     model: ClaudeModel;
     mode: InstanceMode;
+    prompt?: string;
     planMode?: boolean;
   } {
     if (!data || typeof data !== 'object') {
@@ -217,6 +218,7 @@ export const validators = {
       projectId: obj.projectId,
       model: obj.model,
       mode: obj.mode,
+      prompt: typeof obj.prompt === 'string' ? obj.prompt : undefined,
       planMode: obj.planMode === true,
     };
   },

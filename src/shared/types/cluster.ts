@@ -86,6 +86,7 @@ export interface RemoteInstanceRequest {
   nodeId: string;
   model: ClaudeModel;
   mode: InstanceMode;
+  prompt?: string;
   planMode?: boolean;
 }
 

@@ -88,6 +88,7 @@ export interface ClaudeInstanceConfig {
   projectPath: string;
   model: ClaudeModel;
   mode: InstanceMode;
+  prompt?: string; // Initial prompt for stream-json/print mode
   skipPermissions?: boolean;
   resumeSessionId?: string; // For --resume flag
   planMode?: boolean; // For --plan flag
@@ -98,6 +99,7 @@ export class ClaudeInstance extends EventEmitter {
   public readonly projectId: string;
   public readonly model: ClaudeModel;
   public readonly mode: InstanceMode;
+  public readonly prompt?: string;
   public readonly createdAt: number;
   public readonly skipPermissions: boolean;
   public readonly resumeSessionId?: string;
@@ -122,6 +124,7 @@ export class ClaudeInstance extends EventEmitter {
     this.projectPath = config.projectPath;
     this.model = config.model;
     this.mode = config.mode;
+    this.prompt = config.prompt;
     this.skipPermissions = config.skipPermissions ?? false;
     this.resumeSessionId = config.resumeSessionId;
     this.planMode = config.planMode ?? false;
@@ -325,6 +328,16 @@ export class ClaudeInstance extends EventEmitter {
         this.emit('exit', exitCode);
         this.ptyProcess = null;
       });
+
+      // For stream-json mode, send the initial prompt via stdin after a short delay
+      // This allows Claude to initialize before receiving input
+      if (this.mode === 'stream-json' && this.prompt) {
+        setTimeout(() => {
+          if (this.ptyProcess) {
+            this.sendInput(this.prompt + '\r');
+          }
+        }, 500);
+      }
     } catch (error) {
       this._status = 'error';
       this._error = error instanceof Error ? error.message : 'Failed to start process';
@@ -358,13 +371,17 @@ export class ClaudeInstance extends EventEmitter {
     }
 
     // For new conversations:
-    // Add print mode flag for non-interactive (required for prompt input)
-    if (this.mode === 'print' || this.mode === 'stream-json') {
+    // Add print mode flag ONLY for print mode (one-shot, non-interactive)
+    // stream-json mode runs interactively to allow ongoing conversations
+    if (this.mode === 'print') {
       args.push('-p');
+      // Add prompt at the end for print mode
+      if (this.prompt) {
+        args.push(this.prompt);
+      }
     }
 
-    // Add output format for stream-json
-    // Note: --verbose is required when using -p with --output-format stream-json
+    // Add output format for stream-json (runs interactively, prompt sent via stdin)
     if (this.mode === 'stream-json') {
       args.push('--output-format', 'stream-json', '--verbose');
     }

@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       projectId: string;
       model: ClaudeModel;
       mode: InstanceMode;
+      prompt?: string;
       planMode?: boolean;
     }): Promise<ClaudeInstance> => ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_CREATE, config),
 
@@ -489,6 +490,7 @@ declare global {
           projectId: string;
           model: ClaudeModel;
           mode: InstanceMode;
+          prompt?: string;
           planMode?: boolean;
         }) => Promise<ClaudeInstance>;
         kill: (id: string) => Promise<void>;

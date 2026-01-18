@@ -20,6 +20,7 @@
     "terminal": "Terminal",
     "structured": "Estructurado",
     "settings": "Configuración",
+    "home": "Ir al inicio",
     "switchToTerminal": "Cambiar a vista terminal",
     "switchToStructured": "Cambiar a vista estructurada",
     "switchToLight": "Cambiar a modo claro",

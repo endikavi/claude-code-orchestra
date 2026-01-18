@@ -72,6 +72,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         projectId: string;
         model: ClaudeModel;
         mode: InstanceMode;
+        prompt?: string;
         planMode?: boolean;
         nodeId?: string; // Optional: for cluster projects
       }
@@ -96,6 +97,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
               projectId: validated.projectId,
               model: validated.model,
               mode: validated.mode,
+              prompt: validated.prompt,
               planMode: validated.planMode,
             });
 
@@ -116,9 +118,14 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       const instance = processManager.createInstance(validated);
 
       // Create a conversation automatically (same as web clients)
+      // Generate title from prompt (first 50 chars) or unique session ID
+      const conversationTitle = validated.prompt
+        ? validated.prompt.slice(0, 50).split('\n')[0] + (validated.prompt.length > 50 ? '...' : '')
+        : `Session #${Date.now().toString(36).slice(-6).toUpperCase()}`;
+
       const conversation = dataStore.createConversation({
         projectId: validated.projectId,
-        title: `Session ${new Date().toLocaleString()}`,
+        title: conversationTitle,
         initialPrompt: '',
         model: validated.model,
         mode: validated.mode,

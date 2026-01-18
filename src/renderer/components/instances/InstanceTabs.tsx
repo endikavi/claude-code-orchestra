@@ -9,6 +9,7 @@ import type { InstanceStatus, ShellInstanceStatus, ClaudeInstance } from '@share
 export function InstanceTabs() {
   const { selectedProjectId, getSelectedProject } = useProjectStore();
   const {
+    instances: allInstances,
     selectedInstanceId,
     selectInstance,
     getInstancesByProject,
@@ -51,7 +52,8 @@ export function InstanceTabs() {
     }
 
     return local;
-  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances]);
+    // Note: allInstances is included to trigger recalculation when instances change
+  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances, allInstances]);
 
   const shells = selectedProjectId ? getShellsByProject(selectedProjectId) : [];
 

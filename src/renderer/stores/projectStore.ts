@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Project } from '@shared/types';
+import { useInstanceStore } from './instanceStore';
 
 interface ProjectState {
   projects: Project[];
@@ -94,6 +95,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   selectProject: (id) => {
     set({ selectedProjectId: id });
+    // Clear instance/shell selection when changing projects to show project history
+    useInstanceStore.getState().selectInstance(null);
+    useInstanceStore.getState().selectShell(null);
   },
 
   getSelectedProject: () => {

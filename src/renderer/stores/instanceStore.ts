@@ -65,6 +65,8 @@ interface InstanceState {
   outputs: Map<string, InstanceOutput>;
   instanceConversations: Map<string, string>; // instanceId -> conversationId
   selectedInstanceId: string | null;
+  // Timestamp of last explicit selection (to prevent sync from overriding recent selections)
+  lastSelectionTime: number;
   isLoading: boolean;
   error: string | null;
 
@@ -78,6 +80,7 @@ interface InstanceState {
     projectId: string;
     model: ClaudeModel;
     mode: InstanceMode;
+    prompt?: string;
     planMode?: boolean;
   }) => Promise<ClaudeInstance>;
   resumeConversation: (conversation: Conversation) => Promise<ClaudeInstance>;
@@ -137,6 +140,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   outputs: new Map(),
   instanceConversations: new Map(),
   selectedInstanceId: null,
+  lastSelectionTime: 0,
   isLoading: false,
   error: null,
 
@@ -186,6 +190,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           outputs,
           instanceConversations,
           selectedInstanceId: instance.id,
+          selectedShellId: null, // Clear shell selection when creating instance
+          lastSelectionTime: Date.now(),
           isLoading: false,
         };
       });
@@ -245,6 +251,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         outputs,
         instanceConversations,
         selectedInstanceId: instance.id,
+        selectedShellId: null, // Clear shell selection when resuming conversation
+        lastSelectionTime: Date.now(),
         isLoading: false,
       }));
 
@@ -305,7 +313,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   selectInstance: (id) => {
-    set({ selectedInstanceId: id });
+    set({ selectedInstanceId: id, lastSelectionTime: Date.now() });
   },
 
   loadInstances: async () => {
@@ -360,10 +368,24 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       });
     }
 
+    // Preserve selectedInstanceId if:
+    // 1. The instance still exists in the new list, OR
+    // 2. The selection was made very recently (within 2 seconds) - to handle race conditions
+    const currentState = get();
+    const currentSelectedId = currentState.selectedInstanceId;
+    const lastSelectionTime = currentState.lastSelectionTime;
+    const isRecentSelection = Date.now() - lastSelectionTime < 2000;
+    const selectedStillExists =
+      currentSelectedId && instances.some((i) => i.id === currentSelectedId);
+
+    // Don't override recent explicit selections (handles race condition with createInstance)
+    const shouldPreserveSelection = selectedStillExists || isRecentSelection;
+
     set({
       instances,
       outputs: newOutputs,
       instanceConversations: newInstanceConversations,
+      selectedInstanceId: shouldPreserveSelection ? currentSelectedId : null,
     });
   },
 

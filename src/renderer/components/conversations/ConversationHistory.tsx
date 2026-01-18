@@ -5,7 +5,7 @@ import { useInstanceStore } from '../../stores/instanceStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ImportSessionsModal } from './ImportSessionsModal';
-import { getLastAssistantText, truncateText } from '../../utils/messageUtils';
+import { getLastAssistantText, truncateText, getLastToolName } from '../../utils/messageUtils';
 import type { Conversation, ConversationStatus, InstanceStatus } from '@shared/types';
 
 interface ConversationHistoryProps {
@@ -139,10 +139,14 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
 
     const output = getInstanceOutputForConversation(conversationId);
     const lastText = output?.messages ? getLastAssistantText(output.messages) : null;
+    const lastToolName = output?.messages ? getLastToolName(output.messages) : null;
 
     return {
       status: instance.status,
       lastMessage: lastText ? truncateText(lastText, 80) : null,
+      terminalTitle: instance.terminalTitle,
+      messageCount: output?.messages?.length || 0,
+      lastToolName,
     };
   };
 
@@ -154,6 +158,27 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
       tool_executing: t('conversation.instanceStatus.toolExecuting'),
     };
     return statusMap[status] || status;
+  };
+
+  const getStatusWithContext = (
+    status: InstanceStatus,
+    lastMessage: string | null,
+    lastToolName: string | null
+  ) => {
+    const baseLabel = getInstanceStatusLabel(status);
+
+    // For tool_executing, show the tool name
+    if (status === 'tool_executing' && lastToolName) {
+      return `${baseLabel}: ${lastToolName}`;
+    }
+
+    // For running status, show context from last message
+    if (status === 'running' && lastMessage) {
+      const shortMessage = truncateText(lastMessage, 35);
+      return `${baseLabel} - ${shortMessage}`;
+    }
+
+    return baseLabel;
   };
 
   // Force re-render when instances or outputs change
@@ -259,7 +284,7 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-gray-900 dark:text-white truncate">
-                        {conversation.title}
+                        {activeInstance?.terminalTitle || conversation.title}
                       </h3>
                       <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-1">
                         {conversation.initialPrompt}
@@ -310,15 +335,14 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
                             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                           />
                         </svg>
-                        <span className="font-medium">
-                          {getInstanceStatusLabel(activeInstance.status)}
+                        <span className="font-medium truncate">
+                          {getStatusWithContext(
+                            activeInstance.status,
+                            activeInstance.lastMessage,
+                            activeInstance.lastToolName
+                          )}
                         </span>
                       </div>
-                      {activeInstance.lastMessage && (
-                        <p className="mt-1 text-xs text-green-600 dark:text-green-400 truncate">
-                          {activeInstance.lastMessage}
-                        </p>
-                      )}
                     </div>
                   )}
 
@@ -337,7 +361,10 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
                           d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
                         />
                       </svg>
-                      {conversation.messageCount} {t('common.messages')}
+                      {activeInstance
+                        ? conversation.messageCount + activeInstance.messageCount
+                        : conversation.messageCount}{' '}
+                      {t('common.messages')}
                     </span>
                     <span className="flex items-center gap-1">
                       <svg

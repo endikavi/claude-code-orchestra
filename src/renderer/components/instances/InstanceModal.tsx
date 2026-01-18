@@ -4,8 +4,11 @@ import { useInstanceStore } from '../../stores/instanceStore';
 import { Modal } from '../common/Modal';
 import type { ClaudeModel, InstanceMode } from '@shared/types';
 
+type ViewMode = 'terminal' | 'structured';
+
 interface InstanceModalProps {
   projectId: string;
+  viewMode: ViewMode;
   onClose: () => void;
 }
 
@@ -15,19 +18,30 @@ const MODELS: { value: ClaudeModel; label: string }[] = [
   { value: 'haiku', label: 'Claude Haiku' },
 ];
 
-export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
+export function InstanceModal({ projectId, viewMode, onClose }: InstanceModalProps) {
   const { t } = useTranslation();
   const { createInstance } = useInstanceStore();
 
   const [model, setModel] = useState<ClaudeModel>('sonnet');
-  const [mode] = useState<InstanceMode>('interactive'); // Default to interactive
+  const [prompt, setPrompt] = useState('');
   const [planMode, setPlanMode] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Determine mode based on viewMode
+  const mode: InstanceMode = viewMode === 'structured' ? 'stream-json' : 'interactive';
+  const requiresPrompt = viewMode === 'structured';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validate prompt is required in structured mode
+    if (requiresPrompt && !prompt.trim()) {
+      setError(t('instance.promptRequired'));
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -35,6 +49,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
         projectId,
         model,
         mode,
+        prompt: requiresPrompt ? prompt.trim() : undefined,
         planMode,
       });
       onClose();
@@ -48,6 +63,28 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
   return (
     <Modal title={t('instance.newInstance')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Prompt - only show in structured mode */}
+        {requiresPrompt && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              {t('instance.prompt')} <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder={t('instance.promptPlaceholder')}
+              rows={4}
+              className="w-full px-3 py-2 text-sm border rounded-md resize-none
+                bg-white dark:bg-gray-700
+                border-claude-tan/50 dark:border-gray-600
+                text-gray-900 dark:text-white
+                placeholder-gray-400 dark:placeholder-gray-500
+                focus:border-claude-orange dark:focus:border-claude-orange
+                focus:outline-none focus:ring-1 focus:ring-claude-orange/50"
+            />
+          </div>
+        )}
+
         {/* Model */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -70,9 +107,6 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
             ))}
           </div>
         </div>
-
-        {/* TODO: evaluate if terminal mode selection should be available */}
-        {/* Mode section hidden - using interactive by default */}
 
         {/* Plan Mode */}
         <div>
@@ -108,7 +142,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || (requiresPrompt && !prompt.trim())}
             className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isSubmitting ? (
