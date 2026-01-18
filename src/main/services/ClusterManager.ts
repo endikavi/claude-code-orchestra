@@ -420,14 +420,15 @@ export class ClusterManager extends EventEmitter {
         }
       });
 
-      // Handle heartbeat
+      // Handle heartbeat - only update lastSeen, don't overwrite projects/instances
       socket.on('node:heartbeat', () => {
         const connectedNodeId = this.clusterSockets.get(socket.id);
         if (connectedNodeId) {
-          this.handleNodeStateUpdate(connectedNodeId, {
-            projects: [],
-            instances: [],
-          });
+          const node = this.nodes.get(connectedNodeId);
+          if (node) {
+            node.lastSeen = Date.now();
+            // Don't broadcast on heartbeat to avoid unnecessary traffic
+          }
         }
       });
 

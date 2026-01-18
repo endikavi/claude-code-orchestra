@@ -1,9 +1,22 @@
+import { useMemo } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useClusterStore } from '../../stores/clusterStore';
+import type { Project } from '@shared/types';
+import type { GlobalProject } from '@shared/types/cluster';
 
 export function CollapsedProjectList() {
-  const { projects, selectedProjectId, selectProject } = useProjectStore();
+  const { projects: localProjects, selectedProjectId, selectProject } = useProjectStore();
   const { getInstancesByProject } = useInstanceStore();
+  const { isConnected: clusterConnected, globalProjects } = useClusterStore();
+
+  // Use global projects when cluster is connected
+  const projects: (Project | GlobalProject)[] = useMemo(() => {
+    if (clusterConnected && globalProjects.length > 0) {
+      return globalProjects;
+    }
+    return localProjects;
+  }, [clusterConnected, globalProjects, localProjects]);
 
   if (projects.length === 0) {
     return null;
@@ -51,6 +64,9 @@ export function CollapsedProjectList() {
             {/* Tooltip */}
             <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
               {project.name}
+              {'nodeName' in project && 'isLocal' in project && !project.isLocal && (
+                <span className="text-blue-300 ml-1">[{project.nodeName}]</span>
+              )}
               {project.hostname && <span className="text-gray-400 ml-1">@{project.hostname}</span>}
             </div>
           </div>

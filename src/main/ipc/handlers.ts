@@ -73,9 +73,46 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         model: ClaudeModel;
         mode: InstanceMode;
         planMode?: boolean;
+        nodeId?: string; // Optional: for cluster projects
       }
     ) => {
       const validated = validators.instanceCreate(config);
+
+      // Check if this is a remote project (cluster mode)
+      const localProject = dataStore.getProjectById(validated.projectId);
+
+      if (!localProject) {
+        // Project not found locally - check if it's a cluster project
+        const clusterConfig = clusterManager.getConfig();
+        if (clusterConfig.enabled) {
+          // Find the project in global projects
+          const globalProjects = clusterManager.getAllGlobalProjects();
+          const remoteProject = globalProjects.find((p) => p.id === validated.projectId);
+
+          if (remoteProject && !remoteProject.isLocal) {
+            // Create instance on the remote node
+            const remoteInstance = clusterManager.createInstance({
+              nodeId: remoteProject.nodeId,
+              projectId: validated.projectId,
+              model: validated.model,
+              mode: validated.mode,
+              planMode: validated.planMode,
+            });
+
+            // Return placeholder - the actual instance will be created on the remote node
+            return (
+              remoteInstance || {
+                id: 'pending',
+                status: 'starting',
+                projectId: validated.projectId,
+              }
+            );
+          }
+        }
+        throw new Error(`Project with id ${validated.projectId} not found`);
+      }
+
+      // Local project - create instance locally
       const instance = processManager.createInstance(validated);
 
       // Create a conversation automatically (same as web clients)
