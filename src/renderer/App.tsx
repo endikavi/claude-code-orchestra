@@ -6,12 +6,19 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useProjectStore } from './stores/projectStore';
 import { useInstanceStore } from './stores/instanceStore';
 import { useUIStore } from './stores/uiStore';
+import { useClusterStore } from './stores/clusterStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const setupListeners = useInstanceStore((state) => state.setupListeners);
   const initializeFromMain = useUIStore((state) => state.initializeFromMain);
+
+  // Cluster store
+  const loadClusterConfig = useClusterStore((state) => state.loadConfig);
+  const loadClusterStatus = useClusterStore((state) => state.loadStatus);
+  const loadGlobalProjects = useClusterStore((state) => state.loadGlobalProjects);
+  const setupClusterListeners = useClusterStore((state) => state.setupListeners);
 
   // Setup keyboard shortcuts
   useKeyboardShortcuts();
@@ -27,12 +34,29 @@ function App() {
     void loadInstances();
 
     // Setup instance listeners
-    const cleanup = setupListeners();
+    const cleanupInstances = setupListeners();
+
+    // Initialize cluster (load config, status, and setup listeners)
+    void loadClusterConfig().then(() => {
+      void loadClusterStatus();
+      void loadGlobalProjects();
+    });
+    const cleanupCluster = setupClusterListeners();
 
     return () => {
-      cleanup();
+      cleanupInstances();
+      cleanupCluster();
     };
-  }, [loadProjects, loadInstances, setupListeners, initializeFromMain]);
+  }, [
+    loadProjects,
+    loadInstances,
+    setupListeners,
+    initializeFromMain,
+    loadClusterConfig,
+    loadClusterStatus,
+    loadGlobalProjects,
+    setupClusterListeners,
+  ]);
 
   return (
     <ErrorBoundary>

@@ -672,12 +672,17 @@ export class ClusterManager extends EventEmitter {
     nodeId: string,
     state: { projects: Project[]; instances: ClaudeInstance[] }
   ): void {
+    console.log(
+      `[ClusterManager] handleNodeStateUpdate from ${nodeId}: ${state.projects.length} projects, ${state.instances.length} instances`
+    );
     const node = this.nodes.get(nodeId);
     if (node) {
       node.projects = state.projects;
       node.instances = state.instances;
       node.lastSeen = Date.now();
       this.broadcastClusterState();
+    } else {
+      console.log(`[ClusterManager] Node ${nodeId} not found in nodes map`);
     }
   }
 
@@ -944,12 +949,20 @@ export class ClusterManager extends EventEmitter {
    * Send state update to primary
    */
   public sendStateUpdate(): void {
-    if (!this.clientSocket?.connected) return;
+    if (!this.clientSocket?.connected) {
+      console.log('[ClusterManager] sendStateUpdate: not connected to primary');
+      return;
+    }
 
     const processManager = getProcessManager();
+    const projects = this.dataStore.getAllProjects();
+    const instances = processManager.getAllInstances();
+    console.log(
+      `[ClusterManager] sendStateUpdate: ${projects.length} projects, ${instances.length} instances`
+    );
     this.clientSocket.emit('state:update', {
-      projects: this.dataStore.getAllProjects(),
-      instances: processManager.getAllInstances(),
+      projects,
+      instances,
     });
   }
 
@@ -960,6 +973,13 @@ export class ClusterManager extends EventEmitter {
   public notifyProjectChange(): void {
     const config = this.getConfig();
 
+    console.log(
+      '[ClusterManager] notifyProjectChange called, enabled:',
+      config.enabled,
+      'role:',
+      config.role
+    );
+
     // If cluster is not enabled, nothing to do
     if (!config.enabled) {
       return;
@@ -969,13 +989,20 @@ export class ClusterManager extends EventEmitter {
     const localNode = this.nodes.get(this.localNodeId);
     if (localNode) {
       localNode.projects = this.dataStore.getAllProjects();
+      console.log('[ClusterManager] Updated local node projects:', localNode.projects.length);
     }
 
     if (config.role === 'primary' && this.serverRunning) {
       // If primary, broadcast updated state to all connected nodes
+      console.log(
+        '[ClusterManager] Broadcasting as primary to',
+        this.clusterSockets.size,
+        'connected nodes'
+      );
       this.broadcastClusterState();
     } else if (config.role === 'secondary' && this.clientSocket?.connected) {
       // If secondary, send state update to primary
+      console.log('[ClusterManager] Sending state update as secondary');
       this.sendStateUpdate();
     }
   }
@@ -1049,8 +1076,16 @@ export class ClusterManager extends EventEmitter {
   private broadcastClusterState(): void {
     const state = this.getClusterState();
 
+    console.log('[ClusterManager] broadcastClusterState - nodes:', state.nodes.length);
+    state.nodes.forEach((n) => {
+      console.log(
+        `  - Node ${n.name} (${n.id}): ${n.projects.length} projects, ${n.instances.length} instances`
+      );
+    });
+
     // Emit to all connected Socket.io clients (when acting as primary)
     if (this.io && this.serverRunning) {
+      console.log('[ClusterManager] Emitting cluster:state to Socket.io clients');
       this.io.emit('cluster:state', state);
     }
 
