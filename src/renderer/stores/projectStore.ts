@@ -13,6 +13,8 @@ interface ProjectState {
   updateProject: (project: Project) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   selectProject: (id: string | null) => void;
+  syncProjects: (projects: Project[]) => void;
+  setupListeners: () => () => void;
 
   // Selectors
   getSelectedProject: () => Project | undefined;
@@ -97,5 +99,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   getSelectedProject: () => {
     const state = get();
     return state.projects.find((p) => p.id === state.selectedProjectId);
+  },
+
+  syncProjects: (projects) => {
+    set({ projects });
+  },
+
+  setupListeners: () => {
+    const { syncProjects } = get();
+
+    // Listen for sync:state events from web socket (for web clients)
+    const handleSyncState = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        projects?: Project[];
+      }>;
+      if (customEvent.detail?.projects) {
+        syncProjects(customEvent.detail.projects);
+      }
+    };
+    window.addEventListener('sync:state', handleSyncState);
+
+    return () => {
+      window.removeEventListener('sync:state', handleSyncState);
+    };
   },
 }));

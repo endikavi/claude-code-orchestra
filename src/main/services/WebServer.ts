@@ -10,6 +10,7 @@ import { EventEmitter } from 'events';
 import { getAuthService } from './AuthService';
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
+import { getClusterManager } from './ClusterManager';
 import { getAuditLogger } from './AuditLogger';
 import { validators, IpcValidationError } from '../ipc/validators';
 import type {
@@ -41,6 +42,7 @@ export class WebServer extends EventEmitter {
   private isRunning = false;
   private currentPort: number = DEFAULT_REMOTE_PORT;
   private authenticatedSockets: Map<string, string> = new Map(); // socketId -> sessionId
+  private clusterStateHandler: (() => void) | null = null;
 
   private constructor() {
     super();
@@ -512,6 +514,43 @@ export class WebServer extends EventEmitter {
 
         // Validate instance configuration
         const validatedConfig = validators.instanceCreate(instanceConfig);
+
+        // Check if this is a local project
+        const localProject = dataStore.getProjectById(validatedConfig.projectId);
+
+        if (!localProject) {
+          // Project not found locally - check if it's a cluster project
+          const cluster = getClusterManager();
+          const clusterConfig = cluster.getConfig();
+          if (clusterConfig.enabled) {
+            const globalProjects = cluster.getAllGlobalProjects();
+            const remoteProject = globalProjects.find((p) => p.id === validatedConfig.projectId);
+
+            if (remoteProject && !remoteProject.isLocal) {
+              // Create instance on the remote node
+              const remoteInstance = cluster.createInstance({
+                nodeId: remoteProject.nodeId,
+                projectId: validatedConfig.projectId,
+                model: validatedConfig.model,
+                mode: validatedConfig.mode,
+                planMode: validatedConfig.planMode,
+              });
+
+              res.json({
+                success: true,
+                data: remoteInstance || {
+                  id: 'pending',
+                  status: 'starting',
+                  projectId: validatedConfig.projectId,
+                },
+              });
+              return;
+            }
+          }
+          throw new Error(`Project with id ${validatedConfig.projectId} not found`);
+        }
+
+        // Local project - create instance locally
         const instance = processManager.createInstance(validatedConfig);
 
         // Create a conversation automatically for web clients
@@ -543,7 +582,23 @@ export class WebServer extends EventEmitter {
     });
 
     this.app.delete('/api/instances/:id', this.authMiddleware, (req: Request, res: Response) => {
-      processManager.killInstance(String(req.params.id));
+      const instanceId = String(req.params.id);
+
+      // Check if this is a remote instance
+      const cluster = getClusterManager();
+      const clusterConfig = cluster.getConfig();
+      if (clusterConfig.enabled) {
+        const globalInstances = cluster.getAllGlobalInstances();
+        const remoteInstance = globalInstances.find((i) => i.id === instanceId && !i.isLocal);
+        if (remoteInstance) {
+          cluster.killInstance(instanceId, remoteInstance.nodeId);
+          res.json({ success: true });
+          return;
+        }
+      }
+
+      // Local instance
+      processManager.killInstance(instanceId);
       res.json({ success: true });
       this.broadcastStateUpdate();
     });
@@ -552,8 +607,24 @@ export class WebServer extends EventEmitter {
       '/api/instances/:id/input',
       this.authMiddleware,
       (req: Request, res: Response) => {
+        const instanceId = String(req.params.id);
         const { input } = req.body as { input: string };
-        processManager.sendInput(String(req.params.id), input);
+
+        // Check if this is a remote instance
+        const cluster = getClusterManager();
+        const clusterConfig = cluster.getConfig();
+        if (clusterConfig.enabled) {
+          const globalInstances = cluster.getAllGlobalInstances();
+          const remoteInstance = globalInstances.find((i) => i.id === instanceId && !i.isLocal);
+          if (remoteInstance) {
+            cluster.sendInput(instanceId, remoteInstance.nodeId, input);
+            res.json({ success: true });
+            return;
+          }
+        }
+
+        // Local instance
+        processManager.sendInput(instanceId, input);
         res.json({ success: true });
       }
     );
@@ -899,10 +970,31 @@ export class WebServer extends EventEmitter {
   private getSyncState(): SyncState {
     const dataStore = DataStore.getInstance();
     const processManager = getProcessManager();
+    const clusterManager = getClusterManager();
+
+    // Get local projects and instances
+    const localProjects = dataStore.getAllProjects();
+    const localInstances = processManager.getAllInstances();
+
+    // Check if cluster is enabled and get global projects/instances
+    const clusterConfig = clusterManager.getConfig();
+    if (clusterConfig.enabled) {
+      const globalProjects = clusterManager.getAllGlobalProjects();
+      const globalInstances = clusterManager.getAllGlobalInstances();
+
+      // Use global projects/instances directly - they already include all nodes with proper metadata
+      return {
+        projects: globalProjects,
+        instances: globalInstances,
+        conversations: [], // Will be populated per-project on demand
+        outputs: processManager.getAllInstanceOutputs(),
+        instanceConversations: processManager.getAllInstanceConversations(),
+      };
+    }
 
     return {
-      projects: dataStore.getAllProjects(),
-      instances: processManager.getAllInstances(),
+      projects: localProjects,
+      instances: localInstances,
       conversations: [], // Will be populated per-project on demand
       outputs: processManager.getAllInstanceOutputs(), // Include output buffers for late-connecting clients
       instanceConversations: processManager.getAllInstanceConversations(), // Include instance-conversation mappings
@@ -955,6 +1047,14 @@ export class WebServer extends EventEmitter {
         this.isRunning = true;
         this.currentPort = port;
         console.log(`[WebServer] Started on port ${port}`);
+
+        // Subscribe to cluster state changes to broadcast to web clients
+        const clusterManager = getClusterManager();
+        this.clusterStateHandler = () => {
+          this.broadcastStateUpdate();
+        };
+        clusterManager.on('stateChanged', this.clusterStateHandler);
+
         this.emit('started', port);
         resolve();
       });
@@ -994,6 +1094,13 @@ export class WebServer extends EventEmitter {
 
       // Clear authenticated sockets
       this.authenticatedSockets.clear();
+
+      // Unsubscribe from cluster state changes
+      if (this.clusterStateHandler) {
+        const clusterManager = getClusterManager();
+        clusterManager.off('stateChanged', this.clusterStateHandler);
+        this.clusterStateHandler = null;
+      }
 
       // Clear all sessions
       getAuthService().clearAllSessions();

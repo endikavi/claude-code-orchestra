@@ -11,7 +11,8 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const setupListeners = useInstanceStore((state) => state.setupListeners);
+  const setupProjectListeners = useProjectStore((state) => state.setupListeners);
+  const setupInstanceListeners = useInstanceStore((state) => state.setupListeners);
   const initializeFromMain = useUIStore((state) => state.initializeFromMain);
 
   // Cluster store
@@ -33,8 +34,9 @@ function App() {
     void loadProjects();
     void loadInstances();
 
-    // Setup instance listeners
-    const cleanupInstances = setupListeners();
+    // Setup listeners for projects and instances
+    const cleanupProjects = setupProjectListeners();
+    const cleanupInstances = setupInstanceListeners();
 
     // Initialize cluster (load config, status, and setup listeners)
     void loadClusterConfig().then(() => {
@@ -44,13 +46,15 @@ function App() {
     const cleanupCluster = setupClusterListeners();
 
     return () => {
+      cleanupProjects();
       cleanupInstances();
       cleanupCluster();
     };
   }, [
     loadProjects,
     loadInstances,
-    setupListeners,
+    setupProjectListeners,
+    setupInstanceListeners,
     initializeFromMain,
     loadClusterConfig,
     loadClusterStatus,
