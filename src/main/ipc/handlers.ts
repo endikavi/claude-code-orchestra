@@ -23,18 +23,26 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   const processManager = getProcessManager();
   processManager.setMainWindow(mainWindow);
 
+  // Get cluster manager for project sync notifications
+  const clusterManager = getClusterManager();
+  clusterManager.setMainWindow(mainWindow);
+
   // Project handlers
   ipcMain.handle(
     IPC_CHANNELS.PROJECT_CREATE,
     (_event, data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
       const validated = validators.projectCreate(data);
-      return dataStore.createProject(validated);
+      const result = dataStore.createProject(validated);
+      clusterManager.notifyProjectChange();
+      return result;
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_UPDATE, (_event, project: Project) => {
     const validated = validators.projectUpdate(project);
-    return dataStore.updateProject(validated);
+    const result = dataStore.updateProject(validated);
+    clusterManager.notifyProjectChange();
+    return result;
   });
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, (_event, id: string) => {
@@ -42,6 +50,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     // Kill all instances for this project first
     processManager.killProjectInstances(validatedId);
     dataStore.deleteProject(validatedId);
+    clusterManager.notifyProjectChange();
   });
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_GET_ALL, () => {
@@ -348,8 +357,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // ==================== Cluster Handlers ====================
-  const clusterManager = getClusterManager();
-  clusterManager.setMainWindow(mainWindow);
+  // Note: clusterManager is initialized at the top of this function for project sync
 
   // Get cluster config
   ipcMain.handle(IPC_CHANNELS.CLUSTER_GET_CONFIG, () => {

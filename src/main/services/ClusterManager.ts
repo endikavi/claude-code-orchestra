@@ -344,24 +344,44 @@ export class ClusterManager extends EventEmitter {
       const auth = socket.handshake.auth as { nodeId?: string; sharedSecret?: string };
       const { nodeId, sharedSecret } = auth;
 
+      console.log('[ClusterManager] Auth attempt from node:', nodeId);
+      console.log('[ClusterManager] Received secret length:', sharedSecret?.length || 0);
+      console.log(
+        '[ClusterManager] Received secret (first 8 chars):',
+        sharedSecret?.substring(0, 8) || 'none'
+      );
+
       if (!nodeId || !sharedSecret) {
+        console.log('[ClusterManager] Rejected: Missing nodeId or sharedSecret');
         next(new Error('Authentication required'));
         return;
       }
 
-      // Verify shared secret
+      // Verify shared secret - reload config to get latest
+      this.loadConfig();
       const config = this.getConfig();
+
+      console.log('[ClusterManager] Expected secret length:', config.sharedSecret?.length || 0);
+      console.log(
+        '[ClusterManager] Expected secret (first 8 chars):',
+        config.sharedSecret?.substring(0, 8) || 'none'
+      );
+
       if (config.role !== 'primary') {
+        console.log('[ClusterManager] Rejected: This node is not primary, role is:', config.role);
         next(new Error('This node is not a primary node'));
         return;
       }
 
       // Use timing-safe comparison to prevent timing attacks
       if (!config.sharedSecret || !safeCompare(sharedSecret, config.sharedSecret)) {
+        console.log('[ClusterManager] Rejected: Secret mismatch');
+        console.log('[ClusterManager] Secrets match check:', sharedSecret === config.sharedSecret);
         next(new Error('Invalid shared secret'));
         return;
       }
 
+      console.log('[ClusterManager] Auth successful for node:', nodeId);
       // Store node info on socket
       (socket as ServerSocket & { nodeId?: string }).nodeId = nodeId;
       next();
@@ -723,6 +743,11 @@ export class ClusterManager extends EventEmitter {
     try {
       const url = `http://${config.primaryHost}:${config.primaryPort}`;
       console.log(`[ClusterManager] Connecting to primary at ${url}`);
+      console.log(`[ClusterManager] Using nodeId: ${this.localNodeId}`);
+      console.log(`[ClusterManager] Using secret length: ${config.sharedSecret?.length || 0}`);
+      console.log(
+        `[ClusterManager] Using secret (first 8 chars): ${config.sharedSecret?.substring(0, 8) || 'none'}`
+      );
 
       this.clientSocket = io(url, {
         transports: ['websocket', 'polling'],
@@ -924,6 +949,35 @@ export class ClusterManager extends EventEmitter {
       projects: this.dataStore.getAllProjects(),
       instances: processManager.getAllInstances(),
     });
+  }
+
+  /**
+   * Notify cluster of project changes (create/update/delete)
+   * This should be called after any project operation to sync across nodes
+   */
+  public notifyProjectChange(): void {
+    const config = this.getConfig();
+
+    // If cluster is not enabled, nothing to do
+    if (!config.enabled) {
+      return;
+    }
+
+    // Update the local node in memory with fresh project data
+    const localNode = this.nodes.get(this.localNodeId);
+    if (localNode) {
+      localNode.projects = this.dataStore.getAllProjects();
+    }
+
+    if (config.role === 'primary' && this.serverRunning) {
+      // If primary, broadcast updated state to all connected nodes
+      const state = this.getClusterState();
+      this.io?.emit('cluster:state', state);
+      this.broadcastClusterState();
+    } else if (config.role === 'secondary' && this.clientSocket?.connected) {
+      // If secondary, send state update to primary
+      this.sendStateUpdate();
+    }
   }
 
   /**
