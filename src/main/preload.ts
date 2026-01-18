@@ -123,6 +123,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.INSTANCE_SESSION_ID, listener);
     },
 
+    onSync: (callback: (instances: ClaudeInstance[]) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, instances: ClaudeInstance[]) =>
+        callback(instances);
+      ipcRenderer.on(IPC_CHANNELS.INSTANCE_SYNC, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.INSTANCE_SYNC, listener);
+    },
+
     resume: (config: {
       projectId: string;
       sessionId: string;
@@ -388,6 +395,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resize: (id: string, cols: number, rows: number): void =>
       ipcRenderer.send(IPC_CHANNELS.SHELL_RESIZE, id, cols, rows),
 
+    // Get available shells on the system
+    getAvailable: (): Promise<
+      Array<{
+        id: string;
+        name: string;
+        path: string;
+        isDefault: boolean;
+        canRunClaude: boolean;
+      }>
+    > => ipcRenderer.invoke(IPC_CHANNELS.SHELL_GET_AVAILABLE),
+
     onRawOutput: (callback: (shellId: string, data: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, shellId: string, data: string) =>
         callback(shellId, data);
@@ -460,6 +478,7 @@ declare global {
         onExit: (callback: (instanceId: string, code: number) => void) => () => void;
         onRawOutput: (callback: (instanceId: string, data: string) => void) => () => void;
         onSessionId: (callback: (instanceId: string, sessionId: string) => void) => () => void;
+        onSync: (callback: (instances: ClaudeInstance[]) => void) => () => void;
       };
       conversation: {
         create: (data: {
@@ -584,6 +603,15 @@ declare global {
         kill: (id: string) => Promise<void>;
         sendInput: (id: string, input: string) => Promise<void>;
         resize: (id: string, cols: number, rows: number) => void;
+        getAvailable: () => Promise<
+          Array<{
+            id: string;
+            name: string;
+            path: string;
+            isDefault: boolean;
+            canRunClaude: boolean;
+          }>
+        >;
         onRawOutput: (callback: (shellId: string, data: string) => void) => () => void;
         onStatus: (callback: (shellId: string, status: ShellInstanceStatus) => void) => () => void;
         onExit: (callback: (shellId: string, code: number) => void) => () => void;

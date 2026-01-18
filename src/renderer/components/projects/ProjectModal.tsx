@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useConversationStore } from '../../stores/conversationStore';
 import { Modal } from '../common/Modal';
 import { ImportSessionsModal } from '../conversations/ImportSessionsModal';
+import type { AvailableShell } from '@shared/types';
 
 const PROJECT_COLORS = [
   '#ef4444',
@@ -37,11 +38,36 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const [description, setDescription] = useState(existingProject?.description || '');
   const [color, setColor] = useState(existingProject?.color || PROJECT_COLORS[0]);
   const [skipPermissions, setSkipPermissions] = useState(existingProject?.skipPermissions || false);
+  const [preferredShell, setPreferredShell] = useState(existingProject?.preferredShell || '');
+  const [availableShells, setAvailableShells] = useState<AvailableShell[]>([]);
+  const [isLoadingShells, setIsLoadingShells] = useState(true);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
   const { loadConversations } = useConversationStore();
+
+  // Load available shells on mount
+  useEffect(() => {
+    const loadShells = async () => {
+      try {
+        const shells = await window.electronAPI.shell.getAvailable();
+        setAvailableShells(shells);
+        // Set default shell if not already set
+        if (!preferredShell) {
+          const defaultShell = shells.find((s) => s.isDefault);
+          if (defaultShell) {
+            setPreferredShell(defaultShell.path);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load available shells:', err);
+      } finally {
+        setIsLoadingShells(false);
+      }
+    };
+    void loadShells();
+  }, []);
 
   const isEditing = !!existingProject;
 
@@ -82,6 +108,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           description: description.trim() || undefined,
           color,
           skipPermissions,
+          preferredShell: preferredShell || undefined,
         });
       } else {
         await createProject({
@@ -90,6 +117,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           description: description.trim() || undefined,
           color,
           skipPermissions,
+          preferredShell: preferredShell || undefined,
         });
       }
       onClose();
@@ -175,6 +203,53 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
               />
             ))}
           </div>
+        </div>
+
+        {/* Preferred Shell */}
+        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {t('project.preferredShell')}
+          </label>
+          {isLoadingShells ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              {t('project.loadingShells')}
+            </div>
+          ) : (
+            <>
+              <select
+                value={preferredShell}
+                onChange={(e) => setPreferredShell(e.target.value)}
+                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+              >
+                {availableShells.map((shell) => (
+                  <option key={shell.id} value={shell.path}>
+                    {shell.name}
+                    {shell.isDefault ? ` (${t('project.systemDefault')})` : ''}
+                    {shell.canRunClaude ? '' : ` - ${t('project.cannotRunClaude')}`}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {t('project.preferredShellDescription')}
+              </p>
+            </>
+          )}
         </div>
 
         {/* Skip Permissions */}

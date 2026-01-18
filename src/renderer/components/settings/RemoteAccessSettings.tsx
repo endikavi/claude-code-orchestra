@@ -8,6 +8,7 @@ export function RemoteAccessSettings() {
   const [status, setStatus] = useState<RemoteServerStatus | null>(null);
   const [password, setPassword] = useState('');
   const [newPort, setNewPort] = useState('');
+  const [customHostname, setCustomHostname] = useState('');
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +23,7 @@ export function RemoteAccessSettings() {
       setConfig(configData);
       setStatus(statusData);
       setNewPort(configData.port.toString());
+      setCustomHostname(configData.customHostname || '');
 
       // Load QR code if server is running
       if (statusData.running) {
@@ -111,6 +113,31 @@ export function RemoteAccessSettings() {
     }
   };
 
+  const handleToggleAllowAnyCors = async () => {
+    if (!config) return;
+
+    try {
+      await window.electronAPI.remote.updateConfig({ allowAnyCors: !config.allowAnyCors });
+      await loadData();
+    } catch {
+      setError(t('remoteAccess.failedToUpdate'));
+    }
+  };
+
+  const handleCustomHostnameBlur = async () => {
+    if (!config) return;
+
+    // Only update if the value has changed
+    if (customHostname !== config.customHostname) {
+      try {
+        await window.electronAPI.remote.updateConfig({ customHostname });
+        await loadData();
+      } catch {
+        setError(t('remoteAccess.failedToUpdate'));
+      }
+    }
+  };
+
   const handleKickSession = async (sessionId: string) => {
     try {
       await window.electronAPI.remote.kickSession(sessionId);
@@ -189,6 +216,24 @@ export function RemoteAccessSettings() {
         />
       </div>
 
+      {/* Custom Hostname */}
+      <div className="space-y-3">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {t('remoteAccess.customHostname')}
+        </label>
+        <input
+          type="text"
+          value={customHostname}
+          onChange={(e) => setCustomHostname(e.target.value)}
+          onBlur={handleCustomHostnameBlur}
+          placeholder={t('remoteAccess.customHostnamePlaceholder')}
+          className="w-full max-w-sm px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+        />
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {t('remoteAccess.customHostnameDescription')}
+        </p>
+      </div>
+
       {/* Server Toggle */}
       <div className="flex items-center justify-between p-4 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600">
         <div>
@@ -233,6 +278,25 @@ export function RemoteAccessSettings() {
           </span>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {t('remoteAccess.autoStartDescription')}
+          </p>
+        </div>
+      </label>
+
+      {/* Allow Any CORS Toggle */}
+      <label className="flex items-center gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={config?.allowAnyCors ?? false}
+          onChange={handleToggleAllowAnyCors}
+          disabled={!hasPassword}
+          className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange disabled:opacity-50"
+        />
+        <div>
+          <span className="text-sm text-gray-800 dark:text-white">
+            {t('remoteAccess.allowAnyCors')}
+          </span>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {t('remoteAccess.allowAnyCorsDescription')}
           </p>
         </div>
       </label>

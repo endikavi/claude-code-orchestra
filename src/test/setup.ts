@@ -24,6 +24,7 @@ const mockElectronAPI = {
     onExit: vi.fn().mockReturnValue(vi.fn()),
     onRawOutput: vi.fn().mockReturnValue(vi.fn()),
     onSessionId: vi.fn().mockReturnValue(vi.fn()),
+    onSync: vi.fn().mockReturnValue(vi.fn()),
     resize: vi.fn(),
     resume: vi.fn(),
   },
@@ -62,6 +63,15 @@ const mockElectronAPI = {
       sidebarCollapsed: false,
     }),
     update: vi.fn().mockResolvedValue(undefined),
+  },
+  shell: {
+    create: vi.fn(),
+    kill: vi.fn(),
+    sendInput: vi.fn(),
+    resize: vi.fn(),
+    onRawOutput: vi.fn().mockReturnValue(vi.fn()),
+    onStatus: vi.fn().mockReturnValue(vi.fn()),
+    onExit: vi.fn().mockReturnValue(vi.fn()),
   },
 };
 

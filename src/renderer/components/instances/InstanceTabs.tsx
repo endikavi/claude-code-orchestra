@@ -163,6 +163,7 @@ function StatusBadge({ status }: { status: InstanceStatus }) {
   const config: Record<InstanceStatus, { color: string; pulse: boolean; label: string }> = {
     starting: { color: 'bg-yellow-500', pulse: true, label: 'Starting' },
     running: { color: 'bg-green-500', pulse: true, label: 'Running' },
+    waiting_input: { color: 'bg-cyan-500', pulse: false, label: 'Waiting for Input' },
     needs_permission: { color: 'bg-orange-500', pulse: true, label: 'Needs Permission' },
     tool_executing: { color: 'bg-blue-500', pulse: true, label: 'Executing Tool' },
     completed: { color: 'bg-gray-500', pulse: false, label: 'Completed' },

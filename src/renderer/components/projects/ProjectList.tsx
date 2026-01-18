@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ContextMenu } from '../common/ContextMenu';
 import type { Project } from '@shared/types';
+
+// Check if running in Electron (has full API) vs Web (limited API)
+const isElectron =
+  typeof window !== 'undefined' && window.electronAPI && 'uiSettings' in window.electronAPI;
 
 interface ProjectListProps {
   onProjectSelect?: () => void;
@@ -159,13 +163,18 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
           onClose={handleCloseContextMenu}
           items={[
             { label: t('project.newInstance'), onClick: handleNewInstance, icon: <PlayIcon /> },
-            {
-              label: t('project.openTerminal'),
-              onClick: () => {
-                void handleOpenTerminal();
-              },
-              icon: <TerminalIcon />,
-            },
+            // Only show terminal option in Electron (not available in web version)
+            ...(isElectron
+              ? [
+                  {
+                    label: t('project.openTerminal'),
+                    onClick: () => {
+                      void handleOpenTerminal();
+                    },
+                    icon: <TerminalIcon />,
+                  },
+                ]
+              : []),
             {
               label: t('project.localSettings'),
               onClick: handleLocalSettings,

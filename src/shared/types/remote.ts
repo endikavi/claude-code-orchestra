@@ -6,6 +6,8 @@ export interface RemoteConfig {
   port: number;
   passwordHash: string;
   autoStart: boolean;
+  allowAnyCors: boolean; // Allow connections from any origin (for LAN access)
+  customHostname: string; // Custom hostname/domain for CORS (e.g., "orchestra.local")
 }
 
 // Remote session information
@@ -93,6 +95,8 @@ export const DEFAULT_REMOTE_CONFIG: RemoteConfig = {
   port: 3847,
   passwordHash: '',
   autoStart: false,
+  allowAnyCors: false,
+  customHostname: '',
 };
 
 // Default port for remote access

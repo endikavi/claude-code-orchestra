@@ -94,8 +94,8 @@ export function MainContent() {
         />
       )}
 
-      {/* Mode toggle button for Claude instances */}
-      {selectedInstanceId && viewMode === 'terminal' && !selectedShellId && (
+      {/* Mode toggle button for Claude instances (mobile only) */}
+      {selectedInstanceId && viewMode === 'terminal' && !selectedShellId && isMobile && (
         <ModeToggleButton instanceId={selectedInstanceId} />
       )}
 

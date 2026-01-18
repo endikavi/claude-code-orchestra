@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   INSTANCE_RAW_OUTPUT: 'instance:rawOutput',
   INSTANCE_SESSION_ID: 'instance:sessionId',
   INSTANCE_RESUME: 'instance:resume',
+  INSTANCE_SYNC: 'instance:sync', // Sync all instances to renderer (for remote updates)
 
   // Conversation operations
   CONVERSATION_CREATE: 'conversation:create',
@@ -114,6 +115,9 @@ export const IPC_CHANNELS = {
   // Local Settings operations (settings.local.json)
   LOCAL_SETTINGS_READ: 'localSettings:read',
   LOCAL_SETTINGS_WRITE: 'localSettings:write',
+
+  // System shell detection
+  SHELL_GET_AVAILABLE: 'shell:getAvailable',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

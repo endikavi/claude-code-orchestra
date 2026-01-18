@@ -2,6 +2,7 @@
 export type InstanceStatus =
   | 'starting'
   | 'running'
+  | 'waiting_input'
   | 'needs_permission'
   | 'tool_executing'
   | 'completed'
@@ -27,6 +28,15 @@ export type ClaudeModel = 'sonnet' | 'opus' | 'haiku';
 // Instance mode
 export type InstanceMode = 'interactive' | 'print' | 'stream-json';
 
+// Available shell info
+export interface AvailableShell {
+  id: string; // e.g., 'powershell', 'bash'
+  name: string; // e.g., 'PowerShell', 'Bash'
+  path: string; // e.g., 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+  isDefault: boolean; // Is the system default shell
+  canRunClaude: boolean; // Can execute claude command (Windows: powershell recommended)
+}
+
 // Project interface
 export interface Project {
   id: string;
@@ -36,6 +46,7 @@ export interface Project {
   color?: string;
   hostname?: string; // Machine hostname where project is located
   skipPermissions?: boolean; // Launch instances with --dangerously-skip-permissions
+  preferredShell?: string; // Preferred shell path for terminal instances
   createdAt: number;
   updatedAt: number;
 }

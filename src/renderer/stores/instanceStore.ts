@@ -143,7 +143,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   createInstance: async (config) => {
     set({ isLoading: true, error: null });
     try {
-      const instance = await window.electronAPI.instance.create(config);
+      const result = await window.electronAPI.instance.create(config);
+      // Result includes instance data + conversationId
+      const { conversationId, ...instance } = result as {
+        conversationId?: string;
+      } & ClaudeInstance;
 
       // Initialize output storage
       const outputs = new Map(get().outputs);
@@ -151,14 +155,26 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         instanceId: instance.id,
         messages: [],
         rawOutput: '',
+        conversationId,
       });
 
-      set((state) => ({
-        instances: [...state.instances, instance],
-        outputs,
-        selectedInstanceId: instance.id,
-        isLoading: false,
-      }));
+      // Map instance to conversation if we have one
+      const instanceConversations = new Map(get().instanceConversations);
+      if (conversationId) {
+        instanceConversations.set(instance.id, conversationId);
+      }
+
+      set((state) => {
+        // Check if instance already exists (can happen with web client sync)
+        const exists = state.instances.some((i) => i.id === instance.id);
+        return {
+          instances: exists ? state.instances : [...state.instances, instance],
+          outputs,
+          instanceConversations,
+          selectedInstanceId: instance.id,
+          isLoading: false,
+        };
+      });
 
       return instance;
     } catch (error) {
@@ -468,6 +484,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       handleSessionId(id, sessionId);
     });
 
+    // Instance sync listener (for updates from web clients or other sources)
+    const unsubSync = window.electronAPI.instance.onSync((instances) => {
+      syncInstances(instances);
+    });
+
     // Shell event listeners
     const unsubShellRawOutput = window.electronAPI.shell.onRawOutput((id, data) => {
       addShellRawOutput(id, data);
@@ -500,6 +521,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       unsubExit();
       unsubRaw();
       unsubSessionId();
+      unsubSync();
       unsubShellRawOutput();
       unsubShellStatus();
       unsubShellExit();

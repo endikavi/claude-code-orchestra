@@ -86,6 +86,9 @@ export class ProcessManager extends EventEmitter {
     // Start the instance
     instance.start();
 
+    // Notify web clients of state change
+    this.broadcastStateUpdate();
+
     return instance.toJSON();
   }
 
@@ -118,6 +121,9 @@ export class ProcessManager extends EventEmitter {
 
     // Start the instance (will use --resume flag)
     instance.start();
+
+    // Notify web clients of state change
+    this.broadcastStateUpdate();
 
     return instance.toJSON();
   }
@@ -297,12 +303,42 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Broadcast state update to all clients (web and renderer)
+   */
+  private broadcastStateUpdate(): void {
+    // Send to renderer process
+    this.syncToRenderer();
+
+    // Send to web clients
+    getWebServerModule()
+      .then(({ getWebServer }) => {
+        const webServer = getWebServer();
+        if (webServer.running) {
+          webServer.broadcastStateUpdate();
+        }
+      })
+      .catch(() => {
+        // WebServer not available, ignore
+      });
+  }
+
+  /**
+   * Sync instance state to renderer process
+   */
+  private syncToRenderer(): void {
+    const instances = this.getAllInstances();
+    this.sendToRenderer(IPC_CHANNELS.INSTANCE_SYNC, instances);
+  }
+
+  /**
    * Kill an instance
    */
   killInstance(id: string): void {
     const instance = this.instances.get(id);
     if (instance) {
       instance.kill();
+      // Notify web clients of state change
+      this.broadcastStateUpdate();
     }
   }
 
@@ -382,6 +418,7 @@ export class ProcessManager extends EventEmitter {
     const shell = new ShellInstance({
       projectId,
       projectPath: project.path,
+      preferredShell: project.preferredShell,
     });
 
     this.setupShellListeners(shell);

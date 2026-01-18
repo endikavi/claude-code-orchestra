@@ -61,6 +61,9 @@ export class DataStore {
     // Migration: Add hostname column if it doesn't exist
     this.migrateAddHostname();
 
+    // Migration: Add preferredShell column if it doesn't exist
+    this.migrateAddPreferredShell();
+
     // Create index on path for faster lookups
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path)
@@ -119,7 +122,8 @@ export class DataStore {
         enabled INTEGER DEFAULT 0,
         port INTEGER DEFAULT 3847,
         passwordHash TEXT DEFAULT '',
-        autoStart INTEGER DEFAULT 0
+        autoStart INTEGER DEFAULT 0,
+        allowAnyCors INTEGER DEFAULT 0
       )
     `);
 
@@ -127,9 +131,20 @@ export class DataStore {
     const existing = this.db.prepare('SELECT * FROM remote_config WHERE id = 1').get();
     if (!existing) {
       this.db.exec(`
-        INSERT INTO remote_config (id, enabled, port, passwordHash, autoStart)
-        VALUES (1, 0, 3847, '', 0)
+        INSERT INTO remote_config (id, enabled, port, passwordHash, autoStart, allowAnyCors)
+        VALUES (1, 0, 3847, '', 0, 0)
       `);
+    }
+
+    // Migration: Add allowAnyCors column if it doesn't exist
+    const columns = this.db.prepare('PRAGMA table_info(remote_config)').all() as { name: string }[];
+    if (!columns.some((col) => col.name === 'allowAnyCors')) {
+      this.db.exec('ALTER TABLE remote_config ADD COLUMN allowAnyCors INTEGER DEFAULT 0');
+    }
+
+    // Migration: Add customHostname column if it doesn't exist
+    if (!columns.some((col) => col.name === 'customHostname')) {
+      this.db.exec("ALTER TABLE remote_config ADD COLUMN customHostname TEXT DEFAULT ''");
     }
 
     // Create cluster_config table
@@ -264,6 +279,24 @@ export class DataStore {
     }
   }
 
+  /**
+   * Migration: Add preferredShell column for existing databases
+   */
+  private migrateAddPreferredShell(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'preferredShell'
+      );
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN preferredShell TEXT');
+      }
+    } catch (error) {
+      console.warn('Migration preferredShell:', error);
+    }
+  }
+
   // Project CRUD operations
   createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Project {
     const now = Date.now();
@@ -276,13 +309,14 @@ export class DataStore {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, createdAt, updatedAt)
-      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @createdAt, @updatedAt)
+      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, createdAt, updatedAt)
+      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @createdAt, @updatedAt)
     `);
 
     stmt.run({
       ...project,
       skipPermissions: project.skipPermissions ? 1 : 0,
+      preferredShell: project.preferredShell ?? null,
     });
     return project;
   }
@@ -296,13 +330,15 @@ export class DataStore {
     const stmt = this.db.prepare(`
       UPDATE projects
       SET name = @name, path = @path, description = @description,
-          color = @color, hostname = @hostname, skipPermissions = @skipPermissions, updatedAt = @updatedAt
+          color = @color, hostname = @hostname, skipPermissions = @skipPermissions,
+          preferredShell = @preferredShell, updatedAt = @updatedAt
       WHERE id = @id
     `);
 
     const result = stmt.run({
       ...updatedProject,
       skipPermissions: updatedProject.skipPermissions ? 1 : 0,
+      preferredShell: updatedProject.preferredShell ?? null,
     });
     if (result.changes === 0) {
       throw new Error(`Project with id ${project.id} not found`);
@@ -331,6 +367,7 @@ export class DataStore {
       color: row.color as string | undefined,
       hostname: row.hostname as string | undefined,
       skipPermissions: row.skipPermissions === 1,
+      preferredShell: row.preferredShell as string | undefined,
       createdAt: row.createdAt as number,
       updatedAt: row.updatedAt as number,
     };
@@ -565,6 +602,8 @@ export class DataStore {
       port: row.port as number,
       passwordHash: row.passwordHash as string,
       autoStart: row.autoStart === 1,
+      allowAnyCors: row.allowAnyCors === 1,
+      customHostname: (row.customHostname as string) || '',
     };
   }
 
@@ -577,7 +616,7 @@ export class DataStore {
 
     const stmt = this.db.prepare(`
       UPDATE remote_config
-      SET enabled = @enabled, port = @port, passwordHash = @passwordHash, autoStart = @autoStart
+      SET enabled = @enabled, port = @port, passwordHash = @passwordHash, autoStart = @autoStart, allowAnyCors = @allowAnyCors, customHostname = @customHostname
       WHERE id = 1
     `);
 
@@ -586,6 +625,8 @@ export class DataStore {
       port: updated.port,
       passwordHash: updated.passwordHash,
       autoStart: updated.autoStart ? 1 : 0,
+      allowAnyCors: updated.allowAnyCors ? 1 : 0,
+      customHostname: updated.customHostname || '',
     });
 
     return updated;

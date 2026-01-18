@@ -85,12 +85,20 @@ export class WebServer extends EventEmitter {
   }
 
   private setupMiddleware(): void {
-    // Dynamic CORS configuration - allows localhost and local IP
+    // Dynamic CORS configuration - allows localhost, local IP, and optionally any origin
     this.app.use(
       cors({
         origin: (origin, callback) => {
           // Allow requests without origin (desktop apps, curl, etc.)
           if (!origin) {
+            callback(null, true);
+            return;
+          }
+
+          // Check if allowAnyCors is enabled in config
+          const dataStore = DataStore.getInstance();
+          const config = dataStore.getRemoteConfig();
+          if (config.allowAnyCors) {
             callback(null, true);
             return;
           }
@@ -105,6 +113,17 @@ export class WebServer extends EventEmitter {
 
           if (localIp) {
             allowedOrigins.push(`http://${localIp}:${this.currentPort}`);
+          }
+
+          // Add custom hostname to allowed origins if configured
+          if (config.customHostname) {
+            const hostname = config.customHostname;
+            // Add both http and https variants
+            allowedOrigins.push(`http://${hostname}`);
+            allowedOrigins.push(`https://${hostname}`);
+            // Add with port (for non-standard ports)
+            allowedOrigins.push(`http://${hostname}:${this.currentPort}`);
+            allowedOrigins.push(`https://${hostname}:${this.currentPort}`);
           }
 
           if (allowedOrigins.includes(origin)) {

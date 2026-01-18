@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 export interface ShellInstanceConfig {
   projectId: string;
   projectPath: string;
+  preferredShell?: string; // Path to preferred shell executable
 }
 
 export class ShellInstance extends EventEmitter {
@@ -16,12 +17,15 @@ export class ShellInstance extends EventEmitter {
   private ptyProcess: pty.IPty | null = null;
   private _status: ShellInstanceStatus = 'running';
   private projectPath: string;
+  private preferredShell?: string;
+  private _hasExited: boolean = false; // Flag to prevent resize race conditions
 
   constructor(config: ShellInstanceConfig) {
     super();
     this.id = randomUUID();
     this.projectId = config.projectId;
     this.projectPath = config.projectPath;
+    this.preferredShell = config.preferredShell;
     this.createdAt = Date.now();
   }
 
@@ -77,21 +81,46 @@ export class ShellInstance extends EventEmitter {
   }
 
   /**
+   * Get shell command and arguments based on preferred shell or platform defaults
+   */
+  private getShellConfig(): { shell: string; shellArgs: string[] } {
+    // If a preferred shell is set, use it
+    if (this.preferredShell) {
+      const shellPath = this.preferredShell.toLowerCase();
+
+      // Determine arguments based on shell type
+      if (shellPath.includes('powershell') || shellPath.includes('pwsh')) {
+        return { shell: this.preferredShell, shellArgs: ['-NoLogo'] };
+      } else if (shellPath.includes('cmd')) {
+        return { shell: this.preferredShell, shellArgs: [] };
+      } else if (
+        shellPath.includes('bash') ||
+        shellPath.includes('zsh') ||
+        shellPath.includes('fish')
+      ) {
+        return { shell: this.preferredShell, shellArgs: [] };
+      } else if (shellPath.includes('wsl')) {
+        return { shell: this.preferredShell, shellArgs: [] };
+      }
+      // Default: no special args
+      return { shell: this.preferredShell, shellArgs: [] };
+    }
+
+    // Platform defaults
+    if (process.platform === 'win32') {
+      // Windows: Use PowerShell by default (can run Claude)
+      return { shell: 'powershell.exe', shellArgs: ['-NoLogo'] };
+    } else {
+      // Linux/macOS: Use user's default shell
+      return { shell: process.env.SHELL || '/bin/bash', shellArgs: [] };
+    }
+  }
+
+  /**
    * Start the shell process
    */
   start(): void {
-    let shell: string;
-    let shellArgs: string[];
-
-    if (process.platform === 'win32') {
-      // Windows: Use PowerShell by default
-      shell = 'powershell.exe';
-      shellArgs = ['-NoLogo'];
-    } else {
-      // Linux/macOS: Use user's default shell
-      shell = process.env.SHELL || '/bin/bash';
-      shellArgs = [];
-    }
+    const { shell, shellArgs } = this.getShellConfig();
 
     try {
       this.ptyProcess = pty.spawn(shell, shellArgs, {
@@ -113,6 +142,9 @@ export class ShellInstance extends EventEmitter {
       });
 
       this.ptyProcess.onExit(({ exitCode }) => {
+        // Set exit flag immediately to prevent resize race conditions
+        this._hasExited = true;
+
         if (this._status !== 'killed') {
           this._status = exitCode === 0 ? 'completed' : 'error';
         }
@@ -140,8 +172,13 @@ export class ShellInstance extends EventEmitter {
    * Resize the terminal
    */
   resize(cols: number, rows: number): void {
-    if (this.ptyProcess) {
-      this.ptyProcess.resize(cols, rows);
+    // Only resize if process exists and hasn't exited
+    if (this.ptyProcess && !this._hasExited) {
+      try {
+        this.ptyProcess.resize(cols, rows);
+      } catch {
+        // Silently ignore resize errors - process may have exited
+      }
     }
   }
 

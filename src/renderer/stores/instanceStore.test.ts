@@ -57,6 +57,10 @@ describe('instanceStore', () => {
       selectedInstanceId: null,
       isLoading: false,
       error: null,
+      // Shell state
+      shellInstances: [],
+      shellOutputs: new Map(),
+      selectedShellId: null,
     });
 
     // Reset mocks
@@ -503,6 +507,306 @@ describe('instanceStore', () => {
     it('getInstanceOutputForConversation should return output by conversation', () => {
       const output = useInstanceStore.getState().getInstanceOutputForConversation('conv-1');
       expect(output?.instanceId).toBe(mockInstance.id);
+    });
+
+    it('getInstanceForConversation should return undefined for unknown conversation', () => {
+      const instance = useInstanceStore.getState().getInstanceForConversation('unknown-conv');
+      expect(instance).toBeUndefined();
+    });
+
+    it('getInstanceOutputForConversation should return undefined for unknown conversation', () => {
+      const output = useInstanceStore.getState().getInstanceOutputForConversation('unknown-conv');
+      expect(output).toBeUndefined();
+    });
+  });
+
+  // ==================== Shell Tests ====================
+  describe('shell initial state', () => {
+    it('should have empty shell instances array', () => {
+      const state = useInstanceStore.getState();
+      expect(state.shellInstances).toEqual([]);
+    });
+
+    it('should have empty shell outputs map', () => {
+      const state = useInstanceStore.getState();
+      expect(state.shellOutputs.size).toBe(0);
+    });
+
+    it('should have no selected shell', () => {
+      const state = useInstanceStore.getState();
+      expect(state.selectedShellId).toBeNull();
+    });
+  });
+
+  describe('createShellInstance', () => {
+    const mockShell = {
+      id: 'shell-1',
+      projectId: 'proj-1',
+      status: 'running' as const,
+      createdAt: Date.now(),
+    };
+
+    it('should create a shell and add it to the list', async () => {
+      window.electronAPI.shell.create = vi.fn().mockResolvedValue(mockShell);
+
+      const result = await useInstanceStore.getState().createShellInstance('proj-1');
+
+      expect(result).toEqual(mockShell);
+      expect(useInstanceStore.getState().shellInstances).toContainEqual(mockShell);
+    });
+
+    it('should initialize shell output storage', async () => {
+      window.electronAPI.shell.create = vi.fn().mockResolvedValue(mockShell);
+
+      await useInstanceStore.getState().createShellInstance('proj-1');
+
+      const output = useInstanceStore.getState().shellOutputs.get(mockShell.id);
+      expect(output).toBeDefined();
+      expect(output?.rawOutput).toBe('');
+    });
+
+    it('should select the new shell and deselect instance', async () => {
+      useInstanceStore.setState({ selectedInstanceId: 'inst-1' });
+      window.electronAPI.shell.create = vi.fn().mockResolvedValue(mockShell);
+
+      await useInstanceStore.getState().createShellInstance('proj-1');
+
+      expect(useInstanceStore.getState().selectedShellId).toBe(mockShell.id);
+      expect(useInstanceStore.getState().selectedInstanceId).toBeNull();
+    });
+
+    it('should handle creation errors', async () => {
+      window.electronAPI.shell.create = vi.fn().mockRejectedValue(new Error('Shell create failed'));
+
+      await expect(useInstanceStore.getState().createShellInstance('proj-1')).rejects.toThrow(
+        'Shell create failed'
+      );
+
+      expect(useInstanceStore.getState().error).toBe('Shell create failed');
+    });
+  });
+
+  describe('killShellInstance', () => {
+    const mockShell = {
+      id: 'shell-1',
+      projectId: 'proj-1',
+      status: 'running' as const,
+      createdAt: Date.now(),
+    };
+
+    it('should kill shell and remove from store', async () => {
+      useInstanceStore.setState({
+        shellInstances: [mockShell],
+        shellOutputs: new Map([[mockShell.id, { shellId: mockShell.id, rawOutput: '' }]]),
+        selectedShellId: mockShell.id,
+      });
+
+      window.electronAPI.shell.kill = vi.fn().mockResolvedValue(undefined);
+
+      await useInstanceStore.getState().killShellInstance(mockShell.id);
+
+      expect(window.electronAPI.shell.kill).toHaveBeenCalledWith(mockShell.id);
+      expect(useInstanceStore.getState().shellInstances).toHaveLength(0);
+    });
+
+    it('should handle kill errors', async () => {
+      useInstanceStore.setState({ shellInstances: [mockShell] });
+      window.electronAPI.shell.kill = vi.fn().mockRejectedValue(new Error('Kill shell failed'));
+
+      await useInstanceStore.getState().killShellInstance(mockShell.id);
+
+      expect(useInstanceStore.getState().error).toBe('Kill shell failed');
+    });
+  });
+
+  describe('removeShellInstance', () => {
+    const mockShell = {
+      id: 'shell-1',
+      projectId: 'proj-1',
+      status: 'running' as const,
+      createdAt: Date.now(),
+    };
+
+    it('should remove shell from list', () => {
+      useInstanceStore.setState({
+        shellInstances: [mockShell],
+        shellOutputs: new Map([[mockShell.id, { shellId: mockShell.id, rawOutput: '' }]]),
+      });
+
+      useInstanceStore.getState().removeShellInstance(mockShell.id);
+
+      expect(useInstanceStore.getState().shellInstances).toHaveLength(0);
+      expect(useInstanceStore.getState().shellOutputs.has(mockShell.id)).toBe(false);
+    });
+
+    it('should select another shell if removed shell was selected', () => {
+      const shell2 = { ...mockShell, id: 'shell-2' };
+      useInstanceStore.setState({
+        shellInstances: [mockShell, shell2],
+        selectedShellId: mockShell.id,
+      });
+
+      useInstanceStore.getState().removeShellInstance(mockShell.id);
+
+      expect(useInstanceStore.getState().selectedShellId).toBe(shell2.id);
+    });
+
+    it('should set selectedShellId to null if no shells remain', () => {
+      useInstanceStore.setState({
+        shellInstances: [mockShell],
+        selectedShellId: mockShell.id,
+      });
+
+      useInstanceStore.getState().removeShellInstance(mockShell.id);
+
+      expect(useInstanceStore.getState().selectedShellId).toBeNull();
+    });
+  });
+
+  describe('sendShellInput', () => {
+    it('should send input to shell', async () => {
+      window.electronAPI.shell.sendInput = vi.fn().mockResolvedValue(undefined);
+
+      await useInstanceStore.getState().sendShellInput('shell-1', 'ls -la');
+
+      expect(window.electronAPI.shell.sendInput).toHaveBeenCalledWith('shell-1', 'ls -la');
+    });
+
+    it('should handle send errors', async () => {
+      window.electronAPI.shell.sendInput = vi.fn().mockRejectedValue(new Error('Send failed'));
+
+      await useInstanceStore.getState().sendShellInput('shell-1', 'ls');
+
+      expect(useInstanceStore.getState().error).toBe('Send failed');
+    });
+  });
+
+  describe('selectShell', () => {
+    it('should select a shell and deselect instance', () => {
+      useInstanceStore.setState({ selectedInstanceId: 'inst-1' });
+
+      useInstanceStore.getState().selectShell('shell-1');
+
+      expect(useInstanceStore.getState().selectedShellId).toBe('shell-1');
+      expect(useInstanceStore.getState().selectedInstanceId).toBeNull();
+    });
+
+    it('should clear selection when null is passed', () => {
+      useInstanceStore.setState({ selectedShellId: 'shell-1', selectedInstanceId: 'inst-1' });
+
+      useInstanceStore.getState().selectShell(null);
+
+      expect(useInstanceStore.getState().selectedShellId).toBeNull();
+      expect(useInstanceStore.getState().selectedInstanceId).toBe('inst-1');
+    });
+  });
+
+  describe('updateShellStatus', () => {
+    it('should update shell status', () => {
+      const mockShell = {
+        id: 'shell-1',
+        projectId: 'proj-1',
+        status: 'running' as const,
+        createdAt: Date.now(),
+      };
+      useInstanceStore.setState({ shellInstances: [mockShell] });
+
+      useInstanceStore.getState().updateShellStatus('shell-1', 'completed');
+
+      const shell = useInstanceStore.getState().shellInstances.find((s) => s.id === 'shell-1');
+      expect(shell?.status).toBe('completed');
+    });
+  });
+
+  describe('addShellRawOutput', () => {
+    it('should append raw output data', () => {
+      useInstanceStore.setState({
+        shellOutputs: new Map([['shell-1', { shellId: 'shell-1', rawOutput: 'Hello' }]]),
+      });
+
+      useInstanceStore.getState().addShellRawOutput('shell-1', ' World');
+
+      const output = useInstanceStore.getState().shellOutputs.get('shell-1');
+      expect(output?.rawOutput).toBe('Hello World');
+    });
+
+    it('should create output storage if not exists', () => {
+      useInstanceStore.getState().addShellRawOutput('shell-1', 'New data');
+
+      const output = useInstanceStore.getState().shellOutputs.get('shell-1');
+      expect(output?.rawOutput).toBe('New data');
+    });
+  });
+
+  describe('handleShellExit', () => {
+    const mockShell = {
+      id: 'shell-1',
+      projectId: 'proj-1',
+      status: 'running' as const,
+      createdAt: Date.now(),
+    };
+
+    it('should set status to completed on exit code 0', () => {
+      useInstanceStore.setState({ shellInstances: [mockShell] });
+
+      useInstanceStore.getState().handleShellExit('shell-1', 0);
+
+      const shell = useInstanceStore.getState().shellInstances.find((s) => s.id === 'shell-1');
+      expect(shell?.status).toBe('completed');
+    });
+
+    it('should set status to error on non-zero exit code', () => {
+      useInstanceStore.setState({ shellInstances: [mockShell] });
+
+      useInstanceStore.getState().handleShellExit('shell-1', 1);
+
+      const shell = useInstanceStore.getState().shellInstances.find((s) => s.id === 'shell-1');
+      expect(shell?.status).toBe('error');
+    });
+
+    it('should not change status if shell was killed', () => {
+      const killedShell = { ...mockShell, status: 'killed' as const };
+      useInstanceStore.setState({ shellInstances: [killedShell] });
+
+      useInstanceStore.getState().handleShellExit('shell-1', 0);
+
+      const shell = useInstanceStore.getState().shellInstances.find((s) => s.id === 'shell-1');
+      expect(shell?.status).toBe('killed');
+    });
+  });
+
+  describe('shell selectors', () => {
+    const mockShell = {
+      id: 'shell-1',
+      projectId: 'proj-1',
+      status: 'running' as const,
+      createdAt: Date.now(),
+    };
+
+    beforeEach(() => {
+      const shell2 = { ...mockShell, id: 'shell-2', projectId: 'proj-2' };
+      useInstanceStore.setState({
+        shellInstances: [mockShell, shell2],
+        shellOutputs: new Map([[mockShell.id, { shellId: mockShell.id, rawOutput: 'output' }]]),
+        selectedShellId: mockShell.id,
+      });
+    });
+
+    it('getShellsByProject should filter by project', () => {
+      const shells = useInstanceStore.getState().getShellsByProject('proj-1');
+      expect(shells).toHaveLength(1);
+      expect(shells[0].projectId).toBe('proj-1');
+    });
+
+    it('getSelectedShell should return selected shell', () => {
+      const shell = useInstanceStore.getState().getSelectedShell();
+      expect(shell?.id).toBe(mockShell.id);
+    });
+
+    it('getShellOutput should return output for shell', () => {
+      const output = useInstanceStore.getState().getShellOutput(mockShell.id);
+      expect(output?.shellId).toBe(mockShell.id);
+      expect(output?.rawOutput).toBe('output');
     });
   });
 });

@@ -66,7 +66,21 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       }
     ) => {
       const validated = validators.instanceCreate(config);
-      return processManager.createInstance(validated);
+      const instance = processManager.createInstance(validated);
+
+      // Create a conversation automatically (same as web clients)
+      const conversation = dataStore.createConversation({
+        projectId: validated.projectId,
+        title: `Session ${new Date().toLocaleString()}`,
+        initialPrompt: '',
+        model: validated.model,
+        mode: validated.mode,
+      });
+
+      // Store the mapping in ProcessManager
+      processManager.setInstanceConversation(instance.id, conversation.id);
+
+      return { ...instance, conversationId: conversation.id };
     }
   );
 
@@ -492,6 +506,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.on(IPC_CHANNELS.SHELL_RESIZE, (_event, id: string, cols: number, rows: number) => {
     processManager.resizeShellInstance(id, cols, rows);
+  });
+
+  // Get available shells on the system
+  ipcMain.handle(IPC_CHANNELS.SHELL_GET_AVAILABLE, () => {
+    const { ShellDetector } = require('../services/ShellDetector');
+    return ShellDetector.getInstance().getAvailableShells();
   });
 
   // External terminal handler (legacy)

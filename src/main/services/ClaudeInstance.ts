@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
+import { execSync } from 'child_process';
 import { StreamJSONParser } from './StreamJSONParser';
 import type {
   ClaudeInstance as ClaudeInstanceType,
@@ -9,6 +10,78 @@ import type {
   StreamMessage,
 } from '@shared/types';
 import { randomUUID } from 'crypto';
+
+// Cache for Claude CLI path
+let cachedClaudePath: string | null = null;
+
+/**
+ * Find the Claude CLI executable path
+ */
+function findClaudePath(): string {
+  if (cachedClaudePath) {
+    return cachedClaudePath;
+  }
+
+  const fs = require('fs');
+  const path = require('path');
+
+  // On Windows, check common npm global installation paths first
+  if (process.platform === 'win32') {
+    const possiblePaths = [
+      // npm global (default location)
+      path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
+      // npm global (alternative)
+      path.join(process.env.LOCALAPPDATA || '', 'npm', 'claude.cmd'),
+      // Custom npm prefix
+      path.join(process.env.USERPROFILE || '', '.npm-global', 'claude.cmd'),
+      // nvm for windows
+      path.join(process.env.NVM_SYMLINK || '', 'claude.cmd'),
+      // Scoop
+      path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'claude.cmd'),
+    ];
+
+    for (const p of possiblePaths) {
+      if (p && fs.existsSync(p)) {
+        console.log(`[ClaudeInstance] Found Claude at: ${p}`);
+        cachedClaudePath = p;
+        return p;
+      }
+    }
+
+    // Try 'where' command as fallback
+    try {
+      const result = execSync('where claude', {
+        encoding: 'utf-8',
+        timeout: 5000,
+        windowsHide: true,
+        env: process.env, // Use full env for detection
+      });
+      const paths = result.trim().split(/\r?\n/);
+      if (paths.length > 0 && paths[0]) {
+        cachedClaudePath = paths[0].trim();
+        console.log(`[ClaudeInstance] Found Claude via 'where': ${cachedClaudePath}`);
+        return cachedClaudePath;
+      }
+    } catch (err) {
+      console.log(`[ClaudeInstance] 'where claude' failed:`, err);
+    }
+  } else {
+    // Unix: Try 'which' command
+    try {
+      const result = execSync('which claude', { encoding: 'utf-8', timeout: 5000 });
+      cachedClaudePath = result.trim();
+      console.log(`[ClaudeInstance] Found Claude via 'which': ${cachedClaudePath}`);
+      return cachedClaudePath;
+    } catch {
+      // Command not found
+    }
+  }
+
+  // Last resort: assume it's in PATH and hope for the best
+  console.log(`[ClaudeInstance] Claude not found, falling back to 'claude' in PATH`);
+  cachedClaudePath = 'claude';
+  return cachedClaudePath;
+}
 
 export interface ClaudeInstanceConfig {
   projectId: string;
@@ -36,6 +109,11 @@ export class ClaudeInstance extends EventEmitter {
   private _error?: string;
   private _sessionId?: string;
   private projectPath: string;
+  private _hasExited: boolean = false; // Flag to prevent race conditions on resize
+  private idleTimer: NodeJS.Timeout | null = null;
+
+  // Time in ms without output before considering Claude is waiting for input
+  private static readonly IDLE_TIMEOUT = 2000;
 
   constructor(config: ClaudeInstanceConfig) {
     super();
@@ -118,6 +196,19 @@ export class ClaudeInstance extends EventEmitter {
       'HOMEDRIVE',
       'HOMEPATH',
       'SYSTEMDRIVE',
+      'PATHEXT', // Required for Windows to find executables
+      'COMSPEC', // Required for cmd.exe
+      'PSModulePath', // Required for PowerShell
+      'ProgramFiles',
+      'ProgramFiles(x86)',
+      'ProgramData',
+      'CommonProgramFiles',
+      'CommonProgramFiles(x86)',
+      // Node.js / npm paths
+      'NODE_PATH',
+      'npm_config_prefix',
+      'NVM_HOME',
+      'NVM_SYMLINK',
       // Claude CLI specific - API key is required for the CLI to function
       'ANTHROPIC_API_KEY',
     ];
@@ -149,23 +240,46 @@ export class ClaudeInstance extends EventEmitter {
    */
   start(): void {
     const args = this.buildArgs();
-    const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
-    const shellArgs =
-      process.platform === 'win32'
-        ? ['/c', `claude ${args.join(' ')}`]
-        : ['-c', `claude ${args.join(' ')}`];
+    const claudePath = findClaudePath();
+
+    // Log the detected path for debugging
+    console.log(`[ClaudeInstance] Using Claude CLI at: ${claudePath}`);
+
+    // On Windows, if we found a .cmd file, use cmd.exe to run it
+    // Otherwise spawn directly
+    let shell: string;
+    let shellArgs: string[];
+
+    if (process.platform === 'win32') {
+      if (claudePath.endsWith('.cmd') || claudePath.endsWith('.bat')) {
+        // Use cmd.exe to run .cmd/.bat files
+        // Pass arguments separately, not as a single string
+        shell = 'cmd.exe';
+        shellArgs = ['/c', claudePath, ...args];
+      } else {
+        // Try running directly
+        shell = claudePath;
+        shellArgs = args;
+      }
+    } else {
+      // Unix: run directly
+      shell = claudePath;
+      shellArgs = args;
+    }
 
     try {
+      // Use full process.env to ensure PATH includes Node.js and other required tools
+      // The claude.cmd script needs node to be available
       this.ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
         cwd: this.projectPath,
         env: {
-          ...this.getAllowedEnvVars(),
+          ...process.env,
           FORCE_COLOR: '1',
           TERM: 'xterm-256color',
-        },
+        } as Record<string, string>,
       });
 
       this._status = 'starting';
@@ -178,10 +292,26 @@ export class ClaudeInstance extends EventEmitter {
         // Parse JSON for structured view
         if (this.mode === 'stream-json') {
           this.parser.process(data);
+        } else {
+          // For interactive mode, update status to 'running' when we receive data
+          // and reset the idle timer to detect when Claude stops responding
+          if (this._status === 'starting' || this._status === 'waiting_input') {
+            this._status = 'running';
+            this.emit('status', this._status);
+          }
+
+          // Reset idle timer - will transition to waiting_input after timeout
+          this.resetIdleTimer();
         }
       });
 
       this.ptyProcess.onExit(({ exitCode }) => {
+        // Set exit flag immediately to prevent resize race conditions
+        this._hasExited = true;
+
+        // Clean up idle timer
+        this.clearIdleTimer();
+
         this.parser.flush();
 
         if (exitCode === 0) {
@@ -256,10 +386,43 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
+   * Reset the idle timer for interactive mode
+   * When no output is received for IDLE_TIMEOUT ms, switch to waiting_input status
+   */
+  private resetIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+    }
+
+    this.idleTimer = setTimeout(() => {
+      // Only transition to waiting_input in interactive mode when running
+      if (this._status === 'running' && this.mode !== 'stream-json') {
+        this._status = 'waiting_input';
+        this.emit('status', this._status);
+      }
+    }, ClaudeInstance.IDLE_TIMEOUT);
+  }
+
+  /**
+   * Clear the idle timer
+   */
+  private clearIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  /**
    * Send input to the process
    */
   sendInput(input: string): void {
     if (this.ptyProcess) {
+      // When user sends input while waiting, change back to running
+      if (this._status === 'waiting_input') {
+        this._status = 'running';
+        this.emit('status', this._status);
+      }
       this.ptyProcess.write(input);
     }
   }
@@ -268,8 +431,13 @@ export class ClaudeInstance extends EventEmitter {
    * Resize the terminal
    */
   resize(cols: number, rows: number): void {
-    if (this.ptyProcess) {
-      this.ptyProcess.resize(cols, rows);
+    // Only resize if process exists and hasn't exited
+    if (this.ptyProcess && !this._hasExited) {
+      try {
+        this.ptyProcess.resize(cols, rows);
+      } catch {
+        // Silently ignore resize errors - process may have exited
+      }
     }
   }
 
@@ -277,6 +445,9 @@ export class ClaudeInstance extends EventEmitter {
    * Kill the process
    */
   kill(): void {
+    // Clean up idle timer
+    this.clearIdleTimer();
+
     if (this.ptyProcess) {
       this._status = 'killed';
       this.emit('status', this._status);
@@ -314,7 +485,7 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
-   * Check if process is running
+   * Check if process is running (includes waiting_input state)
    */
   get isRunning(): boolean {
     return (

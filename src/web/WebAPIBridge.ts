@@ -410,6 +410,12 @@ export const webAPI = {
     onSessionId: (callback: (instanceId: string, sessionId: string) => void): (() => void) => {
       return addEventListener('instance:sessionId', callback);
     },
+
+    // Web clients receive sync via socket 'sync:state' event, this is a no-op for compatibility
+    onSync: (_callback: (instances: ClaudeInstance[]) => void): (() => void) => {
+      // No-op: web clients sync via socket events, not IPC
+      return () => {};
+    },
   },
 
   // Conversation operations
@@ -555,6 +561,27 @@ export const webAPI = {
         errors: [],
       }),
     checkInstalled: (): Promise<boolean> => Promise.resolve(false),
+  },
+
+  // Shell operations (not available in web version)
+  shell: {
+    openTerminal: (): Promise<{ success: boolean; error?: string }> =>
+      Promise.resolve({ success: false, error: 'Not available in web version' }),
+    create: (): Promise<never> => Promise.reject(new Error('Not available in web version')),
+    kill: (): Promise<void> => Promise.resolve(),
+    sendInput: (): Promise<void> => Promise.resolve(),
+    resize: (): void => {
+      // No-op: shell resize not available in web version
+    },
+    onRawOutput: (): (() => void) => () => {
+      // No-op cleanup
+    },
+    onStatus: (): (() => void) => () => {
+      // No-op cleanup
+    },
+    onExit: (): (() => void) => () => {
+      // No-op cleanup
+    },
   },
 
   // Remote operations (not needed in web version - we ARE the remote client)
