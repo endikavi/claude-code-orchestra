@@ -59,6 +59,7 @@ export interface SyncState {
   instances: ClaudeInstance[];
   conversations: Conversation[];
   outputs?: Record<string, InstanceOutputBuffer>; // Output buffers for each instance
+  instanceConversations?: Record<string, string>; // Mapping: instanceId -> conversationId
 }
 
 // Login request/response

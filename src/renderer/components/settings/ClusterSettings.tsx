@@ -24,6 +24,7 @@ export function ClusterSettings() {
   const [nodeName, setNodeName] = useState('');
   const [primaryHost, setPrimaryHost] = useState('');
   const [primaryPort, setPrimaryPort] = useState('');
+  const [clusterPort, setClusterPort] = useState('');
   const [showSecret, setShowSecret] = useState(false);
 
   // Load config on mount
@@ -40,6 +41,7 @@ export function ClusterSettings() {
       setNodeName(config.nodeName);
       setPrimaryHost(config.primaryHost || '');
       setPrimaryPort(config.primaryPort.toString());
+      setClusterPort(config.primaryPort.toString());
     }
   }, [config]);
 
@@ -67,6 +69,12 @@ export function ClusterSettings() {
     await updateConfig({
       primaryHost: primaryHost.trim(),
       primaryPort: parseInt(primaryPort, 10) || 3847,
+    });
+  };
+
+  const handleUpdateClusterPort = async () => {
+    await updateConfig({
+      primaryPort: parseInt(clusterPort, 10) || 3847,
     });
   };
 
@@ -214,6 +222,38 @@ export function ClusterSettings() {
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('cluster.primarySettings', 'Primary Node Settings')}
           </h4>
+
+          {/* Cluster Port */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-700 dark:text-gray-300">
+              {t('cluster.clusterPort', 'Cluster Port')}
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={clusterPort}
+                onChange={(e) => setClusterPort(e.target.value)}
+                placeholder="3847"
+                disabled={isConnected}
+                min={1}
+                max={65535}
+                className="w-32 px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange disabled:opacity-50"
+              />
+              <button
+                onClick={handleUpdateClusterPort}
+                disabled={isLoading || isConnected}
+                className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+              >
+                {t('common.save', 'Save')}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {t(
+                'cluster.clusterPortDesc',
+                'Port for the cluster server. Secondary nodes will connect to this port.'
+              )}
+            </p>
+          </div>
 
           {/* Shared Secret */}
           <div className="space-y-2">

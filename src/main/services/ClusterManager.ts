@@ -1,7 +1,10 @@
 import { EventEmitter } from 'events';
-import { io, Socket } from 'socket.io-client';
+import { createServer, Server as HttpServer } from 'http';
+import { Server as SocketIOServer, Socket as ServerSocket } from 'socket.io';
+import { io, Socket as ClientSocket } from 'socket.io-client';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { BrowserWindow } from 'electron';
+import { networkInterfaces } from 'os';
 
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
@@ -18,12 +21,26 @@ import type {
   GlobalProject,
   GlobalInstance,
 } from '@shared/types/cluster';
-import type { Project, ClaudeInstance } from '@shared/types';
+import type { Project, ClaudeInstance, StreamMessage, InstanceStatus } from '@shared/types';
 
 // Heartbeat interval in milliseconds
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const RECONNECT_INTERVAL = 5000; // 5 seconds
 const CONNECTION_TIMEOUT = 10000; // 10 seconds
+
+/**
+ * Timing-safe string comparison to prevent timing attacks
+ */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  try {
+    return timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
+  } catch {
+    return false;
+  }
+}
 
 export class ClusterManager extends EventEmitter {
   private static instance: ClusterManager | null = null;
@@ -36,14 +53,22 @@ export class ClusterManager extends EventEmitter {
   private localNodeId: string = '';
   private config: ClusterConfig | null = null;
 
-  // Client socket (when acting as secondary)
-  private clientSocket: Socket<ClusterServerToClientEvents, ClusterClientToServerEvents> | null =
+  // Server (when acting as primary)
+  private httpServer: HttpServer | null = null;
+  private io: SocketIOServer<ClusterClientToServerEvents, ClusterServerToClientEvents> | null =
     null;
+  private clusterSockets: Map<string, string> = new Map(); // socketId -> nodeId
+  private serverRunning: boolean = false;
+
+  // Client socket (when acting as secondary)
+  private clientSocket: ClientSocket<
+    ClusterServerToClientEvents,
+    ClusterClientToServerEvents
+  > | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isConnecting: boolean = false;
-
-  // Server-side state is managed by WebServer's cluster namespace
+  private intentionalDisconnect: boolean = false;
 
   private constructor() {
     super();
@@ -126,30 +151,32 @@ export class ClusterManager extends EventEmitter {
   /**
    * Start cluster mode
    */
-  public start(): Promise<void> {
+  public async start(): Promise<void> {
     const config = this.getConfig();
 
     if (!config.enabled) {
       console.log('[ClusterManager] Cluster mode is disabled');
-      return Promise.resolve();
+      return;
     }
 
     if (config.role === 'primary') {
       console.log('[ClusterManager] Starting as PRIMARY node');
-      this.setupPrimaryMode();
+      await this.setupPrimaryMode();
     } else if (config.role === 'secondary') {
       console.log('[ClusterManager] Starting as SECONDARY node');
+      this.intentionalDisconnect = false;
       this.connectToPrimary();
     }
-
-    return Promise.resolve();
   }
 
   /**
    * Stop cluster mode
    */
-  public stop(): void {
+  public async stop(): Promise<void> {
     console.log('[ClusterManager] Stopping cluster mode');
+
+    // Mark as intentional disconnect to prevent reconnection
+    this.intentionalDisconnect = true;
 
     // Stop heartbeat
     if (this.heartbeatInterval) {
@@ -163,30 +190,340 @@ export class ClusterManager extends EventEmitter {
       this.reconnectTimeout = null;
     }
 
-    // Disconnect client socket
+    // Disconnect client socket (secondary mode)
     if (this.clientSocket) {
       this.clientSocket.disconnect();
       this.clientSocket = null;
     }
 
+    // Stop server (primary mode)
+    await this.stopServer();
+
     // Clear nodes
     this.nodes.clear();
+    this.clusterSockets.clear();
 
     this.emit('stopped');
     this.sendToRenderer('cluster:disconnected');
   }
 
+  /**
+   * Stop the cluster server (primary mode)
+   */
+  private async stopServer(): Promise<void> {
+    if (!this.serverRunning) return;
+
+    return new Promise((resolve) => {
+      console.log('[ClusterManager] Stopping cluster server...');
+
+      // Close Socket.io
+      if (this.io) {
+        void this.io.close();
+        this.io = null;
+      }
+
+      // Close HTTP server
+      if (this.httpServer) {
+        this.httpServer.close(() => {
+          console.log('[ClusterManager] Cluster server stopped');
+          this.httpServer = null;
+          this.serverRunning = false;
+          resolve();
+        });
+      } else {
+        this.serverRunning = false;
+        resolve();
+      }
+    });
+  }
+
   // ==================== Primary Node Functions ====================
 
   /**
-   * Setup as primary node
+   * Setup as primary node - starts the cluster server
    */
-  private setupPrimaryMode(): void {
+  private async setupPrimaryMode(): Promise<void> {
+    const config = this.getConfig();
+
+    // Start the cluster server
+    await this.startServer(config.primaryPort);
+
     // Add local node to the cluster
     this.addLocalNode();
     this.emit('started', 'primary');
     this.sendToRenderer('cluster:connected');
     this.broadcastClusterState();
+  }
+
+  /**
+   * Start the cluster server (primary mode)
+   */
+  private async startServer(port: number): Promise<void> {
+    if (this.serverRunning) {
+      console.log('[ClusterManager] Server already running');
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        // Create HTTP server
+        this.httpServer = createServer();
+
+        // Create Socket.io server
+        this.io = new SocketIOServer(this.httpServer, {
+          cors: {
+            origin: '*',
+            methods: ['GET', 'POST'],
+          },
+          transports: ['websocket', 'polling'],
+        });
+
+        // Setup socket handlers
+        this.setupServerSocketHandlers();
+
+        // Start listening
+        this.httpServer.listen(port, () => {
+          this.serverRunning = true;
+          console.log(`[ClusterManager] Cluster server started on port ${port}`);
+          resolve();
+        });
+
+        this.httpServer.on('error', (error: NodeJS.ErrnoException) => {
+          console.error('[ClusterManager] Server error:', error);
+          if (error.code === 'EADDRINUSE') {
+            reject(new Error(`Port ${port} is already in use`));
+          } else {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
+  /**
+   * Setup socket handlers for the cluster server (primary mode)
+   */
+  private setupServerSocketHandlers(): void {
+    if (!this.io) return;
+
+    // Authentication middleware
+    this.io.use((socket, next) => {
+      const auth = socket.handshake.auth as { nodeId?: string; sharedSecret?: string };
+      const { nodeId, sharedSecret } = auth;
+
+      if (!nodeId || !sharedSecret) {
+        next(new Error('Authentication required'));
+        return;
+      }
+
+      // Verify shared secret
+      const config = this.getConfig();
+      if (config.role !== 'primary') {
+        next(new Error('This node is not a primary node'));
+        return;
+      }
+
+      // Use timing-safe comparison to prevent timing attacks
+      if (!config.sharedSecret || !safeCompare(sharedSecret, config.sharedSecret)) {
+        next(new Error('Invalid shared secret'));
+        return;
+      }
+
+      // Store node info on socket
+      (socket as ServerSocket & { nodeId?: string }).nodeId = nodeId;
+      next();
+    });
+
+    this.io.on('connection', (socket) => {
+      const nodeId = (socket as ServerSocket & { nodeId?: string }).nodeId;
+      console.log(`[ClusterManager] Node connected: ${nodeId}`);
+
+      // Handle node registration
+      socket.on('node:register', (request: NodeRegistrationRequest) => {
+        const response = this.handleNodeRegistration(request, socket.id);
+
+        if (response.success) {
+          this.clusterSockets.set(socket.id, request.nodeId);
+          socket.emit('node:registered', response);
+
+          // Notify other nodes
+          socket.broadcast.emit('node:joined', {
+            id: request.nodeId,
+            name: request.nodeName,
+            host: socket.handshake.address,
+            port: 0,
+            status: 'online',
+            role: 'secondary',
+            projects: request.projects,
+            instances: request.instances,
+            lastSeen: Date.now(),
+          } as ClusterNode);
+
+          // Broadcast updated cluster state
+          const state = this.getClusterState();
+          this.io?.emit('cluster:state', state);
+        } else {
+          socket.emit('node:rejected', response.error || 'Registration failed');
+        }
+      });
+
+      // Handle heartbeat
+      socket.on('node:heartbeat', () => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleNodeStateUpdate(connectedNodeId, {
+            projects: [],
+            instances: [],
+          });
+        }
+      });
+
+      // Handle state updates from secondary nodes
+      socket.on('state:update', (state) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleNodeStateUpdate(connectedNodeId, state);
+
+          // Broadcast updated cluster state to all nodes
+          const clusterState = this.getClusterState();
+          this.io?.emit('cluster:state', clusterState);
+        }
+      });
+
+      // Handle instance events from secondary nodes
+      socket.on('instance:output', (instanceId: string, data: StreamMessage) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('output', connectedNodeId, instanceId, data);
+          socket.broadcast.emit('instance:output', instanceId, connectedNodeId, data);
+        }
+      });
+
+      socket.on('instance:status', (instanceId: string, status: InstanceStatus) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('status', connectedNodeId, instanceId, status);
+          socket.broadcast.emit('instance:status', instanceId, connectedNodeId, status);
+        }
+      });
+
+      socket.on('instance:error', (instanceId: string, error: string) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('error', connectedNodeId, instanceId, error);
+          socket.broadcast.emit('instance:error', instanceId, connectedNodeId, error);
+        }
+      });
+
+      socket.on('instance:exit', (instanceId: string, code: number) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('exit', connectedNodeId, instanceId, code);
+          socket.broadcast.emit('instance:exit', instanceId, connectedNodeId, code);
+        }
+      });
+
+      socket.on('instance:rawOutput', (instanceId: string, data: string) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('rawOutput', connectedNodeId, instanceId, data);
+          socket.broadcast.emit('instance:rawOutput', instanceId, connectedNodeId, data);
+        }
+      });
+
+      socket.on('instance:sessionId', (instanceId: string, sessionId: string) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('sessionId', connectedNodeId, instanceId, sessionId);
+          socket.broadcast.emit('instance:sessionId', instanceId, connectedNodeId, sessionId);
+        }
+      });
+
+      // Handle disconnect
+      socket.on('disconnect', () => {
+        const disconnectedNodeId = this.clusterSockets.get(socket.id);
+        console.log(`[ClusterManager] Node disconnected: ${disconnectedNodeId}`);
+
+        if (disconnectedNodeId) {
+          this.handleNodeDisconnection(disconnectedNodeId);
+          this.clusterSockets.delete(socket.id);
+
+          // Notify other nodes
+          socket.broadcast.emit('node:left', disconnectedNodeId);
+
+          // Broadcast updated cluster state
+          const state = this.getClusterState();
+          this.io?.emit('cluster:state', state);
+        }
+      });
+    });
+
+    // Listen for internal events to send commands to nodes
+    this.on('instance:createRemote', (request: RemoteInstanceRequest) => {
+      this.sendClusterCommand(request.nodeId, 'instance:create', request, Date.now().toString());
+    });
+
+    this.on('instance:killRemote', (instanceId: string, nodeId: string) => {
+      this.sendClusterCommand(nodeId, 'instance:kill', instanceId);
+    });
+
+    this.on('instance:inputRemote', (instanceId: string, nodeId: string, input: string) => {
+      this.sendClusterCommand(nodeId, 'instance:input', instanceId, input);
+    });
+  }
+
+  /**
+   * Send a command to a specific cluster node
+   */
+  private sendClusterCommand(nodeId: string, event: string, ...args: unknown[]): void {
+    if (!this.io) return;
+
+    // Find the socket for this node
+    for (const [socketId, nId] of this.clusterSockets) {
+      if (nId === nodeId) {
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket) {
+          socket.emit(event as keyof ClusterServerToClientEvents, ...(args as [never, never]));
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Broadcast to all cluster nodes
+   */
+  public broadcastToCluster(event: string, ...args: unknown[]): void {
+    if (this.io) {
+      this.io.emit(event as keyof ClusterServerToClientEvents, ...(args as [never]));
+    }
+  }
+
+  /**
+   * Get the local network IP address
+   */
+  public getLocalIpAddress(): string {
+    const interfaces = networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      const nets = interfaces[name];
+      if (!nets) continue;
+      for (const net of nets) {
+        // Skip loopback and non-IPv4
+        if (net.family === 'IPv4' && !net.internal) {
+          return net.address;
+        }
+      }
+    }
+    return 'localhost';
+  }
+
+  /**
+   * Get server running status
+   */
+  public isServerRunning(): boolean {
+    return this.serverRunning;
   }
 
   /**
@@ -350,14 +687,14 @@ export class ClusterManager extends EventEmitter {
     }
 
     this.isConnecting = true;
+    this.intentionalDisconnect = false;
 
     try {
       const url = `http://${config.primaryHost}:${config.primaryPort}`;
       console.log(`[ClusterManager] Connecting to primary at ${url}`);
 
       this.clientSocket = io(url, {
-        path: '/cluster',
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
         timeout: CONNECTION_TIMEOUT,
         auth: {
           nodeId: this.localNodeId,
@@ -394,7 +731,8 @@ export class ClusterManager extends EventEmitter {
       this.emit('disconnected', reason);
       this.sendToRenderer('cluster:disconnected');
 
-      if (reason !== 'io client disconnect') {
+      // Only schedule reconnect if disconnect was not intentional
+      if (!this.intentionalDisconnect && reason !== 'io client disconnect') {
         this.scheduleReconnect();
       }
     });

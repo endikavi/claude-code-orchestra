@@ -86,7 +86,8 @@ interface InstanceState {
   // Sync state from server (for web clients)
   syncInstances: (
     instances: ClaudeInstance[],
-    outputs?: Record<string, { messages: StreamMessage[]; rawOutput: string }>
+    outputs?: Record<string, { messages: StreamMessage[]; rawOutput: string }>,
+    instanceConversationMappings?: Record<string, string>
   ) => void;
 
   // Internal actions for IPC events
@@ -305,8 +306,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
-  syncInstances: (instances, outputs) => {
+  syncInstances: (instances, outputs, instanceConversationMappings) => {
     const newOutputs = new Map(get().outputs);
+    const newInstanceConversations = new Map(get().instanceConversations);
 
     // Sync instances from server
     instances.forEach((instance) => {
@@ -333,9 +335,22 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       });
     }
 
+    // Sync instance-conversation mappings if provided
+    if (instanceConversationMappings) {
+      Object.entries(instanceConversationMappings).forEach(([instanceId, conversationId]) => {
+        newInstanceConversations.set(instanceId, conversationId);
+        // Also update the output's conversationId if it exists
+        const output = newOutputs.get(instanceId);
+        if (output) {
+          newOutputs.set(instanceId, { ...output, conversationId });
+        }
+      });
+    }
+
     set({
       instances,
       outputs: newOutputs,
+      instanceConversations: newInstanceConversations,
     });
   },
 
@@ -505,11 +520,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Listen for sync:state events from web socket (for web clients)
     const handleSyncState = (event: Event) => {
       const customEvent = event as CustomEvent<{
+        instanceConversations?: Record<string, string>;
         instances?: ClaudeInstance[];
         outputs?: Record<string, { messages: StreamMessage[]; rawOutput: string }>;
       }>;
       if (customEvent.detail?.instances) {
-        syncInstances(customEvent.detail.instances, customEvent.detail.outputs);
+        syncInstances(
+          customEvent.detail.instances,
+          customEvent.detail.outputs,
+          customEvent.detail.instanceConversations
+        );
       }
     };
     window.addEventListener('sync:state', handleSyncState);

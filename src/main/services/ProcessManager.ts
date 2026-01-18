@@ -176,6 +176,17 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Get all instance-conversation mappings (for sync state)
+   */
+  getAllInstanceConversations(): Record<string, string> {
+    const result: Record<string, string> = {};
+    this.instanceConversations.forEach((conversationId, instanceId) => {
+      result[instanceId] = conversationId;
+    });
+    return result;
+  }
+
+  /**
    * Setup event listeners for an instance
    */
   private setupInstanceListeners(instance: ClaudeInstance): void {

@@ -1,17 +1,15 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { createServer, Server as HttpServer } from 'http';
-import { Server as SocketIOServer, Socket, Namespace } from 'socket.io';
+import { Server as SocketIOServer, Socket } from 'socket.io';
 import cors from 'cors';
 import { join } from 'path';
 import { networkInterfaces } from 'os';
-import { timingSafeEqual } from 'crypto';
 import { app as electronApp } from 'electron';
 import { EventEmitter } from 'events';
 
 import { getAuthService } from './AuthService';
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
-import { getClusterManager } from './ClusterManager';
 import { getAuditLogger } from './AuditLogger';
 import { validators, IpcValidationError } from '../ipc/validators';
 import type {
@@ -27,32 +25,11 @@ import type {
 } from '@shared/types/remote';
 import { DEFAULT_REMOTE_PORT } from '@shared/types/remote';
 import type { ClaudeModel, InstanceMode, StreamMessage, InstanceStatus } from '@shared/types';
-import type {
-  ClusterServerToClientEvents,
-  ClusterClientToServerEvents,
-  NodeRegistrationRequest,
-  RemoteInstanceRequest,
-  ClusterNode,
-} from '@shared/types/cluster';
 
 // Extend Express Request to include session info
 interface AuthenticatedRequest extends Request {
   session?: RemoteSession;
   tokenPayload?: TokenPayload;
-}
-
-/**
- * Timing-safe string comparison to prevent timing attacks
- */
-function safeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  try {
-    return timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
-  } catch {
-    return false;
-  }
 }
 
 export class WebServer extends EventEmitter {
@@ -61,14 +38,9 @@ export class WebServer extends EventEmitter {
   private app: express.Application;
   private httpServer: HttpServer | null = null;
   private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents> | null = null;
-  private clusterNamespace: Namespace<
-    ClusterClientToServerEvents,
-    ClusterServerToClientEvents
-  > | null = null;
   private isRunning = false;
   private currentPort: number = DEFAULT_REMOTE_PORT;
   private authenticatedSockets: Map<string, string> = new Map(); // socketId -> sessionId
-  private clusterSockets: Map<string, string> = new Map(); // socketId -> nodeId
 
   private constructor() {
     super();
@@ -501,14 +473,19 @@ export class WebServer extends EventEmitter {
 
       if (includeOutputs) {
         const allOutputs = processManager.getAllInstanceOutputs();
-        // Filter outputs to only include those for returned instances
+        const allConversations = processManager.getAllInstanceConversations();
+        // Filter outputs and conversations to only include those for returned instances
         const outputs: Record<string, unknown> = {};
+        const instanceConversations: Record<string, string> = {};
         instances.forEach((inst) => {
           if (allOutputs[inst.id]) {
             outputs[inst.id] = allOutputs[inst.id];
           }
+          if (allConversations[inst.id]) {
+            instanceConversations[inst.id] = allConversations[inst.id];
+          }
         });
-        res.json({ success: true, data: instances, outputs });
+        res.json({ success: true, data: instances, outputs, instanceConversations });
       } else {
         res.json({ success: true, data: instances });
       }
@@ -821,226 +798,9 @@ export class WebServer extends EventEmitter {
 
     // Subscribe to ProcessManager events
     this.setupProcessManagerListeners();
-
-    // Setup cluster namespace for node-to-node communication
-    this.setupClusterNamespace();
   }
 
-  /**
-   * Setup the /cluster namespace for inter-node communication
-   */
-  private setupClusterNamespace(): void {
-    if (!this.io) return;
-
-    const dataStore = DataStore.getInstance();
-    const clusterManager = getClusterManager();
-
-    // Create the cluster namespace
-    this.clusterNamespace = this.io.of('/cluster');
-
-    // Authentication middleware for cluster namespace
-    this.clusterNamespace.use((socket, next) => {
-      const auth = socket.handshake.auth as { nodeId?: string; sharedSecret?: string };
-      const { nodeId, sharedSecret } = auth;
-
-      if (!nodeId || !sharedSecret) {
-        next(new Error('Authentication required'));
-        return;
-      }
-
-      // Verify shared secret
-      const config = dataStore.getClusterConfig();
-      if (config.role !== 'primary') {
-        next(new Error('This node is not a primary node'));
-        return;
-      }
-
-      // Use timing-safe comparison to prevent timing attacks
-      if (!config.sharedSecret || !safeCompare(sharedSecret, config.sharedSecret)) {
-        next(new Error('Invalid shared secret'));
-        return;
-      }
-
-      // Store node info on socket
-      (socket as Socket & { nodeId?: string }).nodeId = nodeId;
-      next();
-    });
-
-    this.clusterNamespace.on('connection', (socket) => {
-      const nodeId = (socket as Socket & { nodeId?: string }).nodeId;
-      console.log(`[WebServer] Cluster node connected: ${nodeId}`);
-
-      // Handle node registration
-      socket.on('node:register', (request: NodeRegistrationRequest) => {
-        const response = clusterManager.handleNodeRegistration(request, socket.id);
-
-        if (response.success) {
-          this.clusterSockets.set(socket.id, request.nodeId);
-          socket.emit('node:registered', response);
-
-          // Notify other nodes
-          socket.broadcast.emit('node:joined', {
-            id: request.nodeId,
-            name: request.nodeName,
-            host: socket.handshake.address,
-            port: 0,
-            status: 'online',
-            role: 'secondary',
-            projects: request.projects,
-            instances: request.instances,
-            lastSeen: Date.now(),
-          } as ClusterNode);
-
-          // Broadcast updated cluster state
-          const state = clusterManager.getClusterState();
-          this.clusterNamespace?.emit('cluster:state', state);
-        } else {
-          socket.emit('node:rejected', response.error || 'Registration failed');
-        }
-      });
-
-      // Handle heartbeat
-      socket.on('node:heartbeat', () => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          // Update last seen timestamp (handled by ClusterManager)
-          clusterManager.handleNodeStateUpdate(nodeId, {
-            projects: [],
-            instances: [],
-          });
-        }
-      });
-
-      // Handle state updates from secondary nodes
-      socket.on('state:update', (state) => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          clusterManager.handleNodeStateUpdate(nodeId, state);
-
-          // Broadcast updated cluster state to all nodes
-          const clusterState = clusterManager.getClusterState();
-          this.clusterNamespace?.emit('cluster:state', clusterState);
-        }
-      });
-
-      // Handle instance events from secondary nodes
-      socket.on('instance:output', (instanceId, data) => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          clusterManager.handleRemoteInstanceEvent('output', nodeId, instanceId, data);
-          // Forward to other nodes and web clients
-          socket.broadcast.emit('instance:output', instanceId, nodeId, data);
-          this.broadcastInstanceOutput(instanceId, data);
-        }
-      });
-
-      socket.on('instance:status', (instanceId, status) => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          clusterManager.handleRemoteInstanceEvent('status', nodeId, instanceId, status);
-          socket.broadcast.emit('instance:status', instanceId, nodeId, status);
-          this.broadcastInstanceStatus(instanceId, status);
-        }
-      });
-
-      socket.on('instance:error', (instanceId, error) => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          clusterManager.handleRemoteInstanceEvent('error', nodeId, instanceId, error);
-          socket.broadcast.emit('instance:error', instanceId, nodeId, error);
-          this.broadcastInstanceError(instanceId, error);
-        }
-      });
-
-      socket.on('instance:exit', (instanceId, code) => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          clusterManager.handleRemoteInstanceEvent('exit', nodeId, instanceId, code);
-          socket.broadcast.emit('instance:exit', instanceId, nodeId, code);
-          this.broadcastInstanceExit(instanceId, code);
-        }
-      });
-
-      socket.on('instance:rawOutput', (instanceId, data) => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          clusterManager.handleRemoteInstanceEvent('rawOutput', nodeId, instanceId, data);
-          socket.broadcast.emit('instance:rawOutput', instanceId, nodeId, data);
-          this.broadcastInstanceRawOutput(instanceId, data);
-        }
-      });
-
-      socket.on('instance:sessionId', (instanceId, sessionId) => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        if (nodeId) {
-          clusterManager.handleRemoteInstanceEvent('sessionId', nodeId, instanceId, sessionId);
-          socket.broadcast.emit('instance:sessionId', instanceId, nodeId, sessionId);
-          this.broadcastInstanceSessionId(instanceId, sessionId);
-        }
-      });
-
-      // Handle disconnect
-      socket.on('disconnect', () => {
-        const nodeId = this.clusterSockets.get(socket.id);
-        console.log(`[WebServer] Cluster node disconnected: ${nodeId}`);
-
-        if (nodeId) {
-          clusterManager.handleNodeDisconnection(nodeId);
-          this.clusterSockets.delete(socket.id);
-
-          // Notify other nodes
-          socket.broadcast.emit('node:left', nodeId);
-
-          // Broadcast updated cluster state
-          const state = clusterManager.getClusterState();
-          this.clusterNamespace?.emit('cluster:state', state);
-        }
-      });
-    });
-
-    // Listen for ClusterManager events to send commands to nodes
-    clusterManager.on('instance:createRemote', (request: RemoteInstanceRequest) => {
-      this.sendClusterCommand(request.nodeId, 'instance:create', request, Date.now().toString());
-    });
-
-    clusterManager.on('instance:killRemote', (instanceId: string, nodeId: string) => {
-      this.sendClusterCommand(nodeId, 'instance:kill', instanceId);
-    });
-
-    clusterManager.on(
-      'instance:inputRemote',
-      (instanceId: string, nodeId: string, input: string) => {
-        this.sendClusterCommand(nodeId, 'instance:input', instanceId, input);
-      }
-    );
-  }
-
-  /**
-   * Send a command to a specific cluster node
-   */
-  private sendClusterCommand(nodeId: string, event: string, ...args: unknown[]): void {
-    if (!this.clusterNamespace) return;
-
-    // Find the socket for this node
-    for (const [socketId, nId] of this.clusterSockets) {
-      if (nId === nodeId) {
-        const socket = this.clusterNamespace.sockets.get(socketId);
-        if (socket) {
-          socket.emit(event as keyof ClusterServerToClientEvents, ...(args as [never, never]));
-        }
-        break;
-      }
-    }
-  }
-
-  /**
-   * Broadcast to all cluster nodes
-   */
-  public broadcastToCluster(event: string, ...args: unknown[]): void {
-    if (this.clusterNamespace) {
-      this.clusterNamespace.emit(event as keyof ClusterServerToClientEvents, ...(args as [never]));
-    }
-  }
+  // Note: Cluster functionality has been moved to ClusterManager with its own server
 
   /**
    * Setup listeners for ProcessManager events to broadcast to web clients
@@ -1136,6 +896,7 @@ export class WebServer extends EventEmitter {
       instances: processManager.getAllInstances(),
       conversations: [], // Will be populated per-project on demand
       outputs: processManager.getAllInstanceOutputs(), // Include output buffers for late-connecting clients
+      instanceConversations: processManager.getAllInstanceConversations(), // Include instance-conversation mappings
     };
   }
 
@@ -1202,11 +963,6 @@ export class WebServer extends EventEmitter {
       }
 
       // Disconnect all sockets
-      if (this.clusterNamespace) {
-        this.clusterNamespace.disconnectSockets(true);
-        this.clusterNamespace = null;
-      }
-
       if (this.io) {
         this.io.disconnectSockets(true);
         void this.io.close();
@@ -1229,7 +985,6 @@ export class WebServer extends EventEmitter {
 
       // Clear authenticated sockets
       this.authenticatedSockets.clear();
-      this.clusterSockets.clear();
 
       // Clear all sessions
       getAuthService().clearAllSessions();

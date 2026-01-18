@@ -378,9 +378,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // Stop cluster mode
-  ipcMain.handle(IPC_CHANNELS.CLUSTER_STOP, () => {
+  ipcMain.handle(IPC_CHANNELS.CLUSTER_STOP, async () => {
     try {
-      clusterManager.stop();
+      await clusterManager.stop();
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

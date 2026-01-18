@@ -109,6 +109,10 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   startCluster: async () => {
     set({ isLoading: true, error: null });
     try {
+      // First, enable cluster mode in config
+      await window.electronAPI.cluster.updateConfig({ enabled: true });
+
+      // Then start the cluster
       const result = await window.electronAPI.cluster.start();
       if (result.success && result.status) {
         set({
@@ -117,10 +121,17 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
           nodes: result.status.nodes,
           isLoading: false,
         });
+        // Reload config to reflect enabled state
+        const config = await window.electronAPI.cluster.getConfig();
+        set({ config });
       } else {
+        // If start failed, disable cluster mode
+        await window.electronAPI.cluster.updateConfig({ enabled: false });
         set({ error: result.error || 'Failed to start cluster', isLoading: false });
       }
     } catch (error) {
+      // If error, disable cluster mode
+      await window.electronAPI.cluster.updateConfig({ enabled: false }).catch(() => {});
       set({
         error: error instanceof Error ? error.message : 'Failed to start cluster',
         isLoading: false,
@@ -133,7 +144,11 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
     try {
       const result = await window.electronAPI.cluster.stop();
       if (result.success) {
+        // Disable cluster mode in config
+        await window.electronAPI.cluster.updateConfig({ enabled: false });
+        const config = await window.electronAPI.cluster.getConfig();
         set({
+          config,
           isConnected: false,
           nodes: [],
           globalProjects: [],

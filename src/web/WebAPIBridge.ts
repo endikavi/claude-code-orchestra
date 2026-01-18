@@ -343,13 +343,18 @@ export const webAPI = {
         success: boolean;
         data: ClaudeInstance[];
         outputs?: Record<string, { messages: StreamMessage[]; rawOutput: string }>;
+        instanceConversations?: Record<string, string>;
       }>('/api/instances?includeOutputs=true');
 
       // If outputs are included, dispatch sync event to update stores
       if (response.outputs) {
         window.dispatchEvent(
           new CustomEvent('sync:state', {
-            detail: { instances: response.data, outputs: response.outputs },
+            detail: {
+              instances: response.data,
+              outputs: response.outputs,
+              instanceConversations: response.instanceConversations,
+            },
           })
         );
       }
