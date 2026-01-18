@@ -118,6 +118,14 @@ export class ClusterManager extends EventEmitter {
   }
 
   /**
+   * Reload configuration from database (for when external changes occur)
+   */
+  public reloadConfig(): ClusterConfig {
+    this.loadConfig();
+    return this.config as ClusterConfig;
+  }
+
+  /**
    * Get cluster status
    */
   public getStatus(): ClusterStatus {
@@ -140,7 +148,8 @@ export class ClusterManager extends EventEmitter {
   public isConnected(): boolean {
     const config = this.getConfig();
     if (config.role === 'primary') {
-      return true; // Primary is always "connected"
+      // Primary is connected only if the server is actually running
+      return this.serverRunning;
     }
     if (config.role === 'secondary') {
       return this.clientSocket?.connected ?? false;
@@ -266,8 +275,25 @@ export class ClusterManager extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       try {
-        // Create HTTP server
-        this.httpServer = createServer();
+        // Create HTTP server with health check endpoint
+        this.httpServer = createServer((req, res) => {
+          if (req.url === '/health' || req.url === '/') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                status: 'ok',
+                service: 'claude-orchestra-cluster',
+                nodeId: this.localNodeId,
+                nodeName: this.getConfig().nodeName,
+                role: 'primary',
+                timestamp: Date.now(),
+              })
+            );
+          } else {
+            res.writeHead(404);
+            res.end();
+          }
+        });
 
         // Create Socket.io server
         this.io = new SocketIOServer(this.httpServer, {
@@ -281,10 +307,15 @@ export class ClusterManager extends EventEmitter {
         // Setup socket handlers
         this.setupServerSocketHandlers();
 
-        // Start listening
-        this.httpServer.listen(port, () => {
+        // Start listening on all interfaces (0.0.0.0)
+        this.httpServer.listen(port, '0.0.0.0', () => {
           this.serverRunning = true;
+          const localIp = this.getLocalIpAddress();
           console.log(`[ClusterManager] Cluster server started on port ${port}`);
+          console.log(`[ClusterManager] Listening on http://0.0.0.0:${port}`);
+          console.log(
+            `[ClusterManager] Local IP: ${localIp} - Secondary nodes should connect to http://${localIp}:${port}`
+          );
           resolve();
         });
 
@@ -739,6 +770,12 @@ export class ClusterManager extends EventEmitter {
 
     this.clientSocket.on('connect_error', (error) => {
       console.error('[ClusterManager] Connection error:', error.message);
+      console.error('[ClusterManager] Error details:', {
+        name: error.name,
+        message: error.message,
+        cause: (error as Error & { cause?: unknown }).cause,
+        description: (error as Error & { description?: string }).description,
+      });
       this.isConnecting = false;
       this.sendToRenderer('cluster:error', error.message);
       this.scheduleReconnect();

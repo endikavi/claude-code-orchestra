@@ -4,6 +4,7 @@ import { setupIpcHandlers, cleanupIpcHandlers } from './ipc/handlers';
 import { getProcessManager } from './services/ProcessManager';
 import { DataStore } from './services/DataStore';
 import { getWebServer } from './services/WebServer';
+import { getClusterManager } from './services/ClusterManager';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only check for squirrel startup in production (module may not exist in all builds)
@@ -88,6 +89,21 @@ app
         console.error('[Main] Failed to auto-start web server:', error);
       }
     }
+
+    // Auto-start cluster if it was enabled
+    const clusterConfig = dataStore.getClusterConfig();
+    if (clusterConfig.enabled && clusterConfig.role !== 'standalone') {
+      try {
+        const clusterManager = getClusterManager();
+        clusterManager.setMainWindow(mainWindow!);
+        await clusterManager.start();
+        console.log(`[Main] Cluster auto-started as ${clusterConfig.role}`);
+      } catch (error) {
+        console.error('[Main] Failed to auto-start cluster:', error);
+        // Reset enabled state on failure to avoid inconsistent state
+        dataStore.updateClusterConfig({ enabled: false });
+      }
+    }
   })
   .catch((error) => {
     console.error('[Main] Failed to initialize app:', error);
@@ -96,6 +112,12 @@ app
 app.on('window-all-closed', () => {
   // Kill all running instances
   getProcessManager().killAll();
+
+  // Stop cluster
+  const clusterManager = getClusterManager();
+  if (clusterManager.isServerRunning() || clusterManager.isConnected()) {
+    void clusterManager.stop();
+  }
 
   // Stop web server
   const webServer = getWebServer();

@@ -391,6 +391,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   // Generate shared secret
   ipcMain.handle(IPC_CHANNELS.CLUSTER_GENERATE_SECRET, () => {
     const secret = dataStore.generateClusterSecret();
+    // Reload ClusterManager config to pick up the new secret
+    clusterManager.reloadConfig();
     return { success: true, secret };
   });
 
