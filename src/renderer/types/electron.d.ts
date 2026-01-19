@@ -39,6 +39,16 @@ declare global {
         onError: (callback: (instanceId: string, error: string) => void) => () => void;
         onExit: (callback: (instanceId: string, code: number) => void) => () => void;
         onRawOutput: (callback: (instanceId: string, data: string) => void) => () => void;
+        onSessionId: (callback: (instanceId: string, sessionId: string) => void) => () => void;
+        onTerminalTitle: (callback: (instanceId: string, title: string) => void) => () => void;
+        onSync: (callback: (instances: ClaudeInstance[]) => void) => () => void;
+        setTitle: (id: string, title: string) => Promise<void>;
+        resume: (config: {
+          projectId: string;
+          sessionId: string;
+          model: ClaudeModel;
+          mode: InstanceMode;
+        }) => Promise<ClaudeInstance>;
       };
       config: {
         getClaudeSettings: () => Promise<ClaudeSettings | null>;
@@ -51,6 +61,14 @@ declare global {
       };
       dialog: {
         selectDirectory: () => Promise<string | null>;
+      };
+      hook?: {
+        onActivity?: (
+          callback: (
+            event: Electron.IpcRendererEvent,
+            data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
+          ) => void
+        ) => () => void;
       };
     };
   }

@@ -10,6 +10,15 @@ import type {
 } from '@shared/types/cluster';
 import type { ClaudeInstance } from '@shared/types';
 
+// Check if running in Electron
+const isElectron = () => {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.electronAPI !== 'undefined' &&
+    typeof window.electronAPI.cluster !== 'undefined'
+  );
+};
+
 interface ClusterStoreState {
   // Configuration
   config: ClusterConfig | null;
@@ -38,6 +47,12 @@ interface ClusterStoreState {
   createRemoteInstance: (request: RemoteInstanceRequest) => Promise<ClaudeInstance | null>;
   sendRemoteInput: (instanceId: string, nodeId: string, input: string) => Promise<void>;
   killRemoteInstance: (instanceId: string, nodeId: string) => Promise<void>;
+  resizeRemoteInstance: (
+    instanceId: string,
+    nodeId: string,
+    cols: number,
+    rows: number
+  ) => Promise<void>;
 
   // State updates from events
   handleStateChanged: (state: ClusterState) => void;
@@ -71,6 +86,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   error: null,
 
   loadConfig: async () => {
+    if (!isElectron()) return;
     try {
       const config = await window.electronAPI.cluster.getConfig();
       set({ config, localNodeId: config.nodeId });
@@ -80,6 +96,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   updateConfig: async (updates) => {
+    if (!isElectron()) return;
     set({ isLoading: true, error: null });
     try {
       const config = await window.electronAPI.cluster.updateConfig(updates);
@@ -93,6 +110,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   loadStatus: async () => {
+    if (!isElectron()) return;
     try {
       const status = await window.electronAPI.cluster.getStatus();
       set({
@@ -107,8 +125,13 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   startCluster: async () => {
+    if (!isElectron()) return;
     set({ isLoading: true, error: null });
     try {
+      // First, enable cluster mode in config
+      await window.electronAPI.cluster.updateConfig({ enabled: true });
+
+      // Then start the cluster
       const result = await window.electronAPI.cluster.start();
       if (result.success && result.status) {
         set({
@@ -117,10 +140,17 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
           nodes: result.status.nodes,
           isLoading: false,
         });
+        // Reload config to reflect enabled state
+        const config = await window.electronAPI.cluster.getConfig();
+        set({ config });
       } else {
+        // If start failed, disable cluster mode
+        await window.electronAPI.cluster.updateConfig({ enabled: false });
         set({ error: result.error || 'Failed to start cluster', isLoading: false });
       }
     } catch (error) {
+      // If error, disable cluster mode
+      await window.electronAPI.cluster.updateConfig({ enabled: false }).catch(() => {});
       set({
         error: error instanceof Error ? error.message : 'Failed to start cluster',
         isLoading: false,
@@ -129,11 +159,16 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   stopCluster: async () => {
+    if (!isElectron()) return;
     set({ isLoading: true, error: null });
     try {
       const result = await window.electronAPI.cluster.stop();
       if (result.success) {
+        // Disable cluster mode in config
+        await window.electronAPI.cluster.updateConfig({ enabled: false });
+        const config = await window.electronAPI.cluster.getConfig();
         set({
+          config,
           isConnected: false,
           nodes: [],
           globalProjects: [],
@@ -152,6 +187,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   generateSecret: async () => {
+    if (!isElectron()) return null;
     try {
       const result = await window.electronAPI.cluster.generateSecret();
       if (result.success && result.secret) {
@@ -167,6 +203,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   loadGlobalProjects: async () => {
+    if (!isElectron()) return;
     try {
       const globalProjects = await window.electronAPI.cluster.getGlobalProjects();
       set({ globalProjects });
@@ -176,6 +213,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   loadGlobalInstances: async () => {
+    if (!isElectron()) return;
     try {
       const globalInstances = await window.electronAPI.cluster.getGlobalInstances();
       set({ globalInstances });
@@ -185,6 +223,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   createRemoteInstance: async (request) => {
+    if (!isElectron()) return null;
     set({ isLoading: true, error: null });
     try {
       const result = await window.electronAPI.cluster.createRemoteInstance(request);
@@ -206,6 +245,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   sendRemoteInput: async (instanceId, nodeId, input) => {
+    if (!isElectron()) return;
     try {
       await window.electronAPI.cluster.sendRemoteInput(instanceId, nodeId, input);
     } catch (error) {
@@ -214,12 +254,22 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   killRemoteInstance: async (instanceId, nodeId) => {
+    if (!isElectron()) return;
     try {
       await window.electronAPI.cluster.killRemoteInstance(instanceId, nodeId);
       // Reload global instances
       await get().loadGlobalInstances();
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to kill remote instance' });
+    }
+  },
+
+  resizeRemoteInstance: async (instanceId, nodeId, cols, rows) => {
+    if (!isElectron()) return;
+    try {
+      await window.electronAPI.cluster.resizeRemoteInstance(instanceId, nodeId, cols, rows);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to resize remote instance' });
     }
   },
 
@@ -268,6 +318,11 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   },
 
   setupListeners: () => {
+    // Cluster listeners are only available in Electron, not in web client
+    if (!isElectron()) {
+      return () => {};
+    }
+
     const {
       handleStateChanged,
       handleNodeJoined,

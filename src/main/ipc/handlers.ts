@@ -13,28 +13,65 @@ import { getClusterManager } from '../services/ClusterManager';
 import { ConfigReader } from '../services/ConfigReader';
 import { ClaudeSessionImporter } from '../services/ClaudeSessionImporter';
 import { UISettingsStore, type UISettings } from '../services/UISettingsStore';
+import { ShellDetector } from '../services/ShellDetector';
 import QRCode from 'qrcode';
-import type { Project, ClaudeModel, InstanceMode, ConversationStatus } from '@shared/types';
+import type {
+  Project,
+  ClaudeModel,
+  InstanceMode,
+  ConversationStatus,
+  NotificationFilterOptions,
+  NotificationPreferences,
+  DashboardHookSettings,
+  HookTemplateType,
+  PermissionRule,
+  GlobalPermissionConfig,
+  PermissionLogQueryOptions,
+  MetricsQueryOptions,
+  MetricsPeriod,
+} from '@shared/types';
 import type { RemoteConfig } from '@shared/types/remote';
 import type { ClusterConfig, RemoteInstanceRequest } from '@shared/types/cluster';
+import { getNotificationManager } from '../services/NotificationManager';
+import { getHookManager } from '../services/HookManager';
+import { getSkillManager } from '../services/SkillManager';
+import { getPermissionManager } from '../services/PermissionManager';
+import { getMetricsService } from '../services/MetricsService';
+import { getGitStatusManager } from '../services/GitStatusManager';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   const dataStore = DataStore.getInstance();
   const processManager = getProcessManager();
   processManager.setMainWindow(mainWindow);
 
+  // Get cluster manager for project sync notifications
+  const clusterManager = getClusterManager();
+  clusterManager.setMainWindow(mainWindow);
+
+  // Get web server for activity IPC events
+  getWebServer().setMainWindow(mainWindow);
+
+  // Get git status manager early for project tracking
+  const gitStatusManager = getGitStatusManager();
+
   // Project handlers
   ipcMain.handle(
     IPC_CHANNELS.PROJECT_CREATE,
     (_event, data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
       const validated = validators.projectCreate(data);
-      return dataStore.createProject(validated);
+      const result = dataStore.createProject(validated);
+      clusterManager.notifyProjectChange();
+      // Track new project for git status
+      gitStatusManager.track(result.id, result.path);
+      return result;
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_UPDATE, (_event, project: Project) => {
     const validated = validators.projectUpdate(project);
-    return dataStore.updateProject(validated);
+    const result = dataStore.updateProject(validated);
+    clusterManager.notifyProjectChange();
+    return result;
   });
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, (_event, id: string) => {
@@ -42,6 +79,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     // Kill all instances for this project first
     processManager.killProjectInstances(validatedId);
     dataStore.deleteProject(validatedId);
+    clusterManager.notifyProjectChange();
+    // Untrack project from git status
+    gitStatusManager.untrack(validatedId);
   });
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_GET_ALL, () => {
@@ -62,16 +102,60 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         projectId: string;
         model: ClaudeModel;
         mode: InstanceMode;
+        prompt?: string;
         planMode?: boolean;
+        nodeId?: string; // Optional: for cluster projects
       }
     ) => {
       const validated = validators.instanceCreate(config);
+
+      // Check if this is a remote project (cluster mode)
+      const localProject = dataStore.getProjectById(validated.projectId);
+
+      if (!localProject) {
+        // Project not found locally - check if it's a cluster project
+        const clusterConfig = clusterManager.getConfig();
+        if (clusterConfig.enabled) {
+          // Find the project in global projects
+          const globalProjects = clusterManager.getAllGlobalProjects();
+          const remoteProject = globalProjects.find((p) => p.id === validated.projectId);
+
+          if (remoteProject && !remoteProject.isLocal) {
+            // Create instance on the remote node
+            const remoteInstance = clusterManager.createInstance({
+              nodeId: remoteProject.nodeId,
+              projectId: validated.projectId,
+              model: validated.model,
+              mode: validated.mode,
+              prompt: validated.prompt,
+              planMode: validated.planMode,
+            });
+
+            // Return placeholder - the actual instance will be created on the remote node
+            return (
+              remoteInstance || {
+                id: 'pending',
+                status: 'starting',
+                projectId: validated.projectId,
+              }
+            );
+          }
+        }
+        throw new Error(`Project with id ${validated.projectId} not found`);
+      }
+
+      // Local project - create instance locally
       const instance = processManager.createInstance(validated);
 
       // Create a conversation automatically (same as web clients)
+      // Generate title from prompt (first 50 chars) or unique session ID
+      const conversationTitle = validated.prompt
+        ? validated.prompt.slice(0, 50).split('\n')[0] + (validated.prompt.length > 50 ? '...' : '')
+        : `Session #${Date.now().toString(36).slice(-6).toUpperCase()}`;
+
       const conversation = dataStore.createConversation({
         projectId: validated.projectId,
-        title: `Session ${new Date().toLocaleString()}`,
+        title: conversationTitle,
         initialPrompt: '',
         model: validated.model,
         mode: validated.mode,
@@ -92,6 +176,11 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.INSTANCE_SEND_INPUT, (_event, id: string, input: string) => {
     const validated = validators.instanceInput(id, input);
     processManager.sendInput(validated.id, validated.input);
+  });
+
+  // Set terminal title and broadcast to web clients and cluster
+  ipcMain.handle(IPC_CHANNELS.INSTANCE_SET_TITLE, (_event, id: string, title: string) => {
+    processManager.setInstanceTitle(id, title);
   });
 
   ipcMain.handle(IPC_CHANNELS.INSTANCE_GET_ALL, () => {
@@ -348,8 +437,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // ==================== Cluster Handlers ====================
-  const clusterManager = getClusterManager();
-  clusterManager.setMainWindow(mainWindow);
+  // Note: clusterManager is initialized at the top of this function for project sync
 
   // Get cluster config
   ipcMain.handle(IPC_CHANNELS.CLUSTER_GET_CONFIG, () => {
@@ -378,9 +466,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // Stop cluster mode
-  ipcMain.handle(IPC_CHANNELS.CLUSTER_STOP, () => {
+  ipcMain.handle(IPC_CHANNELS.CLUSTER_STOP, async () => {
     try {
-      clusterManager.stop();
+      await clusterManager.stop();
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -391,6 +479,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   // Generate shared secret
   ipcMain.handle(IPC_CHANNELS.CLUSTER_GENERATE_SECRET, () => {
     const secret = dataStore.generateClusterSecret();
+    // Reload ClusterManager config to pick up the new secret
+    clusterManager.reloadConfig();
     return { success: true, secret };
   });
 
@@ -432,6 +522,29 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     IPC_CHANNELS.CLUSTER_KILL_REMOTE_INSTANCE,
     (_event, instanceId: string, nodeId: string) => {
       clusterManager.killInstance(instanceId, nodeId);
+      return { success: true };
+    }
+  );
+
+  // Create shell on remote node
+  ipcMain.handle(
+    IPC_CHANNELS.CLUSTER_CREATE_REMOTE_SHELL,
+    (_event, nodeId: string, projectId: string) => {
+      try {
+        clusterManager.createRemoteShell(nodeId, projectId);
+        return { success: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  // Resize remote instance
+  ipcMain.handle(
+    IPC_CHANNELS.CLUSTER_RESIZE_REMOTE_INSTANCE,
+    (_event, instanceId: string, nodeId: string, cols: number, rows: number) => {
+      clusterManager.resizeRemoteInstance(instanceId, nodeId, cols, rows);
       return { success: true };
     }
   );
@@ -510,8 +623,220 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Get available shells on the system
   ipcMain.handle(IPC_CHANNELS.SHELL_GET_AVAILABLE, () => {
-    const { ShellDetector } = require('../services/ShellDetector');
     return ShellDetector.getInstance().getAvailableShells();
+  });
+
+  // ==================== Notification Handlers ====================
+  const notificationManager = getNotificationManager();
+  notificationManager.setMainWindow(mainWindow);
+
+  ipcMain.handle(
+    IPC_CHANNELS.NOTIFICATION_GET_ALL,
+    (_event, options?: NotificationFilterOptions) => {
+      return notificationManager.getAll(options || {});
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_STATS, () => {
+    return notificationManager.getStats();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_MARK_READ, (_event, id: string) => {
+    return notificationManager.markRead(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_MARK_ALL_READ, () => {
+    return notificationManager.markAllRead();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_DISMISS, (_event, id: string) => {
+    return notificationManager.dismiss(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_DELETE, (_event, id: string) => {
+    return notificationManager.delete(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_CLEAR_ALL, () => {
+    notificationManager.clearAll();
+    return { success: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_PREFERENCES, () => {
+    return notificationManager.getPreferences();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.NOTIFICATION_SET_PREFERENCES,
+    (_event, prefs: Partial<NotificationPreferences>) => {
+      notificationManager.setPreferences(prefs);
+      return { success: true };
+    }
+  );
+
+  // ==================== Hook Handlers ====================
+  const hookManager = getHookManager();
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_GET_TEMPLATES, () => {
+    return hookManager.getTemplates();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.HOOK_SETUP_PROJECT,
+    async (
+      _event,
+      projectPath: string,
+      settings: DashboardHookSettings,
+      templateId?: HookTemplateType
+    ) => {
+      // Get the configured WebServer port from DataStore
+      const remoteConfig = dataStore.getRemoteConfig();
+      hookManager.setApiPort(remoteConfig.port);
+
+      return hookManager.setupHooksForProject(projectPath, settings, templateId);
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_REMOVE_PROJECT, async (_event, projectPath: string) => {
+    return hookManager.removeHooksFromProject(projectPath);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_GET_PROJECT_SETTINGS, async (_event, projectPath: string) => {
+    return hookManager.getProjectHookSettings(projectPath);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_HAS_CONFIGURED, async (_event, projectPath: string) => {
+    return hookManager.hasHooksConfigured(projectPath);
+  });
+
+  // ==================== Skill Handlers ====================
+  const skillManager = getSkillManager();
+
+  ipcMain.handle(IPC_CHANNELS.SKILL_GET_AVAILABLE, () => {
+    return skillManager.getAvailableSkills();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_INSTALL,
+    async (_event, projectPath: string, skillIds: string[]) => {
+      return skillManager.installSkills(projectPath, skillIds);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_REMOVE,
+    async (_event, projectPath: string, skillId: string) => {
+      return skillManager.removeSkill(projectPath, skillId);
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.SKILL_GET_INSTALLED, async (_event, projectPath: string) => {
+    return skillManager.getInstalledSkills(projectPath);
+  });
+
+  // ==================== Permission Handlers ====================
+  const permissionManager = getPermissionManager();
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_GET_CONFIG, () => {
+    return permissionManager.getConfig();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.PERMISSION_SET_CONFIG,
+    (_event, config: Partial<GlobalPermissionConfig>) => {
+      permissionManager.setConfig(config);
+      return { success: true };
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.PERMISSION_ADD_RULE,
+    (_event, rule: Omit<PermissionRule, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>) => {
+      return permissionManager.addGlobalRule(rule);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.PERMISSION_UPDATE_RULE,
+    (_event, id: string, updates: Partial<PermissionRule>) => {
+      return permissionManager.updateGlobalRule(id, updates);
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_REMOVE_RULE, (_event, id: string) => {
+    return permissionManager.removeGlobalRule(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_GET_LOG, (_event, options?: PermissionLogQueryOptions) => {
+    return permissionManager.getLog(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_GET_STATS, () => {
+    return permissionManager.getStats();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_CLEAR_LOG, () => {
+    permissionManager.clearLog();
+    return { success: true };
+  });
+
+  // ==================== Metrics Handlers ====================
+  const metricsService = getMetricsService();
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_TOOL_USAGE, (_event, options?: MetricsQueryOptions) => {
+    return metricsService.getToolUsage(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_SESSIONS, (_event, options?: MetricsQueryOptions) => {
+    return metricsService.getSessions(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_PROJECT_SUMMARY, (_event, projectId: string) => {
+    return metricsService.getProjectSummary(projectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_TIME_SERIES, (_event, options?: MetricsQueryOptions) => {
+    return metricsService.getTimeSeries(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_DASHBOARD_SUMMARY, () => {
+    return metricsService.getDashboardSummary();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.METRICS_GET_COST_BREAKDOWN,
+    (_event, options?: MetricsQueryOptions) => {
+      return metricsService.getCostBreakdown(options || {});
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_USAGE_TRENDS, (_event, period?: MetricsPeriod) => {
+    return metricsService.getUsageTrends(period || 'week');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_CLEAR, () => {
+    metricsService.clear();
+    return { success: true };
+  });
+
+  // ==================== Git Status Handlers ====================
+  gitStatusManager.setMainWindow(mainWindow);
+
+  // Start git status polling
+  gitStatusManager.start();
+
+  // Track all existing projects
+  const allProjects = dataStore.getAllProjects();
+  for (const project of allProjects) {
+    gitStatusManager.track(project.id, project.path);
+  }
+
+  ipcMain.handle(IPC_CHANNELS.GIT_GET_STATUS, (_event, projectId: string) => {
+    return gitStatusManager.getStatus(projectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GIT_REFRESH, async (_event, projectId: string) => {
+    return gitStatusManager.refresh(projectId);
   });
 
   // External terminal handler (legacy)

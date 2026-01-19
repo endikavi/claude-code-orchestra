@@ -3,8 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useClusterStore } from '../../stores/clusterStore';
 import { ContextMenu } from '../common/ContextMenu';
+import { GitStatusBadge } from './GitStatusBadge';
 import type { Project } from '@shared/types';
+import type { GlobalProject } from '@shared/types/cluster';
 
 // Check if running in Electron (has full API) vs Web (limited API)
 const isElectron =
@@ -16,20 +19,42 @@ interface ProjectListProps {
 
 export function ProjectList({ onProjectSelect }: ProjectListProps) {
   const { t } = useTranslation();
-  const { projects, selectedProjectId, selectProject, deleteProject } = useProjectStore();
+  const {
+    projects: localProjects,
+    selectedProjectId,
+    selectProject,
+    deleteProject,
+  } = useProjectStore();
   const { getInstancesByProject, createShellInstance, selectShell, selectInstance } =
     useInstanceStore();
   const { setShowProjectModal, setShowInstanceModal, setShowLocalSettingsModal } = useUIStore();
 
+  // Cluster state
+  const { isConnected: clusterConnected, globalProjects } = useClusterStore();
+
+  // Use global projects when cluster is connected, otherwise use local projects
+  const projects: (Project | GlobalProject)[] = useMemo(() => {
+    if (clusterConnected && globalProjects.length > 0) {
+      return globalProjects;
+    }
+    return localProjects;
+  }, [clusterConnected, globalProjects, localProjects]);
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
-    project: Project;
+    project: Project | GlobalProject;
+    isLocal: boolean;
   } | null>(null);
 
-  const handleContextMenu = (e: React.MouseEvent, project: Project) => {
+  // Helper to check if a project is local
+  const isProjectLocal = (project: Project | GlobalProject): boolean => {
+    return !('isLocal' in project) || project.isLocal === true;
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, project: Project | GlobalProject) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, project });
+    setContextMenu({ x: e.clientX, y: e.clientY, project, isLocal: isProjectLocal(project) });
   };
 
   const handleCloseContextMenu = () => setContextMenu(null);
@@ -60,12 +85,25 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
     if (contextMenu) {
       // Select the project first
       selectProject(contextMenu.project.id);
-      // Create integrated shell instance
+
       try {
-        const shell = await createShellInstance(contextMenu.project.id);
-        // Deselect any claude instance and select the shell
-        selectInstance(null);
-        selectShell(shell.id);
+        if (contextMenu.isLocal) {
+          // Local project - create shell directly
+          const shell = await createShellInstance(contextMenu.project.id);
+          // Deselect any claude instance and select the shell
+          selectInstance(null);
+          selectShell(shell.id);
+        } else if ('nodeId' in contextMenu.project) {
+          // Remote project - use cluster to create shell on remote node
+          const result = await window.electronAPI.cluster.createRemoteShell(
+            contextMenu.project.nodeId,
+            contextMenu.project.id
+          );
+          if (!result.success) {
+            console.error('Failed to create remote shell:', result.error);
+          }
+          // Note: The shell will be created on the remote node and synced via cluster state
+        }
       } catch (error) {
         console.error('Failed to create shell:', error);
       }
@@ -122,6 +160,12 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
                   <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
                     {project.name}
                   </span>
+                  {/* Show node name for cluster projects */}
+                  {'nodeName' in project && !project.isLocal && (
+                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded flex-shrink-0">
+                      {project.nodeName}
+                    </span>
+                  )}
                   {project.hostname && (
                     <span className="text-xs text-gray-400 dark:text-gray-500 truncate flex-shrink-0">
                       @{project.hostname}
@@ -138,6 +182,12 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
               <div className="mt-1 text-xs text-gray-500 dark:text-gray-500 truncate pl-5">
                 {project.path}
               </div>
+              {/* Git status badge */}
+              {isElectron && isProjectLocal(project) && (
+                <div className="mt-1.5 pl-5">
+                  <GitStatusBadge projectId={project.id} compact />
+                </div>
+              )}
               {instances.length > 0 && (
                 <div className="mt-2 flex gap-1 pl-5">
                   {instances.slice(0, 5).map((instance) => (
@@ -163,7 +213,7 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
           onClose={handleCloseContextMenu}
           items={[
             { label: t('project.newInstance'), onClick: handleNewInstance, icon: <PlayIcon /> },
-            // Only show terminal option in Electron (not available in web version)
+            // Show terminal in Electron for both local and remote projects
             ...(isElectron
               ? [
                   {
@@ -175,19 +225,29 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
                   },
                 ]
               : []),
-            {
-              label: t('project.localSettings'),
-              onClick: handleLocalSettings,
-              icon: <SettingsIcon />,
-            },
-            { label: t('project.editProject'), onClick: handleEdit, icon: <EditIcon /> },
-            { type: 'separator' },
-            {
-              label: t('project.deleteProject'),
-              onClick: handleDelete,
-              icon: <TrashIcon />,
-              danger: true,
-            },
+            // Only show local settings for local projects in Electron
+            ...(isElectron && contextMenu.isLocal
+              ? [
+                  {
+                    label: t('project.localSettings'),
+                    onClick: handleLocalSettings,
+                    icon: <SettingsIcon />,
+                  },
+                ]
+              : []),
+            // Only show edit/delete for local projects
+            ...(contextMenu.isLocal
+              ? [
+                  { label: t('project.editProject'), onClick: handleEdit, icon: <EditIcon /> },
+                  { type: 'separator' as const },
+                  {
+                    label: t('project.deleteProject'),
+                    onClick: handleDelete,
+                    icon: <TrashIcon />,
+                    danger: true,
+                  },
+                ]
+              : []),
           ]}
         />
       )}

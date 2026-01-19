@@ -12,6 +12,18 @@ import type {
 } from '@shared/types';
 import { useConversationStore } from './conversationStore';
 
+// Buffer limits to prevent memory issues
+const MAX_MESSAGES_PER_INSTANCE = 1000;
+const MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
+
+// Activity tracking for timeline
+export interface InstanceActivity {
+  lastTool?: string;
+  lastToolTime?: number;
+  recentFiles: string[];
+  toolCount: number;
+}
+
 /**
  * Type guard to validate if an object is a valid StreamMessage
  */
@@ -60,7 +72,10 @@ interface InstanceState {
   instances: ClaudeInstance[];
   outputs: Map<string, InstanceOutput>;
   instanceConversations: Map<string, string>; // instanceId -> conversationId
+  activities: Map<string, InstanceActivity>; // instanceId -> activity data
   selectedInstanceId: string | null;
+  // Timestamp of last explicit selection (to prevent sync from overriding recent selections)
+  lastSelectionTime: number;
   isLoading: boolean;
   error: string | null;
 
@@ -74,6 +89,7 @@ interface InstanceState {
     projectId: string;
     model: ClaudeModel;
     mode: InstanceMode;
+    prompt?: string;
     planMode?: boolean;
   }) => Promise<ClaudeInstance>;
   resumeConversation: (conversation: Conversation) => Promise<ClaudeInstance>;
@@ -86,7 +102,8 @@ interface InstanceState {
   // Sync state from server (for web clients)
   syncInstances: (
     instances: ClaudeInstance[],
-    outputs?: Record<string, { messages: StreamMessage[]; rawOutput: string }>
+    outputs?: Record<string, { messages: StreamMessage[]; rawOutput: string }>,
+    instanceConversationMappings?: Record<string, string>
   ) => void;
 
   // Internal actions for IPC events
@@ -97,6 +114,7 @@ interface InstanceState {
   setInstanceError: (id: string, error: string) => void;
   handleInstanceExit: (id: string, code: number) => void;
   handleSessionId: (instanceId: string, sessionId: string) => void;
+  updateActivity: (instanceId: string, activity: Partial<InstanceActivity>) => void;
 
   // Setup listeners
   setupListeners: () => () => void;
@@ -108,6 +126,7 @@ interface InstanceState {
   getConversationIdForInstance: (instanceId: string) => string | undefined;
   getInstanceForConversation: (conversationId: string) => ClaudeInstance | undefined;
   getInstanceOutputForConversation: (conversationId: string) => InstanceOutput | undefined;
+  getActivity: (instanceId: string) => InstanceActivity | undefined;
 
   // Shell actions
   createShellInstance: (projectId: string) => Promise<ShellInstance>;
@@ -131,7 +150,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   instances: [],
   outputs: new Map(),
   instanceConversations: new Map(),
+  activities: new Map(),
   selectedInstanceId: null,
+  lastSelectionTime: 0,
   isLoading: false,
   error: null,
 
@@ -148,6 +169,15 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const { conversationId, ...instance } = result as {
         conversationId?: string;
       } & ClaudeInstance;
+
+      // Check if this is a remote instance placeholder (id: 'pending')
+      // Remote instances are created on another node and will appear via cluster state updates
+      if (instance.id === 'pending') {
+        set({ isLoading: false });
+        // Don't add placeholder to local instances - the real instance will appear
+        // in globalInstances when the cluster state updates
+        return instance;
+      }
 
       // Initialize output storage
       const outputs = new Map(get().outputs);
@@ -172,6 +202,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           outputs,
           instanceConversations,
           selectedInstanceId: instance.id,
+          selectedShellId: null, // Clear shell selection when creating instance
+          lastSelectionTime: Date.now(),
           isLoading: false,
         };
       });
@@ -231,6 +263,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         outputs,
         instanceConversations,
         selectedInstanceId: instance.id,
+        selectedShellId: null, // Clear shell selection when resuming conversation
+        lastSelectionTime: Date.now(),
         isLoading: false,
       }));
 
@@ -264,6 +298,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const instanceConversations = new Map(state.instanceConversations);
       instanceConversations.delete(id);
 
+      const activities = new Map(state.activities);
+      activities.delete(id);
+
       // If the removed instance was selected, select another one or null
       let newSelectedId = state.selectedInstanceId;
       if (state.selectedInstanceId === id) {
@@ -275,6 +312,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         instances: state.instances.filter((inst) => inst.id !== id),
         outputs,
         instanceConversations,
+        activities,
         selectedInstanceId: newSelectedId,
       };
     });
@@ -291,7 +329,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   selectInstance: (id) => {
-    set({ selectedInstanceId: id });
+    set({ selectedInstanceId: id, lastSelectionTime: Date.now() });
   },
 
   loadInstances: async () => {
@@ -305,8 +343,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
-  syncInstances: (instances, outputs) => {
+  syncInstances: (instances, outputs, instanceConversationMappings) => {
     const newOutputs = new Map(get().outputs);
+    const newInstanceConversations = new Map(get().instanceConversations);
 
     // Sync instances from server
     instances.forEach((instance) => {
@@ -333,9 +372,36 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       });
     }
 
+    // Sync instance-conversation mappings if provided
+    if (instanceConversationMappings) {
+      Object.entries(instanceConversationMappings).forEach(([instanceId, conversationId]) => {
+        newInstanceConversations.set(instanceId, conversationId);
+        // Also update the output's conversationId if it exists
+        const output = newOutputs.get(instanceId);
+        if (output) {
+          newOutputs.set(instanceId, { ...output, conversationId });
+        }
+      });
+    }
+
+    // Preserve selectedInstanceId if:
+    // 1. The instance still exists in the new list, OR
+    // 2. The selection was made very recently (within 2 seconds) - to handle race conditions
+    const currentState = get();
+    const currentSelectedId = currentState.selectedInstanceId;
+    const lastSelectionTime = currentState.lastSelectionTime;
+    const isRecentSelection = Date.now() - lastSelectionTime < 2000;
+    const selectedStillExists =
+      currentSelectedId && instances.some((i) => i.id === currentSelectedId);
+
+    // Don't override recent explicit selections (handles race condition with createInstance)
+    const shouldPreserveSelection = selectedStillExists || isRecentSelection;
+
     set({
       instances,
       outputs: newOutputs,
+      instanceConversations: newInstanceConversations,
+      selectedInstanceId: shouldPreserveSelection ? currentSelectedId : null,
     });
   },
 
@@ -351,6 +417,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         inst.id === id ? { ...inst, terminalTitle: title } : inst
       ),
     }));
+
+    // Also update the conversation title
+    const conversationId = get().instanceConversations.get(id);
+    if (conversationId) {
+      useConversationStore
+        .getState()
+        .updateConversation(conversationId, {
+          title,
+        })
+        .catch(console.error);
+    }
   },
 
   addInstanceOutput: (id, message) => {
@@ -362,9 +439,15 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       rawOutput: '',
     };
 
+    // Add message and trim if over limit
+    let messages = [...existing.messages, message];
+    if (messages.length > MAX_MESSAGES_PER_INSTANCE) {
+      messages = messages.slice(-MAX_MESSAGES_PER_INSTANCE);
+    }
+
     outputs.set(id, {
       ...existing,
-      messages: [...existing.messages, message],
+      messages,
     });
 
     set({ outputs });
@@ -391,9 +474,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         messages: [],
         rawOutput: '',
       };
+
+      // Append and trim if over limit
+      let rawOutput = existing.rawOutput + data;
+      if (rawOutput.length > MAX_RAW_OUTPUT_SIZE) {
+        rawOutput = rawOutput.slice(-MAX_RAW_OUTPUT_SIZE);
+      }
+
       outputs.set(id, {
         ...existing,
-        rawOutput: existing.rawOutput + data,
+        rawOutput,
       });
       return { outputs };
     });
@@ -446,9 +536,33 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
+  updateActivity: (instanceId, activity) => {
+    set((state) => {
+      const activities = new Map(state.activities);
+      const existing = activities.get(instanceId) || {
+        recentFiles: [],
+        toolCount: 0,
+      };
+
+      // Merge the activity update
+      const updated: InstanceActivity = {
+        ...existing,
+        ...activity,
+        recentFiles: activity.recentFiles
+          ? [...new Set([...activity.recentFiles, ...existing.recentFiles])].slice(0, 10)
+          : existing.recentFiles,
+        toolCount: activity.lastTool ? existing.toolCount + 1 : existing.toolCount,
+      };
+
+      activities.set(instanceId, updated);
+      return { activities };
+    });
+  },
+
   setupListeners: () => {
     const {
       updateInstanceStatus,
+      updateTerminalTitle,
       addInstanceOutput,
       addRawOutput,
       setInstanceError,
@@ -458,6 +572,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       updateShellStatus,
       addShellRawOutput,
       handleShellExit,
+      updateActivity,
     } = get();
 
     const unsubOutput = window.electronAPI.instance.onOutput((id, message) => {
@@ -484,6 +599,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       handleSessionId(id, sessionId);
     });
 
+    const unsubTerminalTitle = window.electronAPI.instance.onTerminalTitle((id, title) => {
+      updateTerminalTitle(id, title);
+    });
+
     // Instance sync listener (for updates from web clients or other sources)
     const unsubSync = window.electronAPI.instance.onSync((instances) => {
       syncInstances(instances);
@@ -505,14 +624,50 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Listen for sync:state events from web socket (for web clients)
     const handleSyncState = (event: Event) => {
       const customEvent = event as CustomEvent<{
+        instanceConversations?: Record<string, string>;
         instances?: ClaudeInstance[];
         outputs?: Record<string, { messages: StreamMessage[]; rawOutput: string }>;
       }>;
       if (customEvent.detail?.instances) {
-        syncInstances(customEvent.detail.instances, customEvent.detail.outputs);
+        syncInstances(
+          customEvent.detail.instances,
+          customEvent.detail.outputs,
+          customEvent.detail.instanceConversations
+        );
       }
     };
     window.addEventListener('sync:state', handleSyncState);
+
+    // Listen for hook:activity events (real-time tool use tracking)
+    const handleHookActivity = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        instanceId: string;
+        toolName?: string;
+        files?: string[];
+        timestamp: number;
+      }>;
+      if (customEvent.detail?.instanceId) {
+        updateActivity(customEvent.detail.instanceId, {
+          lastTool: customEvent.detail.toolName,
+          lastToolTime: customEvent.detail.timestamp,
+          recentFiles: customEvent.detail.files || [],
+        });
+      }
+    };
+    window.addEventListener('hook:activity', handleHookActivity);
+
+    // Also listen via IPC if available
+    let unsubActivity: (() => void) | undefined;
+    const hookApi = window.electronAPI?.hook;
+    if (hookApi?.onActivity) {
+      unsubActivity = hookApi.onActivity((_event, data) => {
+        updateActivity(data.instanceId, {
+          lastTool: data.toolName,
+          lastToolTime: data.timestamp,
+          recentFiles: data.files || [],
+        });
+      });
+    }
 
     return () => {
       unsubOutput();
@@ -521,11 +676,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       unsubExit();
       unsubRaw();
       unsubSessionId();
+      unsubTerminalTitle();
       unsubSync();
       unsubShellRawOutput();
       unsubShellStatus();
       unsubShellExit();
       window.removeEventListener('sync:state', handleSyncState);
+      window.removeEventListener('hook:activity', handleHookActivity);
+      unsubActivity?.();
     };
   },
 
@@ -564,6 +722,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       }
     }
     return undefined;
+  },
+
+  getActivity: (instanceId) => {
+    return get().activities.get(instanceId);
   },
 
   // ==================== Shell Actions ====================
@@ -659,9 +821,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         shellId: id,
         rawOutput: '',
       };
+
+      // Append and trim if over limit
+      let rawOutput = existing.rawOutput + data;
+      if (rawOutput.length > MAX_RAW_OUTPUT_SIZE) {
+        rawOutput = rawOutput.slice(-MAX_RAW_OUTPUT_SIZE);
+      }
+
       shellOutputs.set(id, {
         ...existing,
-        rawOutput: existing.rawOutput + data,
+        rawOutput,
       });
       return { shellOutputs };
     });

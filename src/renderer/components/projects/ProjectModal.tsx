@@ -5,7 +5,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useConversationStore } from '../../stores/conversationStore';
 import { Modal } from '../common/Modal';
 import { ImportSessionsModal } from '../conversations/ImportSessionsModal';
-import type { AvailableShell } from '@shared/types';
+import type { AvailableShell, HookTemplate, HookTemplateType } from '@shared/types';
 
 const PROJECT_COLORS = [
   '#ef4444',
@@ -32,6 +32,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const { editingProject } = useUIStore();
 
   const existingProject = editingProject ? projects.find((p) => p.id === editingProject) : null;
+  const isEditing = !!existingProject;
 
   const [name, setName] = useState(existingProject?.name || '');
   const [path, setPath] = useState(existingProject?.path || '');
@@ -44,6 +45,13 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+
+  // Hooks integration state
+  const [enableHooksIntegration, setEnableHooksIntegration] = useState(!isEditing);
+  const [hookTemplates, setHookTemplates] = useState<HookTemplate[]>([]);
+  const [selectedHookTemplate, setSelectedHookTemplate] = useState<HookTemplateType>('monitored');
+  const [showHookOptions, setShowHookOptions] = useState(false);
+  const [hasExistingHooks, setHasExistingHooks] = useState(false);
 
   const { loadConversations } = useConversationStore();
 
@@ -69,7 +77,34 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
     void loadShells();
   }, []);
 
-  const isEditing = !!existingProject;
+  // Load hook templates
+  useEffect(() => {
+    const loadHookTemplates = async () => {
+      try {
+        const templates = await window.electronAPI.hook.getTemplates();
+        setHookTemplates(templates);
+      } catch (err) {
+        console.error('Failed to load hook templates:', err);
+      }
+    };
+    void loadHookTemplates();
+  }, []);
+
+  // Check existing hooks when editing
+  useEffect(() => {
+    const checkExistingHooks = async () => {
+      if (isEditing && path) {
+        try {
+          const hasHooks = await window.electronAPI.hook.hasConfigured(path);
+          setHasExistingHooks(hasHooks);
+          setEnableHooksIntegration(hasHooks);
+        } catch (err) {
+          console.error('Failed to check existing hooks:', err);
+        }
+      }
+    };
+    void checkExistingHooks();
+  }, [isEditing, path]);
 
   const handleSelectDirectory = async () => {
     const selectedPath = await window.electronAPI.dialog.selectDirectory();
@@ -100,25 +135,61 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
     setIsSubmitting(true);
 
     try {
+      const projectPath = path.trim();
+
       if (isEditing && existingProject) {
         await updateProject({
           ...existingProject,
           name: name.trim(),
-          path: path.trim(),
+          path: projectPath,
           description: description.trim() || undefined,
           color,
           skipPermissions,
           preferredShell: preferredShell || undefined,
         });
+
+        // Handle hooks integration changes
+        if (enableHooksIntegration && !hasExistingHooks) {
+          // Enable hooks for existing project
+          await window.electronAPI.hook.setupProject(
+            projectPath,
+            {
+              enabled: true,
+              enableNotifications: true,
+              enableToolTracking: true,
+              enablePermissionCheck: true,
+              enableMetrics: true,
+            },
+            selectedHookTemplate
+          );
+        } else if (!enableHooksIntegration && hasExistingHooks) {
+          // Remove hooks from project
+          await window.electronAPI.hook.removeProject(projectPath);
+        }
       } else {
         await createProject({
           name: name.trim(),
-          path: path.trim(),
+          path: projectPath,
           description: description.trim() || undefined,
           color,
           skipPermissions,
           preferredShell: preferredShell || undefined,
         });
+
+        // Set up hooks for new project if enabled
+        if (enableHooksIntegration) {
+          await window.electronAPI.hook.setupProject(
+            projectPath,
+            {
+              enabled: true,
+              enableNotifications: true,
+              enableToolTracking: true,
+              enablePermissionCheck: true,
+              enableMetrics: true,
+            },
+            selectedHookTemplate
+          );
+        }
       }
       onClose();
     } catch (err) {
@@ -272,6 +343,81 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           </label>
         </div>
 
+        {/* Dashboard Hooks Integration */}
+        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enableHooksIntegration}
+              onChange={(e) => setEnableHooksIntegration(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-claude-orange focus:ring-claude-orange focus:ring-offset-claude-beige dark:focus:ring-offset-gray-800"
+            />
+            <div className="flex-1">
+              <span className="text-sm font-medium text-gray-800 dark:text-white">
+                {t('project.enableHooksIntegration', 'Enable Dashboard Integration')}
+              </span>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                {t(
+                  'project.enableHooksIntegrationDescription',
+                  'Receive notifications and track activity from Claude instances in this project'
+                )}
+              </p>
+            </div>
+          </label>
+
+          {/* Hook Options (expanded when enabled) */}
+          {enableHooksIntegration && (
+            <div className="mt-3 ml-7">
+              <button
+                type="button"
+                onClick={() => setShowHookOptions(!showHookOptions)}
+                className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              >
+                <ChevronIcon
+                  className={`w-3 h-3 transition-transform ${showHookOptions ? 'rotate-90' : ''}`}
+                />
+                {t('project.advancedOptions', 'Advanced options')}
+              </button>
+
+              {showHookOptions && (
+                <div className="mt-2 space-y-2">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                    {t('project.hookTemplate', 'Integration template')}
+                  </label>
+                  <select
+                    value={selectedHookTemplate}
+                    onChange={(e) => setSelectedHookTemplate(e.target.value as HookTemplateType)}
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+                  >
+                    {hookTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                  {hookTemplates.find((t) => t.id === selectedHookTemplate)?.description && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {hookTemplates.find((t) => t.id === selectedHookTemplate)?.description}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Warning about existing hooks */}
+          {isEditing && hasExistingHooks && !enableHooksIntegration && (
+            <div className="mt-2 ml-7 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+              <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                {t(
+                  'project.hooksWillBeRemoved',
+                  'Warning: Disabling this will remove existing dashboard hooks from the project.'
+                )}
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Load Session History - Only show when editing */}
         {isEditing && existingProject && (
           <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
@@ -334,5 +480,14 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         />
       )}
     </Modal>
+  );
+}
+
+// Icon component
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
   );
 }

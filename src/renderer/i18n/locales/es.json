@@ -20,6 +20,7 @@
     "terminal": "Terminal",
     "structured": "Estructurado",
     "settings": "Configuración",
+    "home": "Ir al inicio",
     "switchToTerminal": "Cambiar a vista terminal",
     "switchToStructured": "Cambiar a vista estructurada",
     "switchToLight": "Cambiar a modo claro",
@@ -289,5 +290,24 @@
     "validJson": "JSON válido",
     "emptyContent": "El contenido no puede estar vacío",
     "format": "Formatear JSON"
+  },
+  "structuredChat": {
+    "placeholder": "Escribe un mensaje a Claude...",
+    "disabledPlaceholder": "Esperando a Claude...",
+    "hint": "Presiona Enter para enviar, Shift+Enter para nueva línea",
+    "permissionRequired": "Permiso requerido",
+    "accept": "Aceptar (Y)",
+    "reject": "Rechazar (N)"
+  },
+  "git": {
+    "staged": "preparados",
+    "modified": "modificados",
+    "untracked": "sin seguimiento",
+    "ahead": "{{count}} adelante",
+    "behind": "{{count}} detrás",
+    "minutesAgo": "hace {{count}}m",
+    "hoursAgo": "hace {{count}}h",
+    "daysAgo": "hace {{count}}d",
+    "noRepo": "No es un repositorio git"
   }
 }

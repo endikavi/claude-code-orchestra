@@ -315,9 +315,9 @@ export class ClaudeSessionImporter {
           try {
             const parsed = JSON.parse(line) as ClaudeCodeMessage;
             messages.push(parsed);
-          } catch (error) {
-            // Skip malformed lines
-            console.warn('Skipping malformed line in JSONL:', error);
+          } catch {
+            // Skip malformed lines silently - this can happen with license text,
+            // partial writes, or corrupted session files
           }
         }
       });

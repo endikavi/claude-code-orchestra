@@ -1,5 +1,7 @@
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useClusterStore } from '../../stores/clusterStore';
 
 interface ModeToggleButtonProps {
   instanceId: string;
@@ -24,11 +26,23 @@ function getOsShortcut(): { key: string; label: string } {
 export function ModeToggleButton({ instanceId }: ModeToggleButtonProps) {
   const { t } = useTranslation();
   const { sendInput } = useInstanceStore();
+  const { globalInstances, sendRemoteInput, isConnected: clusterConnected } = useClusterStore();
   const shortcut = getOsShortcut();
 
-  const handleClick = () => {
-    void sendInput(instanceId, shortcut.key);
-  };
+  // Check if instance is remote (belongs to another node)
+  const remoteInstance = clusterConnected
+    ? globalInstances.find((i) => i.id === instanceId && !i.isLocal)
+    : null;
+
+  const handleClick = useCallback(() => {
+    if (remoteInstance) {
+      // Remote instance - send through cluster
+      void sendRemoteInput(instanceId, remoteInstance.nodeId, shortcut.key);
+    } else {
+      // Local instance - send directly
+      void sendInput(instanceId, shortcut.key);
+    }
+  }, [instanceId, remoteInstance, sendRemoteInput, sendInput, shortcut.key]);
 
   return (
     <button

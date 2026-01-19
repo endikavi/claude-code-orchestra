@@ -27,6 +27,13 @@ export interface TokenPayload {
   exp: number;
 }
 
+// Hook status update data
+export interface HookStatusUpdate {
+  status: string;
+  message?: string;
+  progress?: number;
+}
+
 // WebSocket events (Server -> Client)
 export interface ServerToClientEvents {
   'instance:output': (instanceId: string, data: StreamMessage) => void;
@@ -35,6 +42,14 @@ export interface ServerToClientEvents {
   'instance:exit': (instanceId: string, code: number) => void;
   'instance:rawOutput': (instanceId: string, data: string) => void;
   'instance:sessionId': (instanceId: string, sessionId: string) => void;
+  'instance:terminalTitle': (instanceId: string, title: string) => void;
+  'instance:hookStatus': (instanceId: string, data: HookStatusUpdate) => void;
+  'hook:activity': (data: {
+    instanceId: string;
+    toolName?: string;
+    files?: string[];
+    timestamp: number;
+  }) => void;
   'sync:state': (state: SyncState) => void;
   'session:kicked': (reason: string) => void;
 }
@@ -59,6 +74,7 @@ export interface SyncState {
   instances: ClaudeInstance[];
   conversations: Conversation[];
   outputs?: Record<string, InstanceOutputBuffer>; // Output buffers for each instance
+  instanceConversations?: Record<string, string>; // Mapping: instanceId -> conversationId
 }
 
 // Login request/response

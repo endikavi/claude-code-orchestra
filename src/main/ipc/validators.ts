@@ -162,7 +162,9 @@ export const validators = {
       path: validatedPath,
       description: typeof obj.description === 'string' ? obj.description : undefined,
       color: typeof obj.color === 'string' ? obj.color : undefined,
+      hostname: typeof obj.hostname === 'string' ? obj.hostname : undefined,
       skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
+      preferredShell: typeof obj.preferredShell === 'string' ? obj.preferredShell : undefined,
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
     };
@@ -185,6 +187,7 @@ export const validators = {
     projectId: string;
     model: ClaudeModel;
     mode: InstanceMode;
+    prompt?: string;
     planMode?: boolean;
   } {
     if (!data || typeof data !== 'object') {
@@ -215,6 +218,7 @@ export const validators = {
       projectId: obj.projectId,
       model: obj.model,
       mode: obj.mode,
+      prompt: typeof obj.prompt === 'string' ? obj.prompt : undefined,
       planMode: obj.planMode === true,
     };
   },

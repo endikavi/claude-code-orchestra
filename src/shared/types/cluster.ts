@@ -86,6 +86,7 @@ export interface RemoteInstanceRequest {
   nodeId: string;
   model: ClaudeModel;
   mode: InstanceMode;
+  prompt?: string;
   planMode?: boolean;
 }
 
@@ -110,6 +111,10 @@ export interface NodeRegistrationResponse {
 export interface ClusterState {
   nodes: ClusterNode[];
   localNodeId: string;
+  /** Monotonically increasing version number for state ordering */
+  version: number;
+  /** Unix timestamp when state was generated */
+  timestamp: number;
 }
 
 // ==================== WebSocket Event Types ====================
@@ -130,6 +135,23 @@ export interface ClusterClientToServerEvents {
   'instance:exit': (instanceId: string, code: number) => void;
   'instance:rawOutput': (instanceId: string, data: string) => void;
   'instance:sessionId': (instanceId: string, sessionId: string) => void;
+  'instance:terminalTitle': (instanceId: string, title: string) => void;
+
+  // Cross-node instance creation request (secondary -> primary -> target node)
+  'instance:createRequest': (request: RemoteInstanceRequest) => void;
+
+  // Shell events (from remote node back to primary)
+  'shell:createRequest': (nodeId: string, projectId: string) => void;
+  'shell:output': (shellId: string, data: string) => void;
+  'shell:exit': (shellId: string, code: number) => void;
+
+  // Resize request (secondary -> primary -> target node)
+  'instance:resizeRequest': (
+    instanceId: string,
+    nodeId: string,
+    cols: number,
+    rows: number
+  ) => void;
 }
 
 /** Events sent from primary to nodes */
@@ -150,6 +172,9 @@ export interface ClusterServerToClientEvents {
   'instance:input': (instanceId: string, input: string) => void;
   'instance:resize': (instanceId: string, cols: number, rows: number) => void;
 
+  // Shell commands to nodes
+  'shell:create': (projectId: string, requestId: string) => void;
+
   // Forwarded instance events (from other nodes)
   'instance:output': (instanceId: string, nodeId: string, data: StreamMessage) => void;
   'instance:status': (instanceId: string, nodeId: string, status: InstanceStatus) => void;
@@ -157,6 +182,7 @@ export interface ClusterServerToClientEvents {
   'instance:exit': (instanceId: string, nodeId: string, code: number) => void;
   'instance:rawOutput': (instanceId: string, nodeId: string, data: string) => void;
   'instance:sessionId': (instanceId: string, nodeId: string, sessionId: string) => void;
+  'instance:terminalTitle': (instanceId: string, nodeId: string, title: string) => void;
 }
 
 // ==================== Authentication Types ====================

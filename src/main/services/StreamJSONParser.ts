@@ -125,7 +125,10 @@ export class StreamJSONParser extends EventEmitter {
         if (message.is_error) {
           return 'error';
         }
-        return 'completed';
+        // In interactive stream-json mode, a result message means Claude finished
+        // one turn and is waiting for more input. The actual 'completed' status
+        // is set when the process exits.
+        return 'waiting_input';
 
       default:
         return this.currentStatus;
