@@ -28,8 +28,10 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
     resumeConversation,
     getInstanceForConversation,
     getInstanceOutputForConversation,
+    getActivity,
     instances, // For reactivity
     outputs, // For reactivity
+    activities, // For reactivity
   } = useInstanceStore();
   const { getSelectedProject } = useProjectStore();
   const { viewMode } = useUIStore();
@@ -140,6 +142,7 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
     const output = getInstanceOutputForConversation(conversationId);
     const lastText = output?.messages ? getLastAssistantText(output.messages) : null;
     const lastToolName = output?.messages ? getLastToolName(output.messages) : null;
+    const activity = getActivity(instance.id);
 
     return {
       status: instance.status,
@@ -147,8 +150,33 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
       terminalTitle: instance.terminalTitle,
       messageCount: output?.messages?.length || 0,
       lastToolName,
+      // Activity timeline data
+      activityTool: activity?.lastTool,
+      activityToolTime: activity?.lastToolTime,
+      recentFiles: activity?.recentFiles || [],
+      toolCount: activity?.toolCount || 0,
     };
   };
+
+  // Sort conversations: active instances first, then by updatedAt
+  const sortedConversations = [...conversations].sort((a, b) => {
+    const aActive = getActiveInstanceData(a.id);
+    const bActive = getActiveInstanceData(b.id);
+
+    // Active instances come first
+    if (aActive && !bActive) return -1;
+    if (!aActive && bActive) return 1;
+
+    // Among active instances, sort by last activity time
+    if (aActive && bActive) {
+      const aTime = aActive.activityToolTime || 0;
+      const bTime = bActive.activityToolTime || 0;
+      if (aTime !== bTime) return bTime - aTime;
+    }
+
+    // Then sort by updatedAt
+    return b.updatedAt - a.updatedAt;
+  });
 
   const getInstanceStatusLabel = (status: InstanceStatus) => {
     const statusMap: Record<string, string> = {
@@ -181,9 +209,10 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
     return baseLabel;
   };
 
-  // Force re-render when instances or outputs change
+  // Force re-render when instances, outputs, or activities change
   void instances;
   void outputs;
+  void activities;
 
   return (
     <div className="h-full flex flex-col bg-claude-cream dark:bg-gray-900">
@@ -266,7 +295,7 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
           </div>
         ) : (
           <div className="space-y-2">
-            {conversations.map((conversation) => {
+            {sortedConversations.map((conversation) => {
               const activeInstance = getActiveInstanceData(conversation.id);
               return (
                 <div
@@ -318,31 +347,65 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
                     </div>
                   </div>
 
-                  {/* Active instance status block */}
+                  {/* Active instance status block with activity timeline */}
                   {activeInstance && (
                     <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
-                      <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
-                        <svg
-                          className="w-4 h-4 animate-spin"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                          />
-                        </svg>
-                        <span className="font-medium truncate">
-                          {getStatusWithContext(
-                            activeInstance.status,
-                            activeInstance.lastMessage,
-                            activeInstance.lastToolName
-                          )}
-                        </span>
+                      <div className="flex items-center justify-between gap-2 text-xs text-green-700 dark:text-green-300">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <svg
+                            className="w-4 h-4 animate-spin flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            />
+                          </svg>
+                          <span className="font-medium truncate">
+                            {getStatusWithContext(
+                              activeInstance.status,
+                              activeInstance.lastMessage,
+                              activeInstance.activityTool || activeInstance.lastToolName
+                            )}
+                          </span>
+                        </div>
+                        {activeInstance.toolCount > 0 && (
+                          <span className="text-green-600 dark:text-green-400 flex-shrink-0">
+                            {activeInstance.toolCount}{' '}
+                            {t('common.tools', { count: activeInstance.toolCount })}
+                          </span>
+                        )}
                       </div>
+                      {/* Recent files activity */}
+                      {activeInstance.recentFiles.length > 0 && (
+                        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+                          <svg
+                            className="w-3.5 h-3.5 flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                            />
+                          </svg>
+                          <span className="truncate">
+                            {activeInstance.recentFiles
+                              .slice(0, 2)
+                              .map((f) => f.split('/').pop())
+                              .join(', ')}
+                            {activeInstance.recentFiles.length > 2 &&
+                              ` +${activeInstance.recentFiles.length - 2}`}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 

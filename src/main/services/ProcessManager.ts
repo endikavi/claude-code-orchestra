@@ -32,6 +32,14 @@ async function getClusterManagerModule() {
   return clusterManagerModule;
 }
 
+let fileLockManagerModule: typeof import('./FileLockManager') | null = null;
+async function getFileLockManagerModule() {
+  if (!fileLockManagerModule) {
+    fileLockManagerModule = await import('./FileLockManager');
+  }
+  return fileLockManagerModule;
+}
+
 export class ProcessManager extends EventEmitter {
   private instances: Map<string, ClaudeInstance> = new Map();
   private shellInstances: Map<string, ShellInstance> = new Map();
@@ -259,6 +267,16 @@ export class ProcessManager extends EventEmitter {
       if (conversationId) {
         this.dataStore.updateConversation(conversationId, { status: 'completed' });
       }
+
+      // Clean up file locks for this instance
+      getFileLockManagerModule()
+        .then((module) => {
+          const fileLockManager = module.getFileLockManager();
+          fileLockManager.cleanupInstance(instance.id);
+        })
+        .catch((error) => {
+          console.error('[ProcessManager] Failed to cleanup file locks:', error);
+        });
 
       // Clean up instance listeners and buffers immediately
       // The exit event is fired after all output has been processed

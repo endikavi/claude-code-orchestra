@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   INSTANCE_TERMINAL_TITLE: 'instance:terminalTitle',
   INSTANCE_RESUME: 'instance:resume',
   INSTANCE_SYNC: 'instance:sync', // Sync all instances to renderer (for remote updates)
+  INSTANCE_HOOK_STATUS: 'instance:hookStatus', // Hook status updates from dashboard integration
 
   // Conversation operations
   CONVERSATION_CREATE: 'conversation:create',
@@ -122,6 +123,67 @@ export const IPC_CHANNELS = {
 
   // System shell detection
   SHELL_GET_AVAILABLE: 'shell:getAvailable',
+
+  // Notification operations
+  NOTIFICATION_GET_ALL: 'notification:getAll',
+  NOTIFICATION_GET_STATS: 'notification:getStats',
+  NOTIFICATION_MARK_READ: 'notification:markRead',
+  NOTIFICATION_MARK_ALL_READ: 'notification:markAllRead',
+  NOTIFICATION_DISMISS: 'notification:dismiss',
+  NOTIFICATION_DELETE: 'notification:delete',
+  NOTIFICATION_CLEAR_ALL: 'notification:clearAll',
+  NOTIFICATION_GET_PREFERENCES: 'notification:getPreferences',
+  NOTIFICATION_SET_PREFERENCES: 'notification:setPreferences',
+
+  // Notification events (main -> renderer)
+  NOTIFICATION_NEW: 'notification:new',
+  NOTIFICATION_UPDATED: 'notification:updated',
+  NOTIFICATION_DISMISSED: 'notification:dismissed',
+  NOTIFICATION_DELETED: 'notification:deleted',
+  NOTIFICATION_CLEARED: 'notification:cleared',
+  NOTIFICATION_ALL_READ: 'notification:allRead',
+  NOTIFICATION_CLICKED: 'notification:clicked',
+
+  // Hook operations
+  HOOK_SETUP_PROJECT: 'hook:setupProject',
+  HOOK_REMOVE_PROJECT: 'hook:removeProject',
+  HOOK_GET_TEMPLATES: 'hook:getTemplates',
+  HOOK_GET_PROJECT_SETTINGS: 'hook:getProjectSettings',
+  HOOK_HAS_CONFIGURED: 'hook:hasConfigured',
+
+  // Hook events (main -> renderer)
+  HOOK_ACTIVITY: 'hook:activity', // Real-time activity tracking from hooks
+
+  // Skill operations
+  SKILL_GET_AVAILABLE: 'skill:getAvailable',
+  SKILL_INSTALL: 'skill:install',
+  SKILL_REMOVE: 'skill:remove',
+  SKILL_GET_INSTALLED: 'skill:getInstalled',
+
+  // Permission operations
+  PERMISSION_GET_CONFIG: 'permission:getConfig',
+  PERMISSION_SET_CONFIG: 'permission:setConfig',
+  PERMISSION_ADD_RULE: 'permission:addRule',
+  PERMISSION_UPDATE_RULE: 'permission:updateRule',
+  PERMISSION_REMOVE_RULE: 'permission:removeRule',
+  PERMISSION_GET_LOG: 'permission:getLog',
+  PERMISSION_GET_STATS: 'permission:getStats',
+  PERMISSION_CLEAR_LOG: 'permission:clearLog',
+
+  // Metrics operations
+  METRICS_GET_TOOL_USAGE: 'metrics:getToolUsage',
+  METRICS_GET_SESSIONS: 'metrics:getSessions',
+  METRICS_GET_PROJECT_SUMMARY: 'metrics:getProjectSummary',
+  METRICS_GET_TIME_SERIES: 'metrics:getTimeSeries',
+  METRICS_GET_DASHBOARD_SUMMARY: 'metrics:getDashboardSummary',
+  METRICS_GET_COST_BREAKDOWN: 'metrics:getCostBreakdown',
+  METRICS_GET_USAGE_TRENDS: 'metrics:getUsageTrends',
+  METRICS_CLEAR: 'metrics:clear',
+
+  // Git status operations
+  GIT_GET_STATUS: 'git:getStatus',
+  GIT_REFRESH: 'git:refresh',
+  GIT_STATUS_CHANGED: 'git:statusChanged', // Event: main -> renderer
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import { execSync } from 'child_process';
 import { StreamJSONParser } from './StreamJSONParser';
+import { DataStore } from './DataStore';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ClaudeModel,
@@ -273,6 +274,7 @@ export class ClaudeInstance extends EventEmitter {
     try {
       // Use full process.env to ensure PATH includes Node.js and other required tools
       // The claude.cmd script needs node to be available
+      // Also inject dashboard environment variables for hooks integration
       this.ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
         cols: 120,
@@ -282,6 +284,12 @@ export class ClaudeInstance extends EventEmitter {
           ...process.env,
           FORCE_COLOR: '1',
           TERM: 'xterm-256color',
+          // Dashboard integration environment variables
+          // These are used by hook scripts to communicate with the dashboard
+          CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
+          CLAUDE_DASHBOARD_PROJECT_ID: this.projectId,
+          CLAUDE_DASHBOARD_PROJECT_PATH: this.projectPath,
+          CLAUDE_DASHBOARD_API_URL: `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`,
         } as Record<string, string>,
       });
 
@@ -292,12 +300,14 @@ export class ClaudeInstance extends EventEmitter {
         // Emit raw data for terminal view
         this.emit('rawOutput', data);
 
-        // Parse JSON for structured view
-        if (this.mode === 'stream-json') {
-          this.parser.process(data);
-        } else {
-          // For interactive mode, update status to 'running' when we receive data
-          // and reset the idle timer to detect when Claude stops responding
+        // Always parse JSON to capture session_id and structured messages
+        // This is needed for both stream-json and interactive modes since we
+        // always use --output-format stream-json to capture the session_id
+        this.parser.process(data);
+
+        // For interactive mode, also handle status transitions based on activity
+        if (this.mode !== 'stream-json') {
+          // Update status to 'running' when we receive data
           if (this._status === 'starting' || this._status === 'waiting_input') {
             this._status = 'running';
             this.emit('status', this._status);
@@ -359,6 +369,9 @@ export class ClaudeInstance extends EventEmitter {
       // Note: --continue (without session ID) resumes the LAST session, which is NOT what we want
       args.push('--resume', this.resumeSessionId);
 
+      // Always use stream-json to capture structured data
+      args.push('--output-format', 'stream-json', '--verbose');
+
       // Add model
       args.push('--model', this.model);
 
@@ -381,10 +394,10 @@ export class ClaudeInstance extends EventEmitter {
       }
     }
 
-    // Add output format for stream-json (runs interactively, prompt sent via stdin)
-    if (this.mode === 'stream-json') {
-      args.push('--output-format', 'stream-json', '--verbose');
-    }
+    // Always use stream-json output format to capture session_id and structured data
+    // This is required for both 'stream-json' and 'interactive' modes
+    // The rawOutput event provides terminal-compatible output for display
+    args.push('--output-format', 'stream-json', '--verbose');
 
     // Add model
     args.push('--model', this.model);

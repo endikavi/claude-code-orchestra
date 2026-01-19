@@ -21,6 +21,28 @@ import type {
   IpAccessRule,
   AuditLogEntry,
   AuditLogQueryOptions,
+  DashboardNotification,
+  NotificationFilterOptions,
+  NotificationStats,
+  NotificationPreferences,
+  HookTemplate,
+  DashboardHookSettings,
+  HookTemplateType,
+  GlobalPermissionConfig,
+  PermissionRule,
+  PermissionLogEntry,
+  PermissionStats,
+  PermissionLogQueryOptions,
+  ToolUsageMetric,
+  SessionMetric,
+  ProjectMetricsSummary,
+  MetricsTimeSeries,
+  DashboardMetricsSummary,
+  CostBreakdown,
+  UsageTrends,
+  MetricsQueryOptions,
+  MetricsPeriod,
+  GitStatus,
 } from '@shared/types';
 import type { RemoteConfig, RemoteServerStatus } from '@shared/types/remote';
 import type {
@@ -472,6 +494,204 @@ contextBridge.exposeInMainWorld('electronAPI', {
     write: (projectPath: string, content: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.LOCAL_SETTINGS_WRITE, projectPath, content),
   },
+
+  // Notification operations
+  notification: {
+    getAll: (options?: NotificationFilterOptions): Promise<DashboardNotification[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ALL, options),
+
+    getStats: (): Promise<NotificationStats> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_STATS),
+
+    markRead: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_MARK_READ, id),
+
+    markAllRead: (): Promise<number> => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_MARK_ALL_READ),
+
+    dismiss: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_DISMISS, id),
+
+    delete: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_DELETE, id),
+
+    clearAll: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_CLEAR_ALL),
+
+    getPreferences: (): Promise<NotificationPreferences> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_PREFERENCES),
+
+    setPreferences: (prefs: Partial<NotificationPreferences>): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_PREFERENCES, prefs),
+
+    // Event listeners
+    onNew: (callback: (notification: DashboardNotification) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, notification: DashboardNotification) =>
+        callback(notification);
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_NEW, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_NEW, listener);
+    },
+
+    onUpdated: (callback: (notification: DashboardNotification) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, notification: DashboardNotification) =>
+        callback(notification);
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_UPDATED, listener);
+    },
+
+    onDismissed: (callback: (id: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, id: string) => callback(id);
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_DISMISSED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_DISMISSED, listener);
+    },
+
+    onDeleted: (callback: (id: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, id: string) => callback(id);
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_DELETED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_DELETED, listener);
+    },
+
+    onCleared: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_CLEARED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_CLEARED, listener);
+    },
+
+    onAllRead: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_ALL_READ, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_ALL_READ, listener);
+    },
+
+    onClicked: (callback: (id: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, id: string) => callback(id);
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_CLICKED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_CLICKED, listener);
+    },
+  },
+
+  // Hook operations
+  hook: {
+    getTemplates: (): Promise<HookTemplate[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HOOK_GET_TEMPLATES),
+
+    setupProject: (
+      projectPath: string,
+      settings: DashboardHookSettings,
+      templateId?: HookTemplateType
+    ): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HOOK_SETUP_PROJECT, projectPath, settings, templateId),
+
+    removeProject: (projectPath: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HOOK_REMOVE_PROJECT, projectPath),
+
+    getProjectSettings: (projectPath: string): Promise<DashboardHookSettings | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HOOK_GET_PROJECT_SETTINGS, projectPath),
+
+    hasConfigured: (projectPath: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HOOK_HAS_CONFIGURED, projectPath),
+
+    // Event listener for real-time activity tracking
+    onActivity: (
+      callback: (
+        event: Electron.IpcRendererEvent,
+        data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
+      ) => void
+    ) => {
+      const listener = (
+        event: Electron.IpcRendererEvent,
+        data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
+      ) => callback(event, data);
+      ipcRenderer.on(IPC_CHANNELS.HOOK_ACTIVITY, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.HOOK_ACTIVITY, listener);
+    },
+  },
+
+  // Skill operations
+  skill: {
+    getAvailable: (): Promise<Array<{ id: string; name: string; description: string }>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_AVAILABLE),
+
+    install: (
+      projectPath: string,
+      skillIds: string[]
+    ): Promise<{ success: boolean; installed: string[]; errors: string[] }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILL_INSTALL, projectPath, skillIds),
+
+    remove: (projectPath: string, skillId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILL_REMOVE, projectPath, skillId),
+
+    getInstalled: (projectPath: string): Promise<string[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_INSTALLED, projectPath),
+  },
+
+  // Permission operations
+  permission: {
+    getConfig: (): Promise<GlobalPermissionConfig> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_GET_CONFIG),
+
+    setConfig: (config: Partial<GlobalPermissionConfig>): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_SET_CONFIG, config),
+
+    addRule: (
+      rule: Omit<PermissionRule, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>
+    ): Promise<PermissionRule> => ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_ADD_RULE, rule),
+
+    updateRule: (id: string, updates: Partial<PermissionRule>): Promise<PermissionRule | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_UPDATE_RULE, id, updates),
+
+    removeRule: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_REMOVE_RULE, id),
+
+    getLog: (options?: PermissionLogQueryOptions): Promise<PermissionLogEntry[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_GET_LOG, options),
+
+    getStats: (): Promise<PermissionStats> => ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_GET_STATS),
+
+    clearLog: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_CLEAR_LOG),
+  },
+
+  // Metrics operations
+  metrics: {
+    getToolUsage: (options?: MetricsQueryOptions): Promise<ToolUsageMetric[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_TOOL_USAGE, options),
+
+    getSessions: (options?: MetricsQueryOptions): Promise<SessionMetric[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_SESSIONS, options),
+
+    getProjectSummary: (projectId: string): Promise<ProjectMetricsSummary> =>
+      ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_PROJECT_SUMMARY, projectId),
+
+    getTimeSeries: (options?: MetricsQueryOptions): Promise<MetricsTimeSeries> =>
+      ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_TIME_SERIES, options),
+
+    getDashboardSummary: (): Promise<DashboardMetricsSummary> =>
+      ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_DASHBOARD_SUMMARY),
+
+    getCostBreakdown: (options?: MetricsQueryOptions): Promise<CostBreakdown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_COST_BREAKDOWN, options),
+
+    getUsageTrends: (period?: MetricsPeriod): Promise<UsageTrends> =>
+      ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_USAGE_TRENDS, period),
+
+    clear: (): Promise<{ success: boolean }> => ipcRenderer.invoke(IPC_CHANNELS.METRICS_CLEAR),
+  },
+
+  // Git status operations
+  git: {
+    getStatus: (projectId: string): Promise<GitStatus | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_STATUS, projectId),
+
+    refresh: (projectId: string): Promise<GitStatus | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_REFRESH, projectId),
+
+    onStatusChanged: (callback: (projectId: string, status: GitStatus) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, projectId: string, status: GitStatus) =>
+        callback(projectId, status);
+      ipcRenderer.on(IPC_CHANNELS.GIT_STATUS_CHANGED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.GIT_STATUS_CHANGED, listener);
+    },
+  },
 });
 
 // Type declarations for renderer
@@ -671,6 +891,83 @@ declare global {
           projectPath: string,
           content: string
         ) => Promise<{ success: boolean; error?: string }>;
+      };
+      notification: {
+        getAll: (options?: NotificationFilterOptions) => Promise<DashboardNotification[]>;
+        getStats: () => Promise<NotificationStats>;
+        markRead: (id: string) => Promise<boolean>;
+        markAllRead: () => Promise<number>;
+        dismiss: (id: string) => Promise<boolean>;
+        delete: (id: string) => Promise<boolean>;
+        clearAll: () => Promise<{ success: boolean }>;
+        getPreferences: () => Promise<NotificationPreferences>;
+        setPreferences: (prefs: Partial<NotificationPreferences>) => Promise<{ success: boolean }>;
+        onNew: (callback: (notification: DashboardNotification) => void) => () => void;
+        onUpdated: (callback: (notification: DashboardNotification) => void) => () => void;
+        onDismissed: (callback: (id: string) => void) => () => void;
+        onDeleted: (callback: (id: string) => void) => () => void;
+        onCleared: (callback: () => void) => () => void;
+        onAllRead: (callback: () => void) => () => void;
+        onClicked: (callback: (id: string) => void) => () => void;
+      };
+      hook: {
+        getTemplates: () => Promise<HookTemplate[]>;
+        setupProject: (
+          projectPath: string,
+          settings: DashboardHookSettings,
+          templateId?: HookTemplateType
+        ) => Promise<{ success: boolean; error?: string }>;
+        removeProject: (projectPath: string) => Promise<{ success: boolean; error?: string }>;
+        getProjectSettings: (projectPath: string) => Promise<DashboardHookSettings | null>;
+        hasConfigured: (projectPath: string) => Promise<boolean>;
+        onActivity: (
+          callback: (
+            event: Electron.IpcRendererEvent,
+            data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
+          ) => void
+        ) => () => void;
+      };
+      skill: {
+        getAvailable: () => Promise<Array<{ id: string; name: string; description: string }>>;
+        install: (
+          projectPath: string,
+          skillIds: string[]
+        ) => Promise<{ success: boolean; installed: string[]; errors: string[] }>;
+        remove: (
+          projectPath: string,
+          skillId: string
+        ) => Promise<{ success: boolean; error?: string }>;
+        getInstalled: (projectPath: string) => Promise<string[]>;
+      };
+      permission: {
+        getConfig: () => Promise<GlobalPermissionConfig>;
+        setConfig: (config: Partial<GlobalPermissionConfig>) => Promise<{ success: boolean }>;
+        addRule: (
+          rule: Omit<PermissionRule, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>
+        ) => Promise<PermissionRule>;
+        updateRule: (
+          id: string,
+          updates: Partial<PermissionRule>
+        ) => Promise<PermissionRule | null>;
+        removeRule: (id: string) => Promise<boolean>;
+        getLog: (options?: PermissionLogQueryOptions) => Promise<PermissionLogEntry[]>;
+        getStats: () => Promise<PermissionStats>;
+        clearLog: () => Promise<{ success: boolean }>;
+      };
+      metrics: {
+        getToolUsage: (options?: MetricsQueryOptions) => Promise<ToolUsageMetric[]>;
+        getSessions: (options?: MetricsQueryOptions) => Promise<SessionMetric[]>;
+        getProjectSummary: (projectId: string) => Promise<ProjectMetricsSummary>;
+        getTimeSeries: (options?: MetricsQueryOptions) => Promise<MetricsTimeSeries>;
+        getDashboardSummary: () => Promise<DashboardMetricsSummary>;
+        getCostBreakdown: (options?: MetricsQueryOptions) => Promise<CostBreakdown>;
+        getUsageTrends: (period?: MetricsPeriod) => Promise<UsageTrends>;
+        clear: () => Promise<{ success: boolean }>;
+      };
+      git: {
+        getStatus: (projectId: string) => Promise<GitStatus | null>;
+        refresh: (projectId: string) => Promise<GitStatus | null>;
+        onStatusChanged: (callback: (projectId: string, status: GitStatus) => void) => () => void;
       };
     };
   }

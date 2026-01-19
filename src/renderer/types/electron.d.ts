@@ -62,6 +62,14 @@ declare global {
       dialog: {
         selectDirectory: () => Promise<string | null>;
       };
+      hook?: {
+        onActivity?: (
+          callback: (
+            event: Electron.IpcRendererEvent,
+            data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
+          ) => void
+        ) => () => void;
+      };
     };
   }
 }

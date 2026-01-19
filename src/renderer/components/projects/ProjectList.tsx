@@ -5,6 +5,7 @@ import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { ContextMenu } from '../common/ContextMenu';
+import { GitStatusBadge } from './GitStatusBadge';
 import type { Project } from '@shared/types';
 import type { GlobalProject } from '@shared/types/cluster';
 
@@ -181,6 +182,12 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
               <div className="mt-1 text-xs text-gray-500 dark:text-gray-500 truncate pl-5">
                 {project.path}
               </div>
+              {/* Git status badge */}
+              {isElectron && isProjectLocal(project) && (
+                <div className="mt-1.5 pl-5">
+                  <GitStatusBadge projectId={project.id} compact />
+                </div>
+              )}
               {instances.length > 0 && (
                 <div className="mt-2 flex gap-1 pl-5">
                   {instances.slice(0, 5).map((instance) => (

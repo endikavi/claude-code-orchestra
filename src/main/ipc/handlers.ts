@@ -15,9 +15,29 @@ import { ClaudeSessionImporter } from '../services/ClaudeSessionImporter';
 import { UISettingsStore, type UISettings } from '../services/UISettingsStore';
 import { ShellDetector } from '../services/ShellDetector';
 import QRCode from 'qrcode';
-import type { Project, ClaudeModel, InstanceMode, ConversationStatus } from '@shared/types';
+import type {
+  Project,
+  ClaudeModel,
+  InstanceMode,
+  ConversationStatus,
+  NotificationFilterOptions,
+  NotificationPreferences,
+  DashboardHookSettings,
+  HookTemplateType,
+  PermissionRule,
+  GlobalPermissionConfig,
+  PermissionLogQueryOptions,
+  MetricsQueryOptions,
+  MetricsPeriod,
+} from '@shared/types';
 import type { RemoteConfig } from '@shared/types/remote';
 import type { ClusterConfig, RemoteInstanceRequest } from '@shared/types/cluster';
+import { getNotificationManager } from '../services/NotificationManager';
+import { getHookManager } from '../services/HookManager';
+import { getSkillManager } from '../services/SkillManager';
+import { getPermissionManager } from '../services/PermissionManager';
+import { getMetricsService } from '../services/MetricsService';
+import { getGitStatusManager } from '../services/GitStatusManager';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   const dataStore = DataStore.getInstance();
@@ -28,6 +48,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   const clusterManager = getClusterManager();
   clusterManager.setMainWindow(mainWindow);
 
+  // Get web server for activity IPC events
+  getWebServer().setMainWindow(mainWindow);
+
+  // Get git status manager early for project tracking
+  const gitStatusManager = getGitStatusManager();
+
   // Project handlers
   ipcMain.handle(
     IPC_CHANNELS.PROJECT_CREATE,
@@ -35,6 +61,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       const validated = validators.projectCreate(data);
       const result = dataStore.createProject(validated);
       clusterManager.notifyProjectChange();
+      // Track new project for git status
+      gitStatusManager.track(result.id, result.path);
       return result;
     }
   );
@@ -52,6 +80,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     processManager.killProjectInstances(validatedId);
     dataStore.deleteProject(validatedId);
     clusterManager.notifyProjectChange();
+    // Untrack project from git status
+    gitStatusManager.untrack(validatedId);
   });
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_GET_ALL, () => {
@@ -594,6 +624,219 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   // Get available shells on the system
   ipcMain.handle(IPC_CHANNELS.SHELL_GET_AVAILABLE, () => {
     return ShellDetector.getInstance().getAvailableShells();
+  });
+
+  // ==================== Notification Handlers ====================
+  const notificationManager = getNotificationManager();
+  notificationManager.setMainWindow(mainWindow);
+
+  ipcMain.handle(
+    IPC_CHANNELS.NOTIFICATION_GET_ALL,
+    (_event, options?: NotificationFilterOptions) => {
+      return notificationManager.getAll(options || {});
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_STATS, () => {
+    return notificationManager.getStats();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_MARK_READ, (_event, id: string) => {
+    return notificationManager.markRead(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_MARK_ALL_READ, () => {
+    return notificationManager.markAllRead();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_DISMISS, (_event, id: string) => {
+    return notificationManager.dismiss(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_DELETE, (_event, id: string) => {
+    return notificationManager.delete(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_CLEAR_ALL, () => {
+    notificationManager.clearAll();
+    return { success: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_PREFERENCES, () => {
+    return notificationManager.getPreferences();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.NOTIFICATION_SET_PREFERENCES,
+    (_event, prefs: Partial<NotificationPreferences>) => {
+      notificationManager.setPreferences(prefs);
+      return { success: true };
+    }
+  );
+
+  // ==================== Hook Handlers ====================
+  const hookManager = getHookManager();
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_GET_TEMPLATES, () => {
+    return hookManager.getTemplates();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.HOOK_SETUP_PROJECT,
+    async (
+      _event,
+      projectPath: string,
+      settings: DashboardHookSettings,
+      templateId?: HookTemplateType
+    ) => {
+      // Get the configured WebServer port from DataStore
+      const remoteConfig = dataStore.getRemoteConfig();
+      hookManager.setApiPort(remoteConfig.port);
+
+      return hookManager.setupHooksForProject(projectPath, settings, templateId);
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_REMOVE_PROJECT, async (_event, projectPath: string) => {
+    return hookManager.removeHooksFromProject(projectPath);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_GET_PROJECT_SETTINGS, async (_event, projectPath: string) => {
+    return hookManager.getProjectHookSettings(projectPath);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.HOOK_HAS_CONFIGURED, async (_event, projectPath: string) => {
+    return hookManager.hasHooksConfigured(projectPath);
+  });
+
+  // ==================== Skill Handlers ====================
+  const skillManager = getSkillManager();
+
+  ipcMain.handle(IPC_CHANNELS.SKILL_GET_AVAILABLE, () => {
+    return skillManager.getAvailableSkills();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_INSTALL,
+    async (_event, projectPath: string, skillIds: string[]) => {
+      return skillManager.installSkills(projectPath, skillIds);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_REMOVE,
+    async (_event, projectPath: string, skillId: string) => {
+      return skillManager.removeSkill(projectPath, skillId);
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.SKILL_GET_INSTALLED, async (_event, projectPath: string) => {
+    return skillManager.getInstalledSkills(projectPath);
+  });
+
+  // ==================== Permission Handlers ====================
+  const permissionManager = getPermissionManager();
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_GET_CONFIG, () => {
+    return permissionManager.getConfig();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.PERMISSION_SET_CONFIG,
+    (_event, config: Partial<GlobalPermissionConfig>) => {
+      permissionManager.setConfig(config);
+      return { success: true };
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.PERMISSION_ADD_RULE,
+    (_event, rule: Omit<PermissionRule, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>) => {
+      return permissionManager.addGlobalRule(rule);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.PERMISSION_UPDATE_RULE,
+    (_event, id: string, updates: Partial<PermissionRule>) => {
+      return permissionManager.updateGlobalRule(id, updates);
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_REMOVE_RULE, (_event, id: string) => {
+    return permissionManager.removeGlobalRule(id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_GET_LOG, (_event, options?: PermissionLogQueryOptions) => {
+    return permissionManager.getLog(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_GET_STATS, () => {
+    return permissionManager.getStats();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_CLEAR_LOG, () => {
+    permissionManager.clearLog();
+    return { success: true };
+  });
+
+  // ==================== Metrics Handlers ====================
+  const metricsService = getMetricsService();
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_TOOL_USAGE, (_event, options?: MetricsQueryOptions) => {
+    return metricsService.getToolUsage(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_SESSIONS, (_event, options?: MetricsQueryOptions) => {
+    return metricsService.getSessions(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_PROJECT_SUMMARY, (_event, projectId: string) => {
+    return metricsService.getProjectSummary(projectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_TIME_SERIES, (_event, options?: MetricsQueryOptions) => {
+    return metricsService.getTimeSeries(options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_DASHBOARD_SUMMARY, () => {
+    return metricsService.getDashboardSummary();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.METRICS_GET_COST_BREAKDOWN,
+    (_event, options?: MetricsQueryOptions) => {
+      return metricsService.getCostBreakdown(options || {});
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_GET_USAGE_TRENDS, (_event, period?: MetricsPeriod) => {
+    return metricsService.getUsageTrends(period || 'week');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.METRICS_CLEAR, () => {
+    metricsService.clear();
+    return { success: true };
+  });
+
+  // ==================== Git Status Handlers ====================
+  gitStatusManager.setMainWindow(mainWindow);
+
+  // Start git status polling
+  gitStatusManager.start();
+
+  // Track all existing projects
+  const allProjects = dataStore.getAllProjects();
+  for (const project of allProjects) {
+    gitStatusManager.track(project.id, project.path);
+  }
+
+  ipcMain.handle(IPC_CHANNELS.GIT_GET_STATUS, (_event, projectId: string) => {
+    return gitStatusManager.getStatus(projectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GIT_REFRESH, async (_event, projectId: string) => {
+    return gitStatusManager.refresh(projectId);
   });
 
   // External terminal handler (legacy)

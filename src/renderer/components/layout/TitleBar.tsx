@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useProjectStore } from '../../stores/projectStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
+import { NotificationBadge, NotificationPanel } from '../notifications';
 
 // Helper to check if running in web mode (must be called at render time, not module load time)
 const getIsWebMode = () => !!(window as unknown as { __WEB_VERSION__?: boolean }).__WEB_VERSION__;
@@ -18,15 +20,17 @@ export function TitleBar() {
     setSidebarMobileOpen,
     toggleSidebar,
     sidebarCollapsed,
+    showNotificationPanel,
+    setShowNotificationPanel,
   } = useUIStore();
-  const { selectedInstanceId, selectInstance, selectedShellId, selectShell } = useInstanceStore();
+  const { selectInstance, selectShell } = useInstanceStore();
+  const { selectProject } = useProjectStore();
   const isMobile = useIsMobile();
-
-  const hasActiveInstance = selectedInstanceId !== null || selectedShellId !== null;
 
   const handleGoHome = () => {
     selectInstance(null);
     selectShell(null);
+    selectProject(null);
   };
 
   const handleMinimize = () => window.electronAPI.window.minimize();
@@ -71,16 +75,14 @@ export function TitleBar() {
         <span className="text-sm font-medium text-gray-700 dark:text-gray-200 hidden sm:inline">
           {t('titleBar.title')}
         </span>
-        {/* Home button - visible when an instance is selected */}
-        {hasActiveInstance && (
-          <button
-            onClick={handleGoHome}
-            className="ml-2 p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
-            title={t('titleBar.home')}
-          >
-            <HomeIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-          </button>
-        )}
+        {/* Home button - always visible */}
+        <button
+          onClick={handleGoHome}
+          className="ml-2 p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
+          title={t('titleBar.home')}
+        >
+          <HomeIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+        </button>
       </div>
 
       {/* Center controls */}
@@ -120,6 +122,15 @@ export function TitleBar() {
             <MoonIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           )}
         </button>
+
+        {/* Notifications */}
+        <div className="relative">
+          <NotificationBadge onClick={() => setShowNotificationPanel(!showNotificationPanel)} />
+          <NotificationPanel
+            isOpen={showNotificationPanel}
+            onClose={() => setShowNotificationPanel(false)}
+          />
+        </div>
 
         {/* Settings button */}
         <button

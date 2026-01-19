@@ -298,5 +298,16 @@
     "permissionRequired": "Permiso requerido",
     "accept": "Aceptar (Y)",
     "reject": "Rechazar (N)"
+  },
+  "git": {
+    "staged": "preparados",
+    "modified": "modificados",
+    "untracked": "sin seguimiento",
+    "ahead": "{{count}} adelante",
+    "behind": "{{count}} detrás",
+    "minutesAgo": "hace {{count}}m",
+    "hoursAgo": "hace {{count}}h",
+    "daysAgo": "hace {{count}}d",
+    "noRepo": "No es un repositorio git"
   }
 }

@@ -12,6 +12,7 @@ import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
 import { getClusterManager } from './ClusterManager';
 import { getAuditLogger } from './AuditLogger';
+import { getFileLockManager } from './FileLockManager';
 import { validators, IpcValidationError } from '../ipc/validators';
 import type {
   RemoteServerStatus,
@@ -25,7 +26,21 @@ import type {
   RemoteSession,
 } from '@shared/types/remote';
 import { DEFAULT_REMOTE_PORT } from '@shared/types/remote';
-import type { ClaudeModel, InstanceMode, StreamMessage, InstanceStatus } from '@shared/types';
+import type {
+  ClaudeModel,
+  InstanceMode,
+  StreamMessage,
+  InstanceStatus,
+  ToolUseEvent,
+  StopEvent,
+  StatusUpdateEvent,
+  HookNotificationInput,
+  PermissionCheckRequest,
+  PermissionCheckResponse,
+} from '@shared/types';
+import { getNotificationManager } from './NotificationManager';
+import { getPermissionManager } from './PermissionManager';
+import { getMetricsService } from './MetricsService';
 
 // Extend Express Request to include session info
 interface AuthenticatedRequest extends Request {
@@ -44,6 +59,7 @@ export class WebServer extends EventEmitter {
   private authenticatedSockets: Map<string, string> = new Map(); // socketId -> sessionId
   private clusterStateHandler: (() => void) | null = null;
   private processManagerHandler: (() => void) | null = null;
+  private mainWindow: import('electron').BrowserWindow | null = null;
 
   private constructor() {
     super();
@@ -57,6 +73,22 @@ export class WebServer extends EventEmitter {
       WebServer.instance = new WebServer();
     }
     return WebServer.instance;
+  }
+
+  /**
+   * Set the main window for IPC communication
+   */
+  public setMainWindow(window: import('electron').BrowserWindow): void {
+    this.mainWindow = window;
+  }
+
+  /**
+   * Send event to renderer process via IPC
+   */
+  private sendToRenderer(channel: string, ...args: unknown[]): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, ...args);
+    }
   }
 
   private setupMiddleware(): void {
@@ -290,6 +322,65 @@ export class WebServer extends EventEmitter {
     req.tokenPayload = payload;
     next();
   };
+
+  /**
+   * Extract file paths from tool input for activity tracking
+   */
+  private extractFilesFromToolInput(
+    toolName: string,
+    toolInput: Record<string, unknown> | null | undefined
+  ): string[] {
+    if (!toolInput) return [];
+
+    const files: string[] = [];
+
+    switch (toolName) {
+      case 'Write':
+      case 'Edit':
+      case 'Read':
+        if (typeof toolInput.file_path === 'string') {
+          files.push(toolInput.file_path);
+        }
+        break;
+
+      case 'Bash': {
+        // Heuristic: extract file paths from common command patterns
+        const command = toolInput.command;
+        if (typeof command === 'string') {
+          // Match common file operations: cat, grep, sed, cp, mv, rm, touch, mkdir
+          const filePattern =
+            /(?:cat|grep|sed|cp|mv|rm|touch|mkdir|ls|chmod|chown|head|tail|less|more|vi|vim|nano|code|git\s+add|git\s+rm)\s+["']?([^\s"'|><&;]+)/g;
+          let match;
+          while ((match = filePattern.exec(command)) !== null) {
+            const path = match[1];
+            // Filter out flags and common non-file arguments
+            if (
+              (path && !path.startsWith('-') && !path.startsWith('$') && path.includes('/')) ||
+              path.includes('.')
+            ) {
+              files.push(path);
+            }
+          }
+        }
+        break;
+      }
+
+      case 'Glob':
+        if (typeof toolInput.pattern === 'string') {
+          // For glob, include the pattern as a reference
+          files.push(toolInput.pattern);
+        }
+        break;
+
+      case 'NotebookEdit':
+        if (typeof toolInput.notebook_path === 'string') {
+          files.push(toolInput.notebook_path);
+        }
+        break;
+    }
+
+    return files.slice(0, 10); // Limit to 10 files
+  }
 
   private setupRoutes(): void {
     const dataStore = DataStore.getInstance();
@@ -744,6 +835,633 @@ export class WebServer extends EventEmitter {
     this.app.get('/api/sync', this.authMiddleware, (_req: Request, res: Response) => {
       const state = this.getSyncState();
       res.json({ success: true, data: state });
+    });
+
+    // ==================== Hooks API ====================
+    // These endpoints receive events from Claude CLI hooks
+    // They do NOT require auth because they come from local hook scripts
+
+    // Notification endpoint - receives notifications from Claude CLI
+    this.app.post('/api/hooks/notify', (req: Request, res: Response) => {
+      try {
+        const { instanceId, eventType, data, timestamp } = req.body as {
+          instanceId: string;
+          eventType: string;
+          data: HookNotificationInput;
+          timestamp: number;
+        };
+
+        console.log(`[WebServer] Hook notification from ${instanceId}: ${eventType}`);
+
+        // Get project ID from instance
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Create dashboard notification
+        const notificationManager = getNotificationManager();
+        notificationManager.handleHookNotification(data, instanceId, projectId);
+
+        // Record metric
+        const metricsService = getMetricsService();
+        metricsService.recordHookEvent({
+          instanceId,
+          projectId: projectId || 'unknown',
+          eventType: 'Notification',
+          timestamp: timestamp || Date.now(),
+        });
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook notify error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Post-tool endpoint - receives tool use events after execution
+    this.app.post('/api/hooks/post-tool', (req: Request, res: Response) => {
+      try {
+        const { instanceId, eventType, data, timestamp } = req.body as {
+          instanceId: string;
+          eventType: string;
+          data?: {
+            tool_name?: string;
+            tool_input?: Record<string, unknown>;
+            success?: boolean;
+            duration_ms?: number;
+          } | null;
+          timestamp: number;
+        };
+
+        console.log(
+          `[WebServer] Hook post-tool from ${instanceId}: ${data?.tool_name || 'unknown'}`
+        );
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Record tool use metric (with null safety for data)
+        const metricsService = getMetricsService();
+        const toolName = data?.tool_name || 'unknown';
+        const toolEvent: ToolUseEvent = {
+          instanceId,
+          projectId: projectId || 'unknown',
+          toolName,
+          toolInput: data?.tool_input || {},
+          success: data?.success !== false,
+          durationMs: data?.duration_ms,
+          timestamp: timestamp || Date.now(),
+        };
+        metricsService.recordToolUse(toolEvent);
+
+        // Extract files from tool input for activity tracking
+        const files = this.extractFilesFromToolInput(toolName, data?.tool_input);
+
+        // Track files with FileLockManager and check for conflicts
+        const fileLockManager = getFileLockManager();
+        const notificationManager = getNotificationManager();
+        const conflictFiles: string[] = [];
+
+        // Determine action type based on tool
+        let fileAction: 'read' | 'write' | 'create' | 'delete' = 'read';
+        if (toolName === 'Write') {
+          fileAction = 'create';
+        } else if (toolName === 'Edit' || toolName === 'NotebookEdit') {
+          fileAction = 'write';
+        } else if (toolName === 'Bash') {
+          // Check for write-like commands
+          const command = data?.tool_input?.command;
+          if (
+            typeof command === 'string' &&
+            /\b(rm|mv|cp|mkdir|touch|chmod|chown)\b/.test(command)
+          ) {
+            fileAction = 'write';
+          }
+        }
+
+        // Track each file and check for conflicts
+        for (const file of files) {
+          const conflict = fileLockManager.trackFile(
+            instanceId,
+            projectId || 'unknown',
+            file,
+            fileAction
+          );
+          if (conflict) {
+            conflictFiles.push(file);
+          }
+        }
+
+        // Notify if there are conflicts
+        if (conflictFiles.length > 0 && projectId) {
+          notificationManager.notifyCollaborationAlert(instanceId, projectId, conflictFiles);
+        }
+
+        // Emit event for real-time tracking
+        this.emit('hook:toolUse', toolEvent);
+
+        // Send activity update to renderer via IPC
+        const activityData = {
+          instanceId,
+          toolName,
+          files,
+          timestamp: timestamp || Date.now(),
+        };
+        this.sendToRenderer('hook:activity', activityData);
+
+        // Also broadcast to Socket.IO clients
+        if (this.io) {
+          this.io.emit('hook:activity', activityData);
+        }
+
+        res.json({ success: true, conflicts: conflictFiles });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook post-tool error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // File lock query endpoint - check if a file has conflicts
+    this.app.get('/api/hooks/file-lock', (req: Request, res: Response) => {
+      try {
+        const fileParam = req.query.file;
+        const instanceIdParam = req.query.instanceId;
+
+        // Handle both string and string[] query params
+        const file = Array.isArray(fileParam) ? fileParam[0] : fileParam;
+        const instanceId = Array.isArray(instanceIdParam)
+          ? instanceIdParam[0]
+          : instanceIdParam || '';
+
+        if (!file || typeof file !== 'string') {
+          res.status(400).json({ success: false, error: 'File parameter is required' });
+          return;
+        }
+
+        const fileLockManager = getFileLockManager();
+        const conflicts = fileLockManager.detectConflicts(instanceId as string, file);
+
+        res.json({
+          success: true,
+          data: {
+            file,
+            locked: conflicts !== null,
+            conflicts: conflicts || [],
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] File lock query error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // File lock stats endpoint - get overall lock statistics
+    this.app.get('/api/hooks/file-lock/stats', (_req: Request, res: Response) => {
+      try {
+        const fileLockManager = getFileLockManager();
+        const stats = fileLockManager.getStats();
+
+        res.json({
+          success: true,
+          data: stats,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] File lock stats error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Get active files for an instance
+    this.app.get('/api/hooks/file-lock/instance/:instanceId', (req: Request, res: Response) => {
+      try {
+        const instanceId = req.params.instanceId as string;
+        const fileLockManager = getFileLockManager();
+        const files = fileLockManager.getActiveFilesByInstance(instanceId);
+
+        res.json({
+          success: true,
+          data: {
+            instanceId,
+            files,
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Instance files query error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Pre-tool permission check endpoint
+    this.app.post('/api/hooks/permission/check', (req: Request, res: Response) => {
+      try {
+        const { instanceId, toolName, toolInput, timestamp } = req.body as PermissionCheckRequest;
+
+        console.log(`[WebServer] Permission check from ${instanceId}: ${toolName}`);
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId || 'unknown';
+
+        // Check permission with PermissionManager
+        const permissionManager = getPermissionManager();
+        const result = permissionManager.checkPermission({
+          instanceId,
+          projectId,
+          toolName,
+          toolInput,
+          timestamp: timestamp || Date.now(),
+        });
+
+        // Record the permission check
+        const metricsService = getMetricsService();
+        metricsService.recordPermissionCheck({
+          instanceId,
+          projectId,
+          toolName,
+          decision: result.decision,
+          timestamp: timestamp || Date.now(),
+        });
+
+        const response: PermissionCheckResponse = {
+          decision: result.decision,
+          reason: result.reason,
+          ruleId: result.ruleId,
+        };
+
+        res.json(response);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook permission check error:', message);
+        // On error, return 'ask' to let Claude handle normally
+        res.json({
+          decision: 'ask',
+          reason: 'Dashboard error: ' + message,
+        } as PermissionCheckResponse);
+      }
+    });
+
+    // Stop/stopped endpoint - instance stopped
+    this.app.post('/api/hooks/stopped', (req: Request, res: Response) => {
+      try {
+        const { instanceId, eventType, data, timestamp } = req.body as {
+          instanceId: string;
+          eventType: string;
+          data?: { reason?: string; total_cost_usd?: number; duration_ms?: number } | null;
+          timestamp: number;
+        };
+
+        console.log(`[WebServer] Hook stopped from ${instanceId}`);
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Record stop event (with null safety for data)
+        const metricsService = getMetricsService();
+        const stopEvent: StopEvent = {
+          instanceId,
+          projectId: projectId || 'unknown',
+          reason: data?.reason,
+          totalCostUsd: data?.total_cost_usd,
+          durationMs: data?.duration_ms,
+          timestamp: timestamp || Date.now(),
+        };
+        metricsService.recordSessionEnd(stopEvent);
+
+        // Create notification for task completion
+        const notificationManager = getNotificationManager();
+        if (projectId) {
+          notificationManager.notifyTaskCompleted(
+            instanceId,
+            projectId,
+            undefined,
+            data?.total_cost_usd
+          );
+        }
+
+        this.emit('hook:stopped', stopEvent);
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook stopped error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Session start endpoint
+    this.app.post('/api/hooks/session-start', (req: Request, res: Response) => {
+      try {
+        const { instanceId, data, timestamp } = req.body as {
+          instanceId: string;
+          data?: { session_id?: string } | null;
+          timestamp: number;
+        };
+
+        console.log(`[WebServer] Hook session-start from ${instanceId}`);
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Record session start (with null safety for data)
+        const metricsService = getMetricsService();
+        metricsService.recordSessionStart({
+          instanceId,
+          projectId: projectId || 'unknown',
+          sessionId: data?.session_id,
+          timestamp: timestamp || Date.now(),
+        });
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook session-start error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Session end endpoint
+    this.app.post('/api/hooks/session-end', (req: Request, res: Response) => {
+      try {
+        const { instanceId, data, timestamp } = req.body as {
+          instanceId: string;
+          data?: { session_id?: string; total_cost_usd?: number } | null;
+          timestamp: number;
+        };
+
+        console.log(`[WebServer] Hook session-end from ${instanceId}`);
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Record session end (with null safety for data)
+        const metricsService = getMetricsService();
+        metricsService.recordSessionEnd({
+          instanceId,
+          projectId: projectId || 'unknown',
+          sessionId: data?.session_id,
+          totalCostUsd: data?.total_cost_usd,
+          timestamp: timestamp || Date.now(),
+        });
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook session-end error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // User prompt submit endpoint
+    this.app.post('/api/hooks/prompt-submit', (req: Request, res: Response) => {
+      try {
+        const { instanceId, data, timestamp } = req.body as {
+          instanceId: string;
+          data?: { prompt?: string; session_id?: string } | null;
+          timestamp: number;
+        };
+
+        console.log(`[WebServer] Hook prompt-submit from ${instanceId}`);
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Record prompt event
+        const metricsService = getMetricsService();
+        metricsService.recordHookEvent({
+          instanceId,
+          projectId: projectId || 'unknown',
+          eventType: 'UserPromptSubmit',
+          timestamp: timestamp || Date.now(),
+        });
+
+        // Emit event for real-time tracking
+        this.emit('hook:promptSubmit', {
+          instanceId,
+          projectId,
+          prompt: data?.prompt,
+          timestamp: timestamp || Date.now(),
+        });
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook prompt-submit error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Pre-tool endpoint (generic tracking, separate from permission check)
+    this.app.post('/api/hooks/pre-tool', (req: Request, res: Response) => {
+      try {
+        const { instanceId, data, timestamp } = req.body as {
+          instanceId: string;
+          data?: { tool_name?: string; tool_input?: Record<string, unknown> } | null;
+          timestamp: number;
+        };
+
+        console.log(
+          `[WebServer] Hook pre-tool from ${instanceId}: ${data?.tool_name || 'unknown'}`
+        );
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Record pre-tool event
+        const metricsService = getMetricsService();
+        metricsService.recordHookEvent({
+          instanceId,
+          projectId: projectId || 'unknown',
+          eventType: 'PreToolUse',
+          timestamp: timestamp || Date.now(),
+        });
+
+        // Emit event for real-time tracking
+        this.emit('hook:preTool', {
+          instanceId,
+          projectId,
+          toolName: data?.tool_name,
+          toolInput: data?.tool_input,
+          timestamp: timestamp || Date.now(),
+        });
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook pre-tool error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Status update endpoint - for dashboard-status skill
+    this.app.post('/api/hooks/status', (req: Request, res: Response) => {
+      try {
+        const { instanceId, status, message, progress } = req.body as StatusUpdateEvent;
+
+        console.log(`[WebServer] Status update from ${instanceId}: ${status}`);
+
+        const instance = processManager.getInstance(instanceId);
+
+        // Emit status update event for UI
+        this.emit('hook:status', { instanceId, status, message, progress, timestamp: Date.now() });
+
+        // Broadcast to Socket.IO clients
+        if (this.io) {
+          this.io.emit('instance:hookStatus', instanceId, { status, message, progress });
+        }
+
+        res.json({ success: true });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook status error:', errorMessage);
+        res.status(400).json({ success: false, error: errorMessage });
+      }
+    });
+
+    // Context endpoint - fetch context for an instance (for fetch-context skill)
+    this.app.get('/api/hooks/instance/:id/context', (req: Request, res: Response) => {
+      try {
+        const instanceId = String(req.params.id);
+
+        const instance = processManager.getInstance(instanceId);
+        if (!instance) {
+          res.status(404).json({ success: false, error: 'Instance not found' });
+          return;
+        }
+
+        const project = dataStore.getProjectById(instance.projectId);
+
+        // Get recent conversations for the project
+        const recentConversations = dataStore
+          .getConversationsByProject(instance.projectId)
+          .slice(0, 5)
+          .map((c) => ({
+            id: c.id,
+            title: c.title,
+            summary: c.initialPrompt.substring(0, 100),
+            createdAt: c.createdAt,
+          }));
+
+        // Get other active instances for the same project
+        const activeInstances = processManager
+          .getInstancesByProject(instance.projectId)
+          .filter((i) => i.id !== instanceId && i.status === 'running')
+          .map((i) => ({
+            id: i.id,
+            status: i.status,
+            createdAt: i.createdAt,
+          }));
+
+        res.json({
+          success: true,
+          data: {
+            projectId: instance.projectId,
+            projectName: project?.name || 'Unknown',
+            projectPath: project?.path,
+            recentConversations,
+            activeInstances,
+            instanceCount: activeInstances.length + 1,
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook context error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Get active instances for a project (for collaborative-awareness skill)
+    this.app.get('/api/hooks/instances', (req: Request, res: Response) => {
+      try {
+        const projectId = req.query.projectId as string;
+
+        if (!projectId) {
+          res.status(400).json({ success: false, error: 'projectId is required' });
+          return;
+        }
+
+        const instances = processManager.getInstancesByProject(projectId).map((i) => ({
+          id: i.id,
+          status: i.status,
+          startedAt: i.createdAt,
+          lastActivity: Date.now(), // TODO: Track actual last activity
+        }));
+
+        res.json({ success: true, data: { instances } });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook instances error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Activity reporting endpoint (for collaborative-awareness skill)
+    this.app.post('/api/hooks/activity', (req: Request, res: Response) => {
+      try {
+        const { instanceId, action, files } = req.body as {
+          instanceId: string;
+          action: string;
+          files: string[];
+        };
+
+        console.log(`[WebServer] Activity from ${instanceId}: ${action} on ${files.length} files`);
+
+        // Store activity (could be extended to track file locks)
+        this.emit('hook:activity', { instanceId, action, files, timestamp: Date.now() });
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook activity error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // File lock check endpoint (for collaborative-awareness skill)
+    this.app.get('/api/hooks/file-lock', (req: Request, res: Response) => {
+      try {
+        // This is a placeholder - could be extended to actually track file locks
+        // For now, just return that no files are locked
+        res.json({ success: true, data: { locked: false } });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook file-lock error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
+    });
+
+    // Generic event endpoint (catch-all for unknown hook events)
+    this.app.post('/api/hooks/event', (req: Request, res: Response) => {
+      try {
+        const { instanceId, eventType, data, timestamp } = req.body as {
+          instanceId: string;
+          eventType?: string;
+          data?: unknown;
+          timestamp?: number;
+        };
+
+        console.log(`[WebServer] Hook generic event from ${instanceId}: ${eventType || 'unknown'}`);
+
+        const instance = processManager.getInstance(instanceId);
+        const projectId = instance?.projectId;
+
+        // Record generic hook event
+        const metricsService = getMetricsService();
+        metricsService.recordHookEvent({
+          instanceId,
+          projectId: projectId || 'unknown',
+          eventType: eventType || 'unknown',
+          timestamp: timestamp || Date.now(),
+        });
+
+        res.json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[WebServer] Hook event error:', message);
+        res.status(400).json({ success: false, error: message });
+      }
     });
 
     // ==================== Static files (web UI) ====================

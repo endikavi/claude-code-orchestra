@@ -6,6 +6,7 @@ import { Tabs, type Tab } from '../common/Tabs';
 import { RemoteAccessSettings } from './RemoteAccessSettings';
 import { ClusterSettings } from './ClusterSettings';
 import { SecuritySettings } from './SecuritySettings';
+import { NotificationSettings } from './NotificationSettings';
 import type { Language } from '@shared/types';
 
 interface SettingsModalProps {
@@ -28,6 +29,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       id: 'general',
       label: t('settings.tabs.general'),
       icon: <SettingsIcon className="w-4 h-4" />,
+    },
+    {
+      id: 'notifications',
+      label: t('settings.tabs.notifications'),
+      icon: <BellIcon className="w-4 h-4" />,
     },
     ...(!isWebVersion
       ? [
@@ -137,6 +143,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </div>
         )}
 
+        {activeTab === 'notifications' && <NotificationSettings />}
+
         {activeTab === 'remote' && <RemoteAccessSettings />}
 
         {activeTab === 'security' && <SecuritySettings />}
@@ -244,6 +252,19 @@ function ServerIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"
+      />
+    </svg>
+  );
+}
+
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
       />
     </svg>
   );

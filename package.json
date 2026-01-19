@@ -1,6 +1,6 @@
 {
   "name": "claude-code-orchestra",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Desktop app for managing Claude Code CLI instances",
   "author": "Endika Vicioso Marquinez",
   "license": "AGPL-3.0",
@@ -28,7 +28,7 @@
     "build:vite": "vite build",
     "build:web": "vite build --config vite.config.web.ts",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "vite",
     "electron:build": "npm run build:vite && npm run build:web && electron-builder",
     "electron:build:linux": "npm run build:vite && npm run build:web && electron-builder --linux",
     "electron:build:win": "npm run build:vite && npm run build:web && electron-builder --win",

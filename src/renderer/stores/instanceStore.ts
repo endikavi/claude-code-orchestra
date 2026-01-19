@@ -16,6 +16,14 @@ import { useConversationStore } from './conversationStore';
 const MAX_MESSAGES_PER_INSTANCE = 1000;
 const MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
 
+// Activity tracking for timeline
+export interface InstanceActivity {
+  lastTool?: string;
+  lastToolTime?: number;
+  recentFiles: string[];
+  toolCount: number;
+}
+
 /**
  * Type guard to validate if an object is a valid StreamMessage
  */
@@ -64,6 +72,7 @@ interface InstanceState {
   instances: ClaudeInstance[];
   outputs: Map<string, InstanceOutput>;
   instanceConversations: Map<string, string>; // instanceId -> conversationId
+  activities: Map<string, InstanceActivity>; // instanceId -> activity data
   selectedInstanceId: string | null;
   // Timestamp of last explicit selection (to prevent sync from overriding recent selections)
   lastSelectionTime: number;
@@ -105,6 +114,7 @@ interface InstanceState {
   setInstanceError: (id: string, error: string) => void;
   handleInstanceExit: (id: string, code: number) => void;
   handleSessionId: (instanceId: string, sessionId: string) => void;
+  updateActivity: (instanceId: string, activity: Partial<InstanceActivity>) => void;
 
   // Setup listeners
   setupListeners: () => () => void;
@@ -116,6 +126,7 @@ interface InstanceState {
   getConversationIdForInstance: (instanceId: string) => string | undefined;
   getInstanceForConversation: (conversationId: string) => ClaudeInstance | undefined;
   getInstanceOutputForConversation: (conversationId: string) => InstanceOutput | undefined;
+  getActivity: (instanceId: string) => InstanceActivity | undefined;
 
   // Shell actions
   createShellInstance: (projectId: string) => Promise<ShellInstance>;
@@ -139,6 +150,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   instances: [],
   outputs: new Map(),
   instanceConversations: new Map(),
+  activities: new Map(),
   selectedInstanceId: null,
   lastSelectionTime: 0,
   isLoading: false,
@@ -286,6 +298,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const instanceConversations = new Map(state.instanceConversations);
       instanceConversations.delete(id);
 
+      const activities = new Map(state.activities);
+      activities.delete(id);
+
       // If the removed instance was selected, select another one or null
       let newSelectedId = state.selectedInstanceId;
       if (state.selectedInstanceId === id) {
@@ -297,6 +312,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         instances: state.instances.filter((inst) => inst.id !== id),
         outputs,
         instanceConversations,
+        activities,
         selectedInstanceId: newSelectedId,
       };
     });
@@ -401,6 +417,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         inst.id === id ? { ...inst, terminalTitle: title } : inst
       ),
     }));
+
+    // Also update the conversation title
+    const conversationId = get().instanceConversations.get(id);
+    if (conversationId) {
+      useConversationStore
+        .getState()
+        .updateConversation(conversationId, {
+          title,
+        })
+        .catch(console.error);
+    }
   },
 
   addInstanceOutput: (id, message) => {
@@ -509,6 +536,29 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
+  updateActivity: (instanceId, activity) => {
+    set((state) => {
+      const activities = new Map(state.activities);
+      const existing = activities.get(instanceId) || {
+        recentFiles: [],
+        toolCount: 0,
+      };
+
+      // Merge the activity update
+      const updated: InstanceActivity = {
+        ...existing,
+        ...activity,
+        recentFiles: activity.recentFiles
+          ? [...new Set([...activity.recentFiles, ...existing.recentFiles])].slice(0, 10)
+          : existing.recentFiles,
+        toolCount: activity.lastTool ? existing.toolCount + 1 : existing.toolCount,
+      };
+
+      activities.set(instanceId, updated);
+      return { activities };
+    });
+  },
+
   setupListeners: () => {
     const {
       updateInstanceStatus,
@@ -522,6 +572,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       updateShellStatus,
       addShellRawOutput,
       handleShellExit,
+      updateActivity,
     } = get();
 
     const unsubOutput = window.electronAPI.instance.onOutput((id, message) => {
@@ -587,6 +638,37 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     };
     window.addEventListener('sync:state', handleSyncState);
 
+    // Listen for hook:activity events (real-time tool use tracking)
+    const handleHookActivity = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        instanceId: string;
+        toolName?: string;
+        files?: string[];
+        timestamp: number;
+      }>;
+      if (customEvent.detail?.instanceId) {
+        updateActivity(customEvent.detail.instanceId, {
+          lastTool: customEvent.detail.toolName,
+          lastToolTime: customEvent.detail.timestamp,
+          recentFiles: customEvent.detail.files || [],
+        });
+      }
+    };
+    window.addEventListener('hook:activity', handleHookActivity);
+
+    // Also listen via IPC if available
+    let unsubActivity: (() => void) | undefined;
+    const hookApi = window.electronAPI?.hook;
+    if (hookApi?.onActivity) {
+      unsubActivity = hookApi.onActivity((_event, data) => {
+        updateActivity(data.instanceId, {
+          lastTool: data.toolName,
+          lastToolTime: data.timestamp,
+          recentFiles: data.files || [],
+        });
+      });
+    }
+
     return () => {
       unsubOutput();
       unsubStatus();
@@ -600,6 +682,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       unsubShellStatus();
       unsubShellExit();
       window.removeEventListener('sync:state', handleSyncState);
+      window.removeEventListener('hook:activity', handleHookActivity);
+      unsubActivity?.();
     };
   },
 
@@ -638,6 +722,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       }
     }
     return undefined;
+  },
+
+  getActivity: (instanceId) => {
+    return get().activities.get(instanceId);
   },
 
   // ==================== Shell Actions ====================

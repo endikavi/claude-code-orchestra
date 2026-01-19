@@ -11,6 +11,7 @@ interface UIState extends UISettings {
   showInstanceModal: boolean;
   showSettingsModal: boolean;
   showLocalSettingsModal: boolean;
+  showNotificationPanel: boolean;
   editingProject: string | null;
   localSettingsProjectPath: string | null;
 
@@ -28,6 +29,8 @@ interface UIState extends UISettings {
   setShowInstanceModal: (show: boolean) => void;
   setShowSettingsModal: (show: boolean) => void;
   setShowLocalSettingsModal: (show: boolean, projectPath?: string | null) => void;
+  setShowNotificationPanel: (show: boolean) => void;
+  toggleNotificationPanel: () => void;
   initializeFromMain: () => Promise<void>;
 }
 
@@ -95,6 +98,7 @@ export const useUIStore = create<UIState>()(
       showInstanceModal: false,
       showSettingsModal: false,
       showLocalSettingsModal: false,
+      showNotificationPanel: false,
       editingProject: null,
       localSettingsProjectPath: null,
       _hasHydrated: false,
@@ -181,6 +185,11 @@ export const useUIStore = create<UIState>()(
 
       setShowLocalSettingsModal: (show, projectPath = null) =>
         set({ showLocalSettingsModal: show, localSettingsProjectPath: projectPath }),
+
+      setShowNotificationPanel: (show) => set({ showNotificationPanel: show }),
+
+      toggleNotificationPanel: () =>
+        set((state) => ({ showNotificationPanel: !state.showNotificationPanel })),
     }),
     {
       name: 'claude-code-orchestra-ui',

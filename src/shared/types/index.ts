@@ -261,3 +261,32 @@ export * from './cluster';
 
 // Re-export security types
 export * from './security';
+
+// Re-export hooks types
+export * from './hooks';
+
+// Re-export notifications types
+export * from './notifications';
+
+// Re-export permissions types
+export * from './permissions';
+
+// Re-export metrics types
+export * from './metrics';
+
+// Git status types
+export interface GitStatus {
+  branch: string;
+  ahead: number;
+  behind: number;
+  staged: { added: number; modified: number; deleted: number };
+  unstaged: { added: number; modified: number; deleted: number };
+  untracked: number;
+  totalFiles: number;
+  linesAdded: number;
+  linesRemoved: number;
+  lastCommitTime: number | null;
+  lastCommitMessage: string | null;
+  isRepo: boolean;
+  lastChecked: number;
+}
