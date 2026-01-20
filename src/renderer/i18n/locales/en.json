@@ -39,7 +39,11 @@
     "noProjects": "No projects yet. Click the + button to add one.",
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
-    "openMenu": "Open menu"
+    "openMenu": "Open menu",
+    "localProjects": "Local",
+    "cluster": "Cluster",
+    "collapseSection": "Collapse section",
+    "expandSection": "Expand section"
   },
   "settings": {
     "title": "Settings",
@@ -221,6 +225,10 @@
     "accept": "Accept (Yes)",
     "reject": "Reject (No)"
   },
+  "terminal": {
+    "copy": "Copy",
+    "paste": "Paste"
+  },
   "modeToggle": {
     "title": "Toggle Claude mode",
     "label": "Mode"
@@ -395,6 +403,9 @@
     "completed": "completed",
     "instancesWithSubagents": "instances with subagents",
     "subagents": "subagents",
+    "goToInstance": "Go to instance",
+    "noInstances": "No active instances",
+    "noInstancesDescription": "Start a new Claude instance from a project to see it here.",
     "subagentDetails": "Subagent Details",
     "noSubagents": "No Subagents",
     "noSubagentsDescription": "When Claude uses the Task tool to spawn subagents, they will appear here.",

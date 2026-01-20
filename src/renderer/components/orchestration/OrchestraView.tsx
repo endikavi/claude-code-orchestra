@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOrchestrationStore } from '../../stores/orchestrationStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -24,8 +24,8 @@ interface ProjectGroup {
 
 export function OrchestraView() {
   const { t } = useTranslation();
-  const { projects } = useProjectStore();
-  const { instances } = useInstanceStore();
+  const { projects, selectProject } = useProjectStore();
+  const { instances, selectInstance, selectShell } = useInstanceStore();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(['all']));
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
   const {
@@ -37,18 +37,25 @@ export function OrchestraView() {
     getTotalCompletedSubagents,
   } = useOrchestrationStore();
 
-  // Group instances by project
+  // Navigate to instance tab
+  const navigateToInstance = useCallback(
+    (projectId: string, instanceId: string) => {
+      selectShell(null);
+      selectProject(projectId === 'no-project' ? null : projectId);
+      selectInstance(instanceId);
+    },
+    [selectProject, selectInstance, selectShell]
+  );
+
+  // Group ALL active instances by project
   const projectGroups = useMemo((): ProjectGroup[] => {
     const groups = new Map<string, ProjectGroup>();
 
-    // Process all instances with subagents
-    Object.keys(subagentsByInstance).forEach((instanceId) => {
-      const subagents = subagentsByInstance[instanceId];
-      if (!subagents || subagents.length === 0) return;
-
-      const instance = instances.find((i) => i.id === instanceId);
-      const projectId = instance?.projectId || 'no-project';
+    // Process ALL instances (not just those with subagents)
+    instances.forEach((instance) => {
+      const projectId = instance.projectId || 'no-project';
       const project = projects.find((p) => p.id === projectId);
+      const subagents = subagentsByInstance[instance.id] || [];
 
       if (!groups.has(projectId)) {
         groups.set(projectId, {
@@ -64,13 +71,13 @@ export function OrchestraView() {
       const group = groups.get(projectId);
       if (!group) return;
 
-      const runningCount = getRunningSubagentCount(instanceId);
-      const completedCount = getCompletedSubagentCount(instanceId);
+      const runningCount = getRunningSubagentCount(instance.id);
+      const completedCount = getCompletedSubagentCount(instance.id);
 
       group.instances.push({
-        instanceId,
-        instanceTitle: instance?.terminalTitle || `Instance ${instanceId.slice(0, 8)}`,
-        status: instance?.status || 'unknown',
+        instanceId: instance.id,
+        instanceTitle: instance.terminalTitle || `Instance ${instance.id.slice(0, 8)}`,
+        status: instance.status || 'unknown',
         subagents,
         runningCount,
         completedCount,
@@ -80,8 +87,18 @@ export function OrchestraView() {
       group.totalCompleted += completedCount;
     });
 
-    // Sort groups: projects with running subagents first, then by name
+    // Sort groups: projects with running instances first, then by name
     return Array.from(groups.values()).sort((a, b) => {
+      // Prioritize projects with running instances
+      const aHasRunning = a.instances.some(
+        (i) => i.status === 'running' || i.status === 'tool_executing'
+      );
+      const bHasRunning = b.instances.some(
+        (i) => i.status === 'running' || i.status === 'tool_executing'
+      );
+      if (aHasRunning && !bHasRunning) return -1;
+      if (!aHasRunning && bHasRunning) return 1;
+      // Then by running subagents
       if (a.totalRunning > 0 && b.totalRunning === 0) return -1;
       if (a.totalRunning === 0 && b.totalRunning > 0) return 1;
       return a.projectName.localeCompare(b.projectName);
@@ -147,8 +164,8 @@ export function OrchestraView() {
     );
   }
 
-  // Empty state
-  if (projectGroups.length === 0) {
+  // Empty state - only show when no instances at all
+  if (instances.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center max-w-md">
@@ -163,24 +180,16 @@ export function OrchestraView() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={1}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
           </div>
           <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
-            {t('orchestration.noSubagents')}
+            {t('orchestration.noInstances')}
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
-            {t('orchestration.noSubagentsDescription')}
+            {t('orchestration.noInstancesDescription')}
           </p>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 text-left">
-            <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t('orchestration.howSubagentsWork')}
-            </h4>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {t('orchestration.subagentsExplanation')}
-            </p>
-          </div>
         </div>
       </div>
     );
@@ -239,6 +248,7 @@ export function OrchestraView() {
             expandedInstances={expandedInstances}
             onToggleProject={() => toggleProject(group.projectId)}
             onToggleInstance={toggleInstance}
+            onNavigateToInstance={navigateToInstance}
           />
         ))}
       </div>
@@ -252,6 +262,7 @@ interface ProjectGroupCardProps {
   expandedInstances: Set<string>;
   onToggleProject: () => void;
   onToggleInstance: (instanceId: string) => void;
+  onNavigateToInstance: (projectId: string, instanceId: string) => void;
 }
 
 function ProjectGroupCard({
@@ -260,6 +271,7 @@ function ProjectGroupCard({
   expandedInstances,
   onToggleProject,
   onToggleInstance,
+  onNavigateToInstance,
 }: ProjectGroupCardProps) {
   const { t } = useTranslation();
 
@@ -339,19 +351,21 @@ function ProjectGroupCard({
               className={`${idx !== 0 ? 'border-t border-gray-100 dark:border-gray-700/50' : ''}`}
             >
               {/* Instance Header */}
-              <button
-                onClick={() => onToggleInstance(inst.instanceId)}
-                className="w-full flex items-center justify-between p-3 pl-8 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
-              >
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between p-3 pl-8 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                <button
+                  onClick={() => inst.subagents.length > 0 && onToggleInstance(inst.instanceId)}
+                  className="flex items-center gap-3 flex-1 text-left"
+                >
                   {getStatusIndicator(inst.status)}
                   <span className="font-medium text-sm text-gray-800 dark:text-gray-200">
                     {inst.instanceTitle}
                   </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    ({inst.subagents.length} {t('orchestration.subagents')})
-                  </span>
-                </div>
+                  {inst.subagents.length > 0 && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      ({inst.subagents.length} {t('orchestration.subagents')})
+                    </span>
+                  )}
+                </button>
 
                 <div className="flex items-center gap-2">
                   {inst.runningCount > 0 && (
@@ -360,21 +374,49 @@ function ProjectGroupCard({
                       {inst.runningCount}
                     </span>
                   )}
-                  <svg
-                    className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${expandedInstances.has(inst.instanceId) ? 'rotate-180' : ''}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                  {/* Navigate to instance button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToInstance(group.projectId, inst.instanceId);
+                    }}
+                    className="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    title={t('orchestration.goToInstance')}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
+                    <svg
+                      className="h-4 w-4 text-gray-500 dark:text-gray-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                      />
+                    </svg>
+                  </button>
+                  {/* Expand subagents button - only show if has subagents */}
+                  {inst.subagents.length > 0 && (
+                    <button onClick={() => onToggleInstance(inst.instanceId)} className="p-1">
+                      <svg
+                        className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${expandedInstances.has(inst.instanceId) ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
 
               {/* Subagents List */}
               {expandedInstances.has(inst.instanceId) && (

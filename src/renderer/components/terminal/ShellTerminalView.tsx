@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal, ITheme } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
+import { useTranslation } from 'react-i18next';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { ContextMenu } from '../common/ContextMenu';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -63,14 +65,44 @@ interface ShellTerminalViewProps {
 const SCROLL_THRESHOLD = 50;
 
 export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
+  const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const isNearBottomRef = useRef(true); // Track if user is near bottom for smart scroll
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const { sendShellInput, getShellOutput } = useInstanceStore();
   const theme = useUIStore((state) => state.theme);
 
   const output = getShellOutput(shellId);
+
+  // Context menu handlers
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    if (xtermRef.current) {
+      const selection = xtermRef.current.getSelection();
+      if (selection) {
+        navigator.clipboard.writeText(selection);
+      }
+    }
+    setContextMenu(null);
+  }, []);
+
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && xtermRef.current) {
+        void sendShellInput(shellId, text);
+      }
+    } catch (err) {
+      console.error('Failed to paste:', err);
+    }
+    setContextMenu(null);
+  }, [sendShellInput, shellId]);
 
   // Safe fit function that won't throw
   const safeFit = () => {
@@ -246,7 +278,57 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
 
   return (
     <div className="h-full flex flex-col bg-claude-cream dark:bg-[#1a1a2e]">
-      <div ref={terminalRef} className="flex-1 p-2" style={{ minHeight: 0 }} />
+      <div
+        ref={terminalRef}
+        className="flex-1 p-2"
+        style={{ minHeight: 0 }}
+        onContextMenu={handleContextMenu}
+      />
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            {
+              label: t('terminal.copy'),
+              onClick: handleCopy,
+              icon: <CopyIcon />,
+            },
+            {
+              label: t('terminal.paste'),
+              onClick: handlePaste,
+              icon: <PasteIcon />,
+            },
+          ]}
+        />
+      )}
     </div>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+      />
+    </svg>
+  );
+}
+
+function PasteIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+      />
+    </svg>
   );
 }

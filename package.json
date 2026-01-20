@@ -54,6 +54,9 @@
     "postinstall": "cd node_modules/better-sqlite3 && npx prebuild-install --runtime electron --target 34.5.8 && cd ../.. && npx @electron/rebuild -f -w node-pty"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.7.0",
     "commander": "^12.1.0",

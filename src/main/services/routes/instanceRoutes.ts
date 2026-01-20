@@ -210,5 +210,31 @@ export function createInstanceRoutes(deps: InstanceRoutesDeps): Router {
     res.json({ success: true, data: subagents });
   });
 
+  // Receive sessionId from Claude Code SessionStart hook
+  // This endpoint is called by the hook script when Claude starts a session
+  // No auth required since it comes from the local Claude CLI process
+  router.post('/session-id', (req: Request, res: Response) => {
+    const { instanceId, sessionId } = req.body as { instanceId?: string; sessionId?: string };
+
+    if (!instanceId || !sessionId) {
+      res.status(400).json({ success: false, error: 'Missing instanceId or sessionId' });
+      return;
+    }
+
+    console.log(`[API] Received sessionId ${sessionId} for instance ${instanceId}`);
+
+    // Try to update the conversation with the sessionId
+    const conversationId = processManager.getInstanceConversation(instanceId);
+    if (conversationId) {
+      dataStore.updateConversation(conversationId, { sessionId });
+      console.log(`[API] Updated conversation ${conversationId} with sessionId ${sessionId}`);
+    } else {
+      // Store for later if conversation mapping not set yet (race condition)
+      processManager.setPendingSessionId(instanceId, sessionId);
+    }
+
+    res.json({ success: true });
+  });
+
   return router;
 }

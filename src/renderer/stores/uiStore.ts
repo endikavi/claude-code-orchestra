@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import i18n from 'i18next';
 import type { Language } from '@shared/types';
-import type { UISettings, ViewMode, Theme } from '@shared/types/uiSettings';
+import type { UISettings, ViewMode, Theme, CollapsedSections } from '@shared/types/uiSettings';
 
 interface UIState extends UISettings {
   _hasHydrated: boolean;
@@ -32,6 +32,16 @@ interface UIState extends UISettings {
   setShowNotificationPanel: (show: boolean) => void;
   toggleNotificationPanel: () => void;
   initializeFromMain: () => Promise<void>;
+
+  // Project ordering actions
+  setProjectOrder: (order: string[]) => void;
+  reorderProject: (projectId: string, newIndex: number) => void;
+  addProjectToOrder: (projectId: string) => void;
+  removeProjectFromOrder: (projectId: string) => void;
+
+  // Section collapse actions
+  toggleSectionCollapsed: (sectionId: string) => void;
+  setSectionCollapsed: (sectionId: string, collapsed: boolean) => void;
 }
 
 // Check if running in Electron with uiSettings API
@@ -93,6 +103,8 @@ export const useUIStore = create<UIState>()(
       language: 'en',
       sidebarWidth: 280,
       sidebarCollapsed: false,
+      projectOrder: [],
+      collapsedSections: { local: false, clusters: {} },
       sidebarMobileOpen: false,
       showProjectModal: false,
       showInstanceModal: false,
@@ -114,6 +126,8 @@ export const useUIStore = create<UIState>()(
               language: settings.language,
               sidebarWidth: settings.sidebarWidth,
               sidebarCollapsed: settings.sidebarCollapsed,
+              projectOrder: settings.projectOrder || [],
+              collapsedSections: settings.collapsedSections || { local: false, clusters: {} },
               _hasHydrated: true,
             });
             // Apply theme and language after loading
@@ -190,6 +204,92 @@ export const useUIStore = create<UIState>()(
 
       toggleNotificationPanel: () =>
         set((state) => ({ showNotificationPanel: !state.showNotificationPanel })),
+
+      // Project ordering actions
+      setProjectOrder: (order) => {
+        set({ projectOrder: order });
+        saveToMain({ projectOrder: order });
+      },
+
+      reorderProject: (projectId, newIndex) => {
+        const currentOrder = get().projectOrder;
+        const currentIndex = currentOrder.indexOf(projectId);
+
+        // If project is not in order, add it at the new index
+        if (currentIndex === -1) {
+          const newOrder = [...currentOrder];
+          newOrder.splice(newIndex, 0, projectId);
+          set({ projectOrder: newOrder });
+          saveToMain({ projectOrder: newOrder });
+          return;
+        }
+
+        // Reorder
+        const newOrder = [...currentOrder];
+        newOrder.splice(currentIndex, 1);
+        newOrder.splice(newIndex, 0, projectId);
+        set({ projectOrder: newOrder });
+        saveToMain({ projectOrder: newOrder });
+      },
+
+      addProjectToOrder: (projectId) => {
+        const currentOrder = get().projectOrder;
+        if (!currentOrder.includes(projectId)) {
+          // Add new projects at the beginning
+          const newOrder = [projectId, ...currentOrder];
+          set({ projectOrder: newOrder });
+          saveToMain({ projectOrder: newOrder });
+        }
+      },
+
+      removeProjectFromOrder: (projectId) => {
+        const currentOrder = get().projectOrder;
+        const newOrder = currentOrder.filter((id) => id !== projectId);
+        set({ projectOrder: newOrder });
+        saveToMain({ projectOrder: newOrder });
+      },
+
+      // Section collapse actions
+      toggleSectionCollapsed: (sectionId) => {
+        const currentSections = get().collapsedSections;
+        let newSections: CollapsedSections;
+
+        if (sectionId === 'local') {
+          newSections = { ...currentSections, local: !currentSections.local };
+        } else {
+          // It's a cluster section
+          newSections = {
+            ...currentSections,
+            clusters: {
+              ...currentSections.clusters,
+              [sectionId]: !currentSections.clusters[sectionId],
+            },
+          };
+        }
+
+        set({ collapsedSections: newSections });
+        saveToMain({ collapsedSections: newSections });
+      },
+
+      setSectionCollapsed: (sectionId, collapsed) => {
+        const currentSections = get().collapsedSections;
+        let newSections: CollapsedSections;
+
+        if (sectionId === 'local') {
+          newSections = { ...currentSections, local: collapsed };
+        } else {
+          newSections = {
+            ...currentSections,
+            clusters: {
+              ...currentSections.clusters,
+              [sectionId]: collapsed,
+            },
+          };
+        }
+
+        set({ collapsedSections: newSections });
+        saveToMain({ collapsedSections: newSections });
+      },
     }),
     {
       name: 'claude-code-orchestra-ui',
@@ -200,6 +300,8 @@ export const useUIStore = create<UIState>()(
         language: state.language,
         sidebarWidth: state.sidebarWidth,
         sidebarCollapsed: state.sidebarCollapsed,
+        projectOrder: state.projectOrder,
+        collapsedSections: state.collapsedSections,
       }),
       onRehydrateStorage: () => (state) => {
         if (state && !isElectron()) {

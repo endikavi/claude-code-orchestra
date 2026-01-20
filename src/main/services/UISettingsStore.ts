@@ -11,6 +11,11 @@ const DEFAULT_SETTINGS: UISettings = {
   language: 'en',
   sidebarWidth: 280,
   sidebarCollapsed: false,
+  projectOrder: [],
+  collapsedSections: {
+    local: false,
+    clusters: {},
+  },
 };
 
 export class UISettingsStore {

@@ -258,15 +258,19 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         status: 'active',
       });
 
-      set((state) => ({
-        instances: [...state.instances, instance],
-        outputs,
-        instanceConversations,
-        selectedInstanceId: instance.id,
-        selectedShellId: null, // Clear shell selection when resuming conversation
-        lastSelectionTime: Date.now(),
-        isLoading: false,
-      }));
+      set((state) => {
+        // Check if instance already exists (can happen with sync race condition)
+        const exists = state.instances.some((i) => i.id === instance.id);
+        return {
+          instances: exists ? state.instances : [...state.instances, instance],
+          outputs,
+          instanceConversations,
+          selectedInstanceId: instance.id,
+          selectedShellId: null, // Clear shell selection when resuming conversation
+          lastSelectionTime: Date.now(),
+          isLoading: false,
+        };
+      });
 
       return instance;
     } catch (error) {

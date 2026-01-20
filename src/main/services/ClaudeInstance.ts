@@ -91,6 +91,88 @@ rl.on('line', async (line) => {
 rl.on('close', () => process.exit(0));
 `;
 
+// Session Start Hook script content (embedded to avoid path issues in packaged app)
+// This hook captures session_id from stdin JSON (Claude Code passes hook data via stdin)
+// and sends it to the dashboard API
+const SESSION_START_HOOK_SCRIPT = `#!/usr/bin/env node
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+// Debug logging to file (since stdout is captured by Claude Code)
+const logFile = path.join(process.env.TEMP || '/tmp', 'claude-dashboard-hook.log');
+function log(msg) {
+  const timestamp = new Date().toISOString();
+  fs.appendFileSync(logFile, timestamp + ' ' + msg + '\\n');
+}
+
+// Read JSON input from stdin (Claude Code passes hook data this way)
+let inputData = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  inputData += chunk;
+});
+
+process.stdin.on('end', () => {
+  log('SessionStart hook executed');
+  log('Raw stdin: ' + inputData);
+
+  let hookInput = {};
+  try {
+    hookInput = JSON.parse(inputData);
+    log('Parsed hook input: ' + JSON.stringify(hookInput));
+  } catch (e) {
+    log('Failed to parse stdin JSON: ' + e.message);
+  }
+
+  // Get session_id from hook input (passed via stdin JSON)
+  const sessionId = hookInput.session_id;
+  // Get dashboard vars from environment (passed by ClaudeInstance)
+  const instanceId = process.env.CLAUDE_DASHBOARD_INSTANCE_ID;
+  const apiUrl = process.env.CLAUDE_DASHBOARD_API_URL;
+
+  log('session_id: ' + (sessionId || 'NOT SET'));
+  log('instanceId: ' + (instanceId || 'NOT SET'));
+  log('apiUrl: ' + (apiUrl || 'NOT SET'));
+
+  if (sessionId && instanceId && apiUrl) {
+    log('All vars present, sending request...');
+    const url = new URL('/api/instances/session-id', apiUrl);
+    const data = JSON.stringify({ instanceId, sessionId });
+
+    const req = http.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': data.length
+      }
+    }, (res) => {
+      log('Response received: ' + res.statusCode);
+      // Output valid hook response after request completes
+      outputResponse();
+    });
+
+    req.on('error', (err) => {
+      log('Request error: ' + err.message);
+      outputResponse();
+    });
+
+    req.write(data);
+    req.end();
+  } else {
+    log('Missing vars, skipping request');
+    outputResponse();
+  }
+});
+
+function outputResponse() {
+  // Output valid hook response (required by Claude Code hooks)
+  console.log(JSON.stringify({
+    continue: true
+  }));
+}
+`;
+
 // Cache for Claude CLI path
 let cachedClaudePath: string | null = null;
 
@@ -436,6 +518,71 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
+   * Setup SessionStart hook to capture CLAUDE_SESSION_ID
+   * This hook is called by Claude Code when a session starts and sends the sessionId to the dashboard API
+   */
+  private setupSessionHook(): void {
+    try {
+      // Write hook script to userData directory (always overwrite to ensure latest version)
+      const hookScriptPath = path.join(getUserDataPath(), 'session-start-hook.js');
+      fs.writeFileSync(hookScriptPath, SESSION_START_HOOK_SCRIPT, 'utf-8');
+      console.log(`[ClaudeInstance] Session hook script written to ${hookScriptPath}`);
+
+      // Add hook to .claude/settings.local.json (not committed to git)
+      const claudeDir = path.join(this.projectPath, '.claude');
+      const localSettingsPath = path.join(claudeDir, 'settings.local.json');
+
+      let settings: Record<string, unknown> = {};
+      if (fs.existsSync(localSettingsPath)) {
+        try {
+          settings = JSON.parse(fs.readFileSync(localSettingsPath, 'utf-8'));
+        } catch {
+          // Invalid JSON, start fresh
+          settings = {};
+        }
+      }
+
+      // Add SessionStart hook configuration
+      if (!settings.hooks || typeof settings.hooks !== 'object') {
+        settings.hooks = {};
+      }
+
+      // Normalize path for cross-platform (forward slashes work on both Windows and Unix in Node.js)
+      const normalizedScriptPath = hookScriptPath.replace(/\\/g, '/');
+
+      // Build command based on platform:
+      // - Windows: use 'node' directly (Claude Code requires Node, so it's in PATH)
+      // - Unix: use '/usr/bin/env node' for portability across different Node installations
+      const hookCommand =
+        process.platform === 'win32'
+          ? `node "${normalizedScriptPath}"`
+          : `/usr/bin/env node "${normalizedScriptPath}"`;
+
+      const hooks = settings.hooks as Record<string, unknown>;
+      hooks.SessionStart = [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: hookCommand,
+            },
+          ],
+        },
+      ];
+
+      // Ensure .claude directory exists
+      if (!fs.existsSync(claudeDir)) {
+        fs.mkdirSync(claudeDir, { recursive: true });
+      }
+
+      fs.writeFileSync(localSettingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+      console.log(`[ClaudeInstance] SessionStart hook configured in ${localSettingsPath}`);
+    } catch (error) {
+      console.error('[ClaudeInstance] Failed to setup session hook:', error);
+    }
+  }
+
+  /**
    * Start the Claude CLI process
    */
   start(): void {
@@ -450,6 +597,9 @@ export class ClaudeInstance extends EventEmitter {
     if (this.enableMcp) {
       this.setupMcpConfiguration();
     }
+
+    // Setup SessionStart hook to capture CLAUDE_SESSION_ID
+    this.setupSessionHook();
 
     const args = this.buildArgs();
     const claudePath = findClaudePath();

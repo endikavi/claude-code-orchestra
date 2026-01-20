@@ -72,6 +72,17 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Store a pending sessionId for an instance (used by API route when hook sends sessionId)
+   * This handles the race condition where the sessionId arrives before the conversation mapping is set
+   */
+  setPendingSessionId(instanceId: string, sessionId: string): void {
+    this.pendingSessionIds.set(instanceId, sessionId);
+    console.log(
+      `[ProcessManager] Stored pending sessionId for instance ${instanceId}: ${sessionId}`
+    );
+  }
+
+  /**
    * Set the main window for IPC communication
    */
   setMainWindow(window: BrowserWindowType): void {

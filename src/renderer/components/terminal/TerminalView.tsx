@@ -1,10 +1,12 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal, ITheme } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
+import { useTranslation } from 'react-i18next';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
+import { ContextMenu } from '../common/ContextMenu';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -64,11 +66,14 @@ interface TerminalViewProps {
 const SCROLL_THRESHOLD = 50;
 
 export function TerminalView({ instanceId }: TerminalViewProps) {
+  const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const isNearBottomRef = useRef(true); // Track if user is near bottom for smart scroll
-  const { sendInput, getInstanceOutput, updateTerminalTitle } = useInstanceStore();
+  const hasAutoFocusedRef = useRef(false); // Track if we've auto-focused after ready
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const { sendInput, getInstanceOutput, updateTerminalTitle, instances } = useInstanceStore();
   const {
     globalInstances,
     sendRemoteInput,
@@ -78,6 +83,11 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
   const theme = useUIStore((state) => state.theme);
 
   const output = getInstanceOutput(instanceId);
+
+  // Get instance status for loading state and auto-focus
+  const instance = instances.find((i) => i.id === instanceId);
+  const status = instance?.status ?? 'starting';
+  const isReady = status === 'running' || status === 'waiting_input';
 
   // Check if instance is remote (belongs to another node)
   const remoteInstance = clusterConnected
@@ -97,6 +107,34 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     },
     [remoteInstance, sendRemoteInput, sendInput]
   );
+
+  // Context menu handlers
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    if (xtermRef.current) {
+      const selection = xtermRef.current.getSelection();
+      if (selection) {
+        navigator.clipboard.writeText(selection);
+      }
+    }
+    setContextMenu(null);
+  }, []);
+
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && xtermRef.current) {
+        void handleSendInput(instanceId, text);
+      }
+    } catch (err) {
+      console.error('Failed to paste:', err);
+    }
+    setContextMenu(null);
+  }, [handleSendInput, instanceId]);
 
   // Safe fit function that won't throw
   const safeFit = () => {
@@ -230,6 +268,9 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
           terminal.scrollToBottom();
         });
       }
+
+      // Auto-focus terminal after initialization
+      terminal.focus();
     };
 
     // Start initialization with a small delay to ensure DOM is ready
@@ -300,9 +341,91 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     }
   }, [theme]);
 
+  // Auto-focus terminal when instance becomes ready (running/waiting_input)
+  useEffect(() => {
+    if (isReady && xtermRef.current && !hasAutoFocusedRef.current) {
+      hasAutoFocusedRef.current = true;
+      xtermRef.current.focus();
+    }
+  }, [isReady]);
+
+  // Focus terminal when this component receives focus (e.g., tab switch)
+  // This is triggered by the parent component via key change
+  useEffect(() => {
+    // Small delay to ensure terminal is rendered
+    const focusTimer = setTimeout(() => {
+      if (xtermRef.current) {
+        xtermRef.current.focus();
+      }
+    }, 50);
+
+    return () => clearTimeout(focusTimer);
+  }, [instanceId]);
+
   return (
-    <div className="h-full flex flex-col bg-claude-cream dark:bg-[#1a1a2e]">
-      <div ref={terminalRef} className="flex-1 p-2" style={{ minHeight: 0 }} />
+    <div className="h-full flex flex-col bg-claude-cream dark:bg-[#1a1a2e] relative">
+      <div
+        ref={terminalRef}
+        className="flex-1 p-2"
+        style={{ minHeight: 0 }}
+        onContextMenu={handleContextMenu}
+      />
+      {/* Loading overlay while instance is starting */}
+      {status === 'starting' && (
+        <div className="absolute inset-0 bg-claude-cream/80 dark:bg-[#1a1a2e]/80 flex items-center justify-center z-10">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-3 border-claude-orange border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              {t('terminal.starting', 'Starting Claude...')}
+            </span>
+          </div>
+        </div>
+      )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            {
+              label: t('terminal.copy'),
+              onClick: handleCopy,
+              icon: <CopyIcon />,
+            },
+            {
+              label: t('terminal.paste'),
+              onClick: handlePaste,
+              icon: <PasteIcon />,
+            },
+          ]}
+        />
+      )}
     </div>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+      />
+    </svg>
+  );
+}
+
+function PasteIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+      />
+    </svg>
   );
 }
