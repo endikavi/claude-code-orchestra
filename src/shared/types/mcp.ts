@@ -86,7 +86,7 @@ export interface McpToolContext {
 export type McpToolHandler = (
   args: Record<string, any>,
   context: McpToolContext
-) => Promise<McpToolResult>;
+) => Promise<McpToolResult> | McpToolResult;
 
 /**
  * Internal tool definition with handler
