@@ -732,6 +732,10 @@ export class WebServer extends EventEmitter {
   public broadcastStateUpdate(): void {
     if (this.io) {
       const state = this.getSyncState();
+      const socketCount = this.io.sockets.sockets.size;
+      console.log(
+        `[WebServer] Broadcasting sync:state to ${socketCount} sockets, ${state.instances?.length || 0} instances`
+      );
       this.io.emit('sync:state', state);
     }
   }

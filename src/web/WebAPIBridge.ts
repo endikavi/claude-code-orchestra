@@ -143,6 +143,11 @@ export function connectSocket(): void {
 
   // Sync state handler
   socket.on('sync:state', async (state: SyncState) => {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[WebSocket] Received sync:state with ${state.instances?.length || 0} instances`,
+      state.instances?.map((i) => ({ id: i.id, status: i.status }))
+    );
     // Auto-subscribe to all existing instances in parallel
     if (state.instances && Array.isArray(state.instances)) {
       const subscriptions = state.instances.map((instance) => {

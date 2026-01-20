@@ -809,6 +809,14 @@ export class ClusterManager extends EventEmitter {
   }
 
   /**
+   * Public method to refresh local node state
+   * Called by StateSyncManager before getting global state
+   */
+  public refreshLocalNodeState(): void {
+    this.updateLocalNodeState();
+  }
+
+  /**
    * Handle registration from a secondary node
    * Called by WebServer's cluster namespace
    */

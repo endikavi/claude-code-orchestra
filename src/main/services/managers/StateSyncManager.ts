@@ -41,6 +41,10 @@ export class StateSyncManager {
     // Check if cluster is enabled and get global projects/instances
     const clusterConfig = clusterManager.getConfig();
     if (clusterConfig.enabled) {
+      // Update local node state before getting global instances
+      // This ensures newly created instances are included in the global state
+      clusterManager.refreshLocalNodeState();
+
       const globalProjects = clusterManager.getAllGlobalProjects();
       const globalInstances = clusterManager.getAllGlobalInstances();
 

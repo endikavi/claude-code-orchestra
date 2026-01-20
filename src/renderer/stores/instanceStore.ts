@@ -348,6 +348,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const newOutputs = new Map(currentState.outputs);
     const newInstanceConversations = new Map(currentState.instanceConversations);
 
+    // Debug logging
+    // eslint-disable-next-line no-console
+    console.log(
+      `[instanceStore] syncInstances called with ${instances.length} server instances, current local: ${currentState.instances.length}`
+    );
+
     // Build a map of server instances for quick lookup
     const serverInstanceMap = new Map(instances.map((i) => [i.id, i]));
 
