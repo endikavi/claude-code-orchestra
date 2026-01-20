@@ -13,24 +13,24 @@ import type {
 const DASHBOARD_API_PORT = 3847;
 
 // Hook templates
+// Note: HooksConfig is a flat structure with event types at the root level
+// This matches Claude Code's .claude/settings.json format
 const HOOK_TEMPLATES: Record<HookTemplateType, HookTemplate> = {
   basic: {
     id: 'basic',
     name: 'Basic',
     description: 'Basic notifications only',
     hooks: {
-      hooks: {
-        Notification: [
-          {
-            hooks: [
-              {
-                type: 'command',
-                command: '', // Will be set dynamically
-              },
-            ],
-          },
-        ],
-      },
+      Notification: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: '', // Will be set dynamically
+            },
+          ],
+        },
+      ],
     },
     skills: [],
     settings: {
@@ -45,11 +45,9 @@ const HOOK_TEMPLATES: Record<HookTemplateType, HookTemplate> = {
     name: 'Monitored',
     description: 'Notifications, metrics, and status tracking',
     hooks: {
-      hooks: {
-        Notification: [],
-        PostToolUse: [],
-        Stop: [],
-      },
+      Notification: [],
+      PostToolUse: [],
+      Stop: [],
     },
     skills: ['dashboard-status'],
     settings: {
@@ -64,12 +62,10 @@ const HOOK_TEMPLATES: Record<HookTemplateType, HookTemplate> = {
     name: 'Collaborative',
     description: 'Full monitoring with collaboration awareness',
     hooks: {
-      hooks: {
-        Notification: [],
-        PostToolUse: [],
-        Stop: [],
-        SessionStart: [],
-      },
+      Notification: [],
+      PostToolUse: [],
+      Stop: [],
+      SessionStart: [],
     },
     skills: ['dashboard-status', 'fetch-context', 'collaborative-awareness'],
     settings: {
@@ -84,10 +80,8 @@ const HOOK_TEMPLATES: Record<HookTemplateType, HookTemplate> = {
     name: 'Secure',
     description: 'Permission validation from dashboard',
     hooks: {
-      hooks: {
-        PreToolUse: [],
-        Notification: [],
-      },
+      PreToolUse: [],
+      Notification: [],
     },
     skills: [],
     settings: {
@@ -102,16 +96,14 @@ const HOOK_TEMPLATES: Record<HookTemplateType, HookTemplate> = {
     name: 'Complete',
     description: 'All hooks and skills enabled',
     hooks: {
-      hooks: {
-        PreToolUse: [],
-        PostToolUse: [],
-        UserPromptSubmit: [],
-        Stop: [],
-        SubagentStop: [],
-        Notification: [],
-        SessionStart: [],
-        SessionEnd: [],
-      },
+      PreToolUse: [],
+      PostToolUse: [],
+      UserPromptSubmit: [],
+      Stop: [],
+      SubagentStop: [],
+      Notification: [],
+      SessionStart: [],
+      SessionEnd: [],
     },
     skills: ['dashboard-status', 'fetch-context', 'collaborative-awareness'],
     settings: {
@@ -339,7 +331,10 @@ try {
         $response = Invoke-RestMethod -Uri "${apiUrl}" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 5 -ErrorAction SilentlyContinue
 
         if ($response.decision -eq "allow") {
+            # Complete hook output format per Claude Code specification
             $output = @{
+                continue = $true
+                suppressOutput = $false
                 hookSpecificOutput = @{
                     permissionDecision = "allow"
                     permissionDecisionReason = $response.reason
@@ -349,7 +344,17 @@ try {
             exit 0
         }
         elseif ($response.decision -eq "deny") {
-            Write-Error "Blocked by dashboard policy: $($response.reason)"
+            # Output deny with complete format before exiting with code 2
+            $output = @{
+                continue = $false
+                suppressOutput = $false
+                hookSpecificOutput = @{
+                    permissionDecision = "deny"
+                    permissionDecisionReason = $response.reason
+                    message = "Blocked by dashboard policy: $($response.reason)"
+                }
+            } | ConvertTo-Json -Depth 10 -Compress
+            Write-Output $output
             exit 2
         }
     } catch {
@@ -412,10 +417,12 @@ if [ -n "$RESPONSE" ]; then
     REASON=$(echo "$RESPONSE" | jq -r '.reason // empty' 2>/dev/null)
 
     if [ "$DECISION" = "allow" ]; then
-        jq -n --arg reason "$REASON" '{hookSpecificOutput:{permissionDecision:"allow",permissionDecisionReason:$reason}}'
+        # Complete hook output format per Claude Code specification
+        jq -n --arg reason "$REASON" '{continue:true,suppressOutput:false,hookSpecificOutput:{permissionDecision:"allow",permissionDecisionReason:$reason}}'
         exit 0
     elif [ "$DECISION" = "deny" ]; then
-        echo "Blocked by dashboard policy: $REASON" >&2
+        # Output deny with complete format before exiting with code 2
+        jq -n --arg reason "$REASON" '{continue:false,suppressOutput:false,hookSpecificOutput:{permissionDecision:"deny",permissionDecisionReason:$reason,message:("Blocked by dashboard policy: " + $reason)}}'
         exit 2
     fi
 fi
@@ -476,8 +483,9 @@ exit 0
         // File doesn't exist, start fresh
       }
 
-      // Build hooks configuration
-      const hooksConfig: HooksConfig = { hooks: {} };
+      // Build hooks configuration (flat structure - event types at root level)
+      // This matches Claude Code's .claude/settings.json format
+      const hooksConfig: HooksConfig = {};
       const instanceIdEnvVar = 'CLAUDE_DASHBOARD_INSTANCE_ID';
 
       // Get template if specified
@@ -508,13 +516,13 @@ exit 0
 
         await fs.promises.writeFile(scriptPath, script.content, { mode: 0o755 });
 
-        // Add to hooks config
+        // Add to hooks config (directly at root level, no "hooks" wrapper)
         const command =
           process.platform === 'win32'
             ? `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
             : scriptPath;
 
-        hooksConfig.hooks[hook.eventType] = [
+        hooksConfig[hook.eventType] = [
           {
             hooks: [{ type: 'command', command }],
           },
@@ -533,7 +541,7 @@ exit 0
             ? `powershell -ExecutionPolicy Bypass -File "${permScriptPath}"`
             : permScriptPath;
 
-        hooksConfig.hooks.PreToolUse = [
+        hooksConfig.PreToolUse = [
           {
             hooks: [{ type: 'command', command }],
           },
@@ -541,9 +549,10 @@ exit 0
       }
 
       // Merge with existing settings
+      // Hook events go directly at root level (no "hooks" wrapper)
       const mergedSettings = {
         ...existingSettings,
-        hooks: hooksConfig.hooks,
+        ...hooksConfig, // Spread hook events directly at root level
         dashboardIntegration: {
           enabled: effectiveSettings.enabled,
           templateId: templateId || 'custom',
@@ -584,12 +593,26 @@ exit 0
         // Directory might not exist
       }
 
-      // Update settings to remove hooks
+      // Update settings to remove hooks (hook events are at root level)
       try {
         const content = await fs.promises.readFile(settingsPath, 'utf-8');
         const settings = JSON.parse(content);
 
-        delete settings.hooks;
+        // Remove all hook event types at root level
+        const hookEvents: HookEventType[] = [
+          'PreToolUse',
+          'PostToolUse',
+          'UserPromptSubmit',
+          'Stop',
+          'SubagentStop',
+          'Notification',
+          'SessionStart',
+          'SessionEnd',
+          'PreCompact',
+        ];
+        for (const event of hookEvents) {
+          delete settings[event];
+        }
         delete settings.dashboardIntegration;
 
         await fs.promises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');

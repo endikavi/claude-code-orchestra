@@ -7,6 +7,8 @@ import type {
   GlobalProject,
   GlobalInstance,
   RemoteInstanceRequest,
+  ClusterNodePrivacy,
+  ClusterPermissionChangeEvent,
 } from '@shared/types/cluster';
 import type { ClaudeInstance } from '@shared/types';
 
@@ -29,6 +31,9 @@ interface ClusterStoreState {
   localNodeId: string;
   globalProjects: GlobalProject[];
   globalInstances: GlobalInstance[];
+
+  // Privacy settings
+  privacy: ClusterNodePrivacy | null;
 
   // Connection state
   isConnected: boolean;
@@ -54,6 +59,12 @@ interface ClusterStoreState {
     rows: number
   ) => Promise<void>;
 
+  // Privacy actions
+  loadPrivacy: () => Promise<void>;
+  updatePrivacy: (updates: Partial<ClusterNodePrivacy>) => Promise<void>;
+  addTrustedNode: (nodeId: string) => Promise<void>;
+  removeTrustedNode: (nodeId: string) => Promise<void>;
+
   // State updates from events
   handleStateChanged: (state: ClusterState) => void;
   handleNodeJoined: (node: ClusterNode) => void;
@@ -61,6 +72,7 @@ interface ClusterStoreState {
   handleConnected: () => void;
   handleDisconnected: () => void;
   handleError: (error: string) => void;
+  handlePermissionsChanged: (event: ClusterPermissionChangeEvent) => void;
 
   // Setup listeners
   setupListeners: () => () => void;
@@ -72,6 +84,7 @@ interface ClusterStoreState {
   isClusterEnabled: () => boolean;
   isPrimary: () => boolean;
   isSecondary: () => boolean;
+  isTrustedNode: (nodeId: string) => boolean;
 }
 
 export const useClusterStore = create<ClusterStoreState>((set, get) => ({
@@ -81,6 +94,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
   localNodeId: '',
   globalProjects: [],
   globalInstances: [],
+  privacy: null,
   isConnected: false,
   isLoading: false,
   error: null,
@@ -273,6 +287,49 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
     }
   },
 
+  loadPrivacy: async () => {
+    if (!isElectron()) return;
+    try {
+      const privacy = await window.electronAPI.cluster.getPrivacy();
+      set({ privacy });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load privacy settings' });
+    }
+  },
+
+  updatePrivacy: async (updates) => {
+    if (!isElectron()) return;
+    set({ isLoading: true, error: null });
+    try {
+      const privacy = await window.electronAPI.cluster.updatePrivacy(updates);
+      set({ privacy, isLoading: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to update privacy settings',
+        isLoading: false,
+      });
+    }
+  },
+
+  addTrustedNode: async (nodeId) => {
+    const { privacy } = get();
+    if (!privacy) return;
+
+    const trustedNodeIds = [...privacy.trustedNodeIds];
+    if (!trustedNodeIds.includes(nodeId)) {
+      trustedNodeIds.push(nodeId);
+      await get().updatePrivacy({ trustedNodeIds });
+    }
+  },
+
+  removeTrustedNode: async (nodeId) => {
+    const { privacy } = get();
+    if (!privacy) return;
+
+    const trustedNodeIds = privacy.trustedNodeIds.filter((id) => id !== nodeId);
+    await get().updatePrivacy({ trustedNodeIds });
+  },
+
   handleStateChanged: (state) => {
     set({
       nodes: state.nodes,
@@ -315,6 +372,14 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
 
   handleError: (error) => {
     set({ error });
+  },
+
+  handlePermissionsChanged: (event) => {
+    console.log('[ClusterStore] Permissions changed:', event);
+    // Reload privacy settings and global data
+    void get().loadPrivacy();
+    void get().loadGlobalProjects();
+    void get().loadGlobalInstances();
   },
 
   setupListeners: () => {
@@ -371,5 +436,9 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
 
   isSecondary: () => {
     return get().config?.role === 'secondary';
+  },
+
+  isTrustedNode: (nodeId) => {
+    return get().privacy?.trustedNodeIds.includes(nodeId) ?? false;
   },
 }));

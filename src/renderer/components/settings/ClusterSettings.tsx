@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClusterStore } from '../../stores/clusterStore';
+import { ClusterPrivacySettings } from './ClusterPrivacySettings';
 import type { ClusterNodeRole, ClusterNode } from '@shared/types/cluster';
 
 export function ClusterSettings() {
@@ -451,6 +452,13 @@ export function ClusterSettings() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Privacy Settings - only show when cluster is enabled */}
+      {config?.role !== 'standalone' && (
+        <div className="pt-4 border-t border-claude-tan/30 dark:border-gray-600">
+          <ClusterPrivacySettings />
         </div>
       )}
     </div>

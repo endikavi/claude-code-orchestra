@@ -344,10 +344,35 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   syncInstances: (instances, outputs, instanceConversationMappings) => {
-    const newOutputs = new Map(get().outputs);
-    const newInstanceConversations = new Map(get().instanceConversations);
+    const currentState = get();
+    const newOutputs = new Map(currentState.outputs);
+    const newInstanceConversations = new Map(currentState.instanceConversations);
 
-    // Sync instances from server
+    // Build a map of server instances for quick lookup
+    const serverInstanceMap = new Map(instances.map((i) => [i.id, i]));
+
+    // Merge strategy:
+    // 1. Keep local instances that have terminal status (completed/error/killed) and are NOT in server list
+    //    (server has already cleaned them up, but we want to keep showing them)
+    // 2. Update/add instances that come from the server
+    // 3. Remove instances that are in "running" state locally but not in server (they were killed externally)
+    const terminalStatuses: InstanceStatus[] = ['completed', 'error', 'killed'];
+
+    // Start with local instances that should be preserved (terminal status, not in server)
+    const preservedLocalInstances = currentState.instances.filter((localInst) => {
+      const isInServer = serverInstanceMap.has(localInst.id);
+      const hasTerminalStatus = terminalStatuses.includes(localInst.status);
+      // Preserve if it's terminal AND not in server (server cleaned it up)
+      return hasTerminalStatus && !isInServer;
+    });
+
+    // Merge: server instances + preserved local instances
+    const mergedInstances = [
+      ...instances, // All instances from server (these are authoritative for active instances)
+      ...preservedLocalInstances, // Local terminal instances not in server
+    ];
+
+    // Sync instances from server - initialize outputs for new instances
     instances.forEach((instance) => {
       // Initialize output storage for each instance if not exists
       if (!newOutputs.has(instance.id)) {
@@ -385,20 +410,19 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
 
     // Preserve selectedInstanceId if:
-    // 1. The instance still exists in the new list, OR
+    // 1. The instance still exists in the merged list, OR
     // 2. The selection was made very recently (within 2 seconds) - to handle race conditions
-    const currentState = get();
     const currentSelectedId = currentState.selectedInstanceId;
     const lastSelectionTime = currentState.lastSelectionTime;
     const isRecentSelection = Date.now() - lastSelectionTime < 2000;
     const selectedStillExists =
-      currentSelectedId && instances.some((i) => i.id === currentSelectedId);
+      currentSelectedId && mergedInstances.some((i) => i.id === currentSelectedId);
 
     // Don't override recent explicit selections (handles race condition with createInstance)
     const shouldPreserveSelection = selectedStillExists || isRecentSelection;
 
     set({
-      instances,
+      instances: mergedInstances,
       outputs: newOutputs,
       instanceConversations: newInstanceConversations,
       selectedInstanceId: shouldPreserveSelection ? currentSelectedId : null,

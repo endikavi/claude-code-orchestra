@@ -146,7 +146,13 @@
     "saveChanges": "Save Changes",
     "nameRequired": "Project name is required",
     "pathRequired": "Project path is required",
-    "failedToSave": "Failed to save project"
+    "failedToSave": "Failed to save project",
+    "clusterSharing": "Cluster Sharing",
+    "clusterVisibility": "Visibility in cluster",
+    "useNodeDefault": "Use node default",
+    "shareWithCluster": "Share with cluster",
+    "dontShare": "Keep private",
+    "allowRemoteInstances": "Allow remote instances"
   },
   "instance": {
     "newInstance": "New Claude Instance",
@@ -157,6 +163,9 @@
     "startInstance": "Start Instance",
     "promptRequired": "Prompt is required",
     "failedToCreate": "Failed to create instance",
+    "clusterPrivacy": "Cluster Privacy",
+    "shareWithCluster": "Share with cluster",
+    "allowRemoteInput": "Allow remote input",
     "planMode": "Start in plan mode",
     "planModeDesc": "Claude will first create an implementation plan before executing any changes",
     "modes": {
@@ -280,7 +289,27 @@
     "connectedNodes": "Connected Nodes",
     "thisNode": "This node",
     "projects": "projects",
-    "instances": "instances"
+    "instances": "instances",
+    "privacy": {
+      "title": "Cluster Privacy",
+      "description": "Control what other nodes can see and do",
+      "defaultVisibility": "Default Visibility",
+      "shareProjects": "Share projects by default",
+      "shareInstances": "Share instances by default",
+      "remoteControl": "Remote Control",
+      "allowRemoteCreate": "Allow remote instance creation",
+      "allowRemoteInput": "Allow remote input",
+      "allowRemoteKill": "Allow remote kill",
+      "trustedNodes": "Trusted Nodes",
+      "trustedNodesDesc": "Trusted nodes bypass all restrictions and have full access",
+      "trustedNodesList": "Trusted node IDs:",
+      "noRemoteNodes": "No remote nodes connected",
+      "trusted": "Trusted",
+      "notTrusted": "Not trusted",
+      "addTrust": "Add to trusted",
+      "removeTrust": "Remove from trusted",
+      "removeFromTrusted": "Remove from trusted"
+    }
   },
   "viewer": {
     "readOnly": "Read-only",
@@ -372,10 +401,31 @@
     "howSubagentsWork": "How subagents work",
     "subagentsExplanation": "Claude can spawn subagents using the Task tool to handle complex operations in parallel. These subagents run within the same session and their progress is tracked here automatically.",
     "more": "more",
+    "allProjects": "All Projects",
+    "noProject": "No Project",
+    "instance": "Instance",
+    "instances": "instances",
+    "activeSubagents": "active subagents",
+    "totalSubagents": "total subagents",
+    "duration": "Duration",
+    "result": "Result",
+    "error": "Error",
+    "prompt": "Prompt",
+    "showPrompt": "Show prompt",
+    "hidePrompt": "Hide prompt",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "noActiveSubagents": "No active subagents",
     "status": {
       "running": "Running",
       "completed": "Completed",
       "error": "Error"
+    },
+    "types": {
+      "Explore": "Explore",
+      "Plan": "Plan",
+      "Bash": "Bash",
+      "general-purpose": "General"
     }
   }
 }

@@ -16,8 +16,17 @@ import type {
 import { DEFAULT_SECURITY_CONFIG } from '@shared/types';
 import type { RemoteConfig } from '@shared/types/remote';
 import { DEFAULT_REMOTE_CONFIG } from '@shared/types/remote';
-import type { ClusterConfig, ClusterNodeRole } from '@shared/types/cluster';
-import { DEFAULT_CLUSTER_CONFIG } from '@shared/types/cluster';
+import type {
+  ClusterConfig,
+  ClusterNodeRole,
+  ClusterNodePrivacy,
+  InstanceClusterPermissions,
+} from '@shared/types/cluster';
+import {
+  DEFAULT_CLUSTER_CONFIG,
+  DEFAULT_NODE_PRIVACY,
+  DEFAULT_INSTANCE_CLUSTER_PERMISSIONS,
+} from '@shared/types/cluster';
 import { randomUUID, randomBytes } from 'crypto';
 import { hostname } from 'os';
 
@@ -63,6 +72,9 @@ export class DataStore {
 
     // Migration: Add preferredShell column if it doesn't exist
     this.migrateAddPreferredShell();
+
+    // Migration: Add clusterPermissions column if it doesn't exist
+    this.migrateAddProjectClusterPermissions();
 
     // Migration: Add enableMcp column if it doesn't exist
     this.migrateAddEnableMcp();
@@ -170,11 +182,34 @@ export class DataStore {
       const generatedNodeId = randomUUID();
       this.db
         .prepare(
-          `INSERT INTO cluster_config (id, enabled, role, nodeId, nodeName, primaryHost, primaryPort, sharedSecret)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO cluster_config (id, enabled, role, nodeId, nodeName, primaryHost, primaryPort, sharedSecret, privacy)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(1, 0, 'standalone', generatedNodeId, 'My Computer', '', 3847, '');
+        .run(
+          1,
+          0,
+          'standalone',
+          generatedNodeId,
+          'My Computer',
+          '',
+          3847,
+          '',
+          JSON.stringify(DEFAULT_NODE_PRIVACY)
+        );
     }
+
+    // Migration: Add privacy column to cluster_config if it doesn't exist
+    this.migrateAddClusterPrivacy();
+
+    // Create instance_cluster_permissions table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS instance_cluster_permissions (
+        instanceId TEXT PRIMARY KEY,
+        shareWithCluster INTEGER DEFAULT 1,
+        allowRemoteInput INTEGER DEFAULT 1,
+        createdAt INTEGER NOT NULL
+      )
+    `);
 
     // Create app_settings table for persistent settings like JWT secret
     this.db.exec(`
@@ -317,6 +352,44 @@ export class DataStore {
     }
   }
 
+  /**
+   * Migration: Add privacy column to cluster_config for existing databases
+   */
+  private migrateAddClusterPrivacy(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(cluster_config)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'privacy'
+      );
+
+      if (!hasColumn) {
+        this.db.exec(
+          `ALTER TABLE cluster_config ADD COLUMN privacy TEXT DEFAULT '${JSON.stringify(DEFAULT_NODE_PRIVACY)}'`
+        );
+      }
+    } catch (error) {
+      console.warn('Migration cluster privacy:', error);
+    }
+  }
+
+  /**
+   * Migration: Add clusterPermissions column to projects for existing databases
+   */
+  private migrateAddProjectClusterPermissions(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'clusterPermissions'
+      );
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN clusterPermissions TEXT');
+      }
+    } catch (error) {
+      console.warn('Migration project cluster permissions:', error);
+    }
+  }
+
   // Project CRUD operations
   createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Project {
     const now = Date.now();
@@ -329,8 +402,8 @@ export class DataStore {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, enableMcp, createdAt, updatedAt)
-      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @enableMcp, @createdAt, @updatedAt)
+      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, enableMcp, clusterPermissions, createdAt, updatedAt)
+      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @enableMcp, @clusterPermissions, @createdAt, @updatedAt)
     `);
 
     stmt.run({
@@ -338,6 +411,9 @@ export class DataStore {
       skipPermissions: project.skipPermissions ? 1 : 0,
       preferredShell: project.preferredShell ?? null,
       enableMcp: project.enableMcp ? 1 : 0,
+      clusterPermissions: project.clusterPermissions
+        ? JSON.stringify(project.clusterPermissions)
+        : null,
     });
     return project;
   }
@@ -352,7 +428,8 @@ export class DataStore {
       UPDATE projects
       SET name = @name, path = @path, description = @description,
           color = @color, hostname = @hostname, skipPermissions = @skipPermissions,
-          preferredShell = @preferredShell, enableMcp = @enableMcp, updatedAt = @updatedAt
+          preferredShell = @preferredShell, enableMcp = @enableMcp, clusterPermissions = @clusterPermissions,
+          updatedAt = @updatedAt
       WHERE id = @id
     `);
 
@@ -366,6 +443,9 @@ export class DataStore {
       skipPermissions: updatedProject.skipPermissions ? 1 : 0,
       preferredShell: updatedProject.preferredShell ?? null,
       enableMcp: updatedProject.enableMcp ? 1 : 0,
+      clusterPermissions: updatedProject.clusterPermissions
+        ? JSON.stringify(updatedProject.clusterPermissions)
+        : null,
       updatedAt: updatedProject.updatedAt,
     });
     if (result.changes === 0) {
@@ -387,6 +467,16 @@ export class DataStore {
    * Map SQLite row to Project with proper boolean conversion
    */
   private mapRowToProject(row: Record<string, unknown>): Project {
+    // Parse cluster permissions if present
+    let clusterPermissions = undefined;
+    if (row.clusterPermissions && typeof row.clusterPermissions === 'string') {
+      try {
+        clusterPermissions = JSON.parse(row.clusterPermissions);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
     return {
       id: row.id as string,
       name: row.name as string,
@@ -397,6 +487,7 @@ export class DataStore {
       skipPermissions: row.skipPermissions === 1,
       preferredShell: row.preferredShell as string | undefined,
       enableMcp: row.enableMcp === 1,
+      clusterPermissions,
       createdAt: row.createdAt as number,
       updatedAt: row.updatedAt as number,
     };
@@ -683,6 +774,16 @@ export class DataStore {
       return { ...DEFAULT_CLUSTER_CONFIG, nodeId };
     }
 
+    // Parse privacy JSON, falling back to defaults
+    let privacy: ClusterNodePrivacy = DEFAULT_NODE_PRIVACY;
+    if (row.privacy && typeof row.privacy === 'string') {
+      try {
+        privacy = { ...DEFAULT_NODE_PRIVACY, ...JSON.parse(row.privacy) };
+      } catch {
+        // Keep defaults if JSON is invalid
+      }
+    }
+
     return {
       enabled: row.enabled === 1,
       role: row.role as ClusterNodeRole,
@@ -691,6 +792,7 @@ export class DataStore {
       primaryHost: row.primaryHost as string | undefined,
       primaryPort: row.primaryPort as number,
       sharedSecret: row.sharedSecret as string,
+      privacy,
     };
   }
 
@@ -699,12 +801,18 @@ export class DataStore {
    */
   updateClusterConfig(config: Partial<ClusterConfig>): ClusterConfig {
     const current = this.getClusterConfig();
-    const updated: ClusterConfig = { ...current, ...config };
+    const updated: ClusterConfig = {
+      ...current,
+      ...config,
+      // Merge privacy settings if provided
+      privacy: config.privacy ? { ...current.privacy, ...config.privacy } : current.privacy,
+    };
 
     const stmt = this.db.prepare(`
       UPDATE cluster_config
       SET enabled = @enabled, role = @role, nodeId = @nodeId, nodeName = @nodeName,
-          primaryHost = @primaryHost, primaryPort = @primaryPort, sharedSecret = @sharedSecret
+          primaryHost = @primaryHost, primaryPort = @primaryPort, sharedSecret = @sharedSecret,
+          privacy = @privacy
       WHERE id = 1
     `);
 
@@ -716,6 +824,7 @@ export class DataStore {
       primaryHost: updated.primaryHost ?? '',
       primaryPort: updated.primaryPort,
       sharedSecret: updated.sharedSecret,
+      privacy: JSON.stringify(updated.privacy),
     });
 
     return updated;
@@ -1122,6 +1231,99 @@ export class DataStore {
       expiresAt: number;
       attempts: number;
     }>;
+  }
+
+  // ==================== Node Privacy CRUD ====================
+
+  /**
+   * Get node privacy settings
+   */
+  getNodePrivacy(): ClusterNodePrivacy {
+    const config = this.getClusterConfig();
+    return config.privacy;
+  }
+
+  /**
+   * Update node privacy settings
+   */
+  updateNodePrivacy(privacy: Partial<ClusterNodePrivacy>): ClusterNodePrivacy {
+    const config = this.getClusterConfig();
+    const updatedPrivacy: ClusterNodePrivacy = { ...config.privacy, ...privacy };
+    this.updateClusterConfig({ privacy: updatedPrivacy });
+    return updatedPrivacy;
+  }
+
+  // ==================== Instance Cluster Permissions CRUD ====================
+
+  /**
+   * Get cluster permissions for an instance
+   */
+  getInstanceClusterPermissions(instanceId: string): InstanceClusterPermissions {
+    const stmt = this.db.prepare('SELECT * FROM instance_cluster_permissions WHERE instanceId = ?');
+    const row = stmt.get(instanceId) as Record<string, unknown> | undefined;
+
+    if (!row) {
+      return { ...DEFAULT_INSTANCE_CLUSTER_PERMISSIONS };
+    }
+
+    return {
+      shareWithCluster: row.shareWithCluster === 1,
+      allowRemoteInput: row.allowRemoteInput === 1,
+    };
+  }
+
+  /**
+   * Set cluster permissions for an instance
+   */
+  setInstanceClusterPermissions(
+    instanceId: string,
+    perms: Partial<InstanceClusterPermissions>
+  ): InstanceClusterPermissions {
+    const current = this.getInstanceClusterPermissions(instanceId);
+    const updated: InstanceClusterPermissions = { ...current, ...perms };
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO instance_cluster_permissions (instanceId, shareWithCluster, allowRemoteInput, createdAt)
+      VALUES (@instanceId, @shareWithCluster, @allowRemoteInput, @createdAt)
+    `);
+
+    stmt.run({
+      instanceId,
+      shareWithCluster: updated.shareWithCluster ? 1 : 0,
+      allowRemoteInput: updated.allowRemoteInput ? 1 : 0,
+      createdAt: Date.now(),
+    });
+
+    return updated;
+  }
+
+  /**
+   * Delete cluster permissions for an instance
+   */
+  deleteInstanceClusterPermissions(instanceId: string): void {
+    const stmt = this.db.prepare('DELETE FROM instance_cluster_permissions WHERE instanceId = ?');
+    stmt.run(instanceId);
+  }
+
+  /**
+   * Get all instance cluster permissions
+   */
+  getAllInstanceClusterPermissions(): Map<string, InstanceClusterPermissions> {
+    const stmt = this.db.prepare('SELECT * FROM instance_cluster_permissions');
+    const rows = stmt.all() as Array<{
+      instanceId: string;
+      shareWithCluster: number;
+      allowRemoteInput: number;
+    }>;
+
+    const result = new Map<string, InstanceClusterPermissions>();
+    for (const row of rows) {
+      result.set(row.instanceId, {
+        shareWithCluster: row.shareWithCluster === 1,
+        allowRemoteInput: row.allowRemoteInput === 1,
+      });
+    }
+    return result;
   }
 
   // Clean up

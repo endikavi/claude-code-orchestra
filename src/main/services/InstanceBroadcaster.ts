@@ -1,5 +1,6 @@
 import { IPC_CHANNELS } from '../ipc/channels';
 import type { StreamMessage, InstanceStatus, ShellInstanceStatus } from '@shared/types';
+import type { SubagentInstance } from '@shared/types/orchestration';
 
 // BrowserWindow type for optional Electron dependency
 type BrowserWindowType = import('electron').BrowserWindow;
@@ -21,6 +22,22 @@ async function getClusterManagerModule() {
   return clusterManagerModule;
 }
 
+let clusterPermissionValidatorModule: typeof import('./ClusterPermissionValidator') | null = null;
+async function getClusterPermissionValidatorModule() {
+  if (!clusterPermissionValidatorModule) {
+    clusterPermissionValidatorModule = await import('./ClusterPermissionValidator');
+  }
+  return clusterPermissionValidatorModule;
+}
+
+let dataStoreModule: typeof import('./DataStore') | null = null;
+async function getDataStoreModule() {
+  if (!dataStoreModule) {
+    dataStoreModule = await import('./DataStore');
+  }
+  return dataStoreModule;
+}
+
 export type InstanceEventType =
   | 'output'
   | 'status'
@@ -28,7 +45,9 @@ export type InstanceEventType =
   | 'exit'
   | 'rawOutput'
   | 'sessionId'
-  | 'terminalTitle';
+  | 'terminalTitle'
+  | 'subagentStarted'
+  | 'subagentCompleted';
 
 /**
  * Handles broadcasting instance events to all destinations:
@@ -69,6 +88,8 @@ export class InstanceBroadcaster {
       rawOutput: IPC_CHANNELS.INSTANCE_RAW_OUTPUT,
       sessionId: IPC_CHANNELS.INSTANCE_SESSION_ID,
       terminalTitle: IPC_CHANNELS.INSTANCE_TERMINAL_TITLE,
+      subagentStarted: IPC_CHANNELS.SUBAGENT_STARTED,
+      subagentCompleted: IPC_CHANNELS.SUBAGENT_COMPLETED,
     };
     return channelMap[event] || null;
   }
@@ -125,6 +146,12 @@ export class InstanceBroadcaster {
           case 'terminalTitle':
             webServer.broadcastInstanceTerminalTitle(instanceId, data as string);
             break;
+          case 'subagentStarted':
+            webServer.broadcastSubagentStarted(instanceId, data as SubagentInstance);
+            break;
+          case 'subagentCompleted':
+            webServer.broadcastSubagentCompleted(instanceId, data as SubagentInstance);
+            break;
         }
       })
       .catch(() => {
@@ -134,10 +161,15 @@ export class InstanceBroadcaster {
 
   /**
    * Send instance events to cluster for distribution to other nodes
+   * Checks permissions before sending to ensure privacy settings are respected
    */
   private sendToCluster(event: string, instanceId: string, data: unknown): void {
-    getClusterManagerModule()
-      .then(({ getClusterManager }) => {
+    Promise.all([
+      getClusterManagerModule(),
+      getClusterPermissionValidatorModule(),
+      getDataStoreModule(),
+    ])
+      .then(([{ getClusterManager }, { getClusterPermissionValidator }, { DataStore }]) => {
         const clusterManager = getClusterManager();
         const config = clusterManager.getConfig();
 
@@ -146,10 +178,21 @@ export class InstanceBroadcaster {
           return;
         }
 
+        // Check if this instance should be shared with cluster
+        const validator = getClusterPermissionValidator();
+        const dataStore = DataStore.getInstance();
+
+        // Get the instance's project ID from the database permissions table
+        const instancePerms = dataStore.getInstanceClusterPermissions(instanceId);
+        if (!instancePerms.shareWithCluster) {
+          // Instance is private, don't forward to cluster
+          return;
+        }
+
         clusterManager.forwardInstanceEvent(event, instanceId, data);
       })
       .catch(() => {
-        // ClusterManager not available, ignore
+        // ClusterManager or validator not available, ignore
       });
   }
 

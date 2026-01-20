@@ -64,12 +64,24 @@ export interface ServerToClientEvents {
   'subagent:completed': (data: { instanceId: string; subagent: SubagentInstance }) => void;
 }
 
+// Subscription callback response
+export interface SubscriptionResponse {
+  success: boolean;
+}
+
 // WebSocket events (Client -> Server)
 export interface ClientToServerEvents {
   'instance:input': (instanceId: string, input: string) => void;
   'instance:resize': (instanceId: string, cols: number, rows: number) => void;
-  'subscribe:instance': (instanceId: string) => void;
-  'unsubscribe:instance': (instanceId: string) => void;
+  'subscribe:instance': (
+    instanceId: string,
+    callback?: (response: SubscriptionResponse) => void
+  ) => void;
+  'unsubscribe:instance': (
+    instanceId: string,
+    callback?: (response: SubscriptionResponse) => void
+  ) => void;
+  'request:sync': () => void;
 }
 
 // Output buffer for instance synchronization

@@ -24,6 +24,7 @@ function getElectronApp(): { isPackaged: boolean; getPath: (name: string) => str
 import { getAuthService } from './AuthService';
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
+import { getSubagentTracker } from './SubagentTracker';
 import { getClusterManager } from './ClusterManager';
 import { getAuditLogger } from './AuditLogger';
 import { getStateSyncManager } from './managers/StateSyncManager';
@@ -47,6 +48,7 @@ import type {
 } from '@shared/types/remote';
 import { DEFAULT_REMOTE_PORT } from '@shared/types/remote';
 import type { StreamMessage, InstanceStatus } from '@shared/types';
+import type { SubagentInstance } from '@shared/types/orchestration';
 
 export class WebServer extends EventEmitter {
   private static instance: WebServer | null = null;
@@ -372,6 +374,13 @@ export class WebServer extends EventEmitter {
       res.json({ success: true, data: state });
     });
 
+    // Subagents endpoint (get all subagents across all instances)
+    this.app.get('/api/subagents', this.authMiddleware, (_req: Request, res: Response) => {
+      const tracker = getSubagentTracker();
+      const subagents = tracker.getAllSubagents();
+      res.json({ success: true, data: subagents });
+    });
+
     // Hook routes (no auth - local hook scripts)
     this.app.use(
       '/api/hooks',
@@ -596,18 +605,33 @@ export class WebServer extends EventEmitter {
       });
 
       // Handle instance subscription (for focused real-time updates)
-      socket.on('subscribe:instance', (instanceId) => {
+      socket.on('subscribe:instance', async (instanceId, callback) => {
         if (typeof instanceId !== 'string' || instanceId.length === 0 || instanceId.length > 128) {
+          if (typeof callback === 'function') callback({ success: false });
           return;
         }
-        void socket.join(`instance:${instanceId}`);
+        await socket.join(`instance:${instanceId}`);
+        // Confirm subscription to client
+        if (typeof callback === 'function') {
+          callback({ success: true });
+        }
       });
 
-      socket.on('unsubscribe:instance', (instanceId) => {
+      socket.on('unsubscribe:instance', async (instanceId, callback) => {
         if (typeof instanceId !== 'string' || instanceId.length === 0 || instanceId.length > 128) {
+          if (typeof callback === 'function') callback({ success: false });
           return;
         }
-        void socket.leave(`instance:${instanceId}`);
+        await socket.leave(`instance:${instanceId}`);
+        if (typeof callback === 'function') {
+          callback({ success: true });
+        }
+      });
+
+      // Handle explicit sync request (e.g., after reconnection)
+      socket.on('request:sync', () => {
+        const state = this.getSyncState();
+        socket.emit('sync:state', state);
       });
 
       // Handle disconnect
@@ -620,10 +644,11 @@ export class WebServer extends EventEmitter {
 
   /**
    * Broadcast instance output to web clients
+   * Note: Broadcast to ALL connected clients to avoid race conditions with subscription
    */
   public broadcastInstanceOutput(instanceId: string, data: StreamMessage): void {
     if (this.io) {
-      this.io.to(`instance:${instanceId}`).emit('instance:output', instanceId, data);
+      this.io.emit('instance:output', instanceId, data);
     }
   }
 
@@ -638,10 +663,11 @@ export class WebServer extends EventEmitter {
 
   /**
    * Broadcast instance error to web clients
+   * Note: Broadcast to ALL connected clients to avoid race conditions with subscription
    */
   public broadcastInstanceError(instanceId: string, error: string): void {
     if (this.io) {
-      this.io.to(`instance:${instanceId}`).emit('instance:error', instanceId, error);
+      this.io.emit('instance:error', instanceId, error);
     }
   }
 
@@ -656,10 +682,11 @@ export class WebServer extends EventEmitter {
 
   /**
    * Broadcast instance raw output to web clients
+   * Note: Broadcast to ALL connected clients to avoid race conditions with subscription
    */
   public broadcastInstanceRawOutput(instanceId: string, data: string): void {
     if (this.io) {
-      this.io.to(`instance:${instanceId}`).emit('instance:rawOutput', instanceId, data);
+      this.io.emit('instance:rawOutput', instanceId, data);
     }
   }
 
@@ -678,6 +705,24 @@ export class WebServer extends EventEmitter {
   public broadcastInstanceTerminalTitle(instanceId: string, title: string): void {
     if (this.io) {
       this.io.emit('instance:terminalTitle', instanceId, title);
+    }
+  }
+
+  /**
+   * Broadcast subagent started event to web clients
+   */
+  public broadcastSubagentStarted(instanceId: string, subagent: SubagentInstance): void {
+    if (this.io) {
+      this.io.emit('subagent:started', { instanceId, subagent });
+    }
+  }
+
+  /**
+   * Broadcast subagent completed event to web clients
+   */
+  public broadcastSubagentCompleted(instanceId: string, subagent: SubagentInstance): void {
+    if (this.io) {
+      this.io.emit('subagent:completed', { instanceId, subagent });
     }
   }
 

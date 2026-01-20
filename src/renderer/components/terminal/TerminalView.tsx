@@ -60,10 +60,14 @@ interface TerminalViewProps {
   instanceId: string;
 }
 
+// Threshold in pixels to consider "near bottom" for smart scroll
+const SCROLL_THRESHOLD = 50;
+
 export function TerminalView({ instanceId }: TerminalViewProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const isNearBottomRef = useRef(true); // Track if user is near bottom for smart scroll
   const { sendInput, getInstanceOutput, updateTerminalTitle } = useInstanceStore();
   const {
     globalInstances,
@@ -166,6 +170,16 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
 
       terminal.open(container);
 
+      // Setup smart scroll tracking - detect when user scrolls away from bottom
+      const viewport = container.querySelector('.xterm-viewport') as HTMLElement;
+      if (viewport) {
+        viewport.addEventListener('scroll', () => {
+          const { scrollTop, scrollHeight, clientHeight } = viewport;
+          const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+          isNearBottomRef.current = distanceFromBottom < SCROLL_THRESHOLD;
+        });
+      }
+
       // Delay fit to ensure terminal renderer is fully initialized
       // xterm.js needs time to setup the renderer before we can fit
       initTimer = setTimeout(() => {
@@ -210,9 +224,11 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
         currentUpdateTitle(currentInstanceId, title);
       });
 
-      // Write existing output
+      // Write existing output and scroll to bottom
       if (currentOutput?.rawOutput) {
-        terminal.write(currentOutput.rawOutput);
+        terminal.write(currentOutput.rawOutput, () => {
+          terminal.scrollToBottom();
+        });
       }
     };
 
@@ -260,11 +276,17 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     };
   }, []);
 
-  // Subscribe to raw output
+  // Subscribe to raw output with smart scroll
   useEffect(() => {
     const unsubscribe = window.electronAPI.instance.onRawOutput((id, data) => {
       if (id === instanceId && xtermRef.current) {
-        xtermRef.current.write(data);
+        xtermRef.current.write(data, () => {
+          // Only auto-scroll if user is near the bottom
+          // This prevents jumping while user is reading previous content
+          if (isNearBottomRef.current) {
+            xtermRef.current?.scrollToBottom();
+          }
+        });
       }
     });
 

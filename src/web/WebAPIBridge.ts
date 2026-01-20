@@ -20,6 +20,7 @@ import type {
   SessionImportBatchResult,
 } from '@shared/types';
 import type { SyncState } from '@shared/types/remote';
+import type { SubagentInstance } from '@shared/types/orchestration';
 
 // Storage keys
 const TOKEN_KEY = 'claude_dashboard_token';
@@ -124,6 +125,14 @@ export function connectSocket(): void {
     console.log('[WebSocket] Disconnected');
   });
 
+  // Handle reconnection - request fresh state from server
+  socket.io.on('reconnect', (attempt: number) => {
+    // eslint-disable-next-line no-console
+    console.log(`[WebSocket] Reconnected after ${attempt} attempts`);
+    // The server will send sync:state on reconnect, but we can also request it explicitly
+    socket?.emit('request:sync');
+  });
+
   socket.on('connect_error', (error: Error) => {
     console.error('[WebSocket] Connection error:', error);
     if (error.message.includes('Authentication')) {
@@ -133,15 +142,17 @@ export function connectSocket(): void {
   });
 
   // Sync state handler
-  socket.on('sync:state', (state: SyncState) => {
-    // Auto-subscribe to all existing instances
+  socket.on('sync:state', async (state: SyncState) => {
+    // Auto-subscribe to all existing instances in parallel
     if (state.instances && Array.isArray(state.instances)) {
-      state.instances.forEach((instance) => {
+      const subscriptions = state.instances.map((instance) => {
         const inst = instance as { id?: string };
         if (inst.id) {
-          subscribeToInstance(inst.id);
+          return subscribeToInstance(inst.id);
         }
+        return Promise.resolve(false);
       });
+      await Promise.all(subscriptions);
     }
     window.dispatchEvent(new CustomEvent('sync:state', { detail: state }));
   });
@@ -173,6 +184,15 @@ export function connectSocket(): void {
 
   socket.on('instance:terminalTitle', (instanceId: string, title: string) => {
     triggerEvent('instance:terminalTitle', instanceId, title);
+  });
+
+  // Subagent events
+  socket.on('subagent:started', (data: { instanceId: string; subagent: SubagentInstance }) => {
+    triggerEvent('subagent:started', data.instanceId, data.subagent);
+  });
+
+  socket.on('subagent:completed', (data: { instanceId: string; subagent: SubagentInstance }) => {
+    triggerEvent('subagent:completed', data.instanceId, data.subagent);
   });
 
   socket.on('session:kicked', (reason: string) => {
@@ -215,13 +235,65 @@ function addEventListener<T extends unknown[]>(
   };
 }
 
-// Subscribe to instance updates
-export function subscribeToInstance(instanceId: string): void {
-  socket?.emit('subscribe:instance', instanceId);
+// Subscribe to instance updates with retry logic
+export function subscribeToInstance(instanceId: string, retries = 3): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!socket?.connected) {
+      resolve(false);
+      return;
+    }
+
+    let resolved = false;
+
+    const attemptSubscribe = (attemptsLeft: number, cleanup: () => void) => {
+      if (resolved || !socket?.connected) {
+        if (!resolved) resolve(false);
+        return;
+      }
+
+      socket.emit('subscribe:instance', instanceId, (response: { success: boolean }) => {
+        if (resolved) return;
+
+        if (response?.success) {
+          resolved = true;
+          cleanup();
+          resolve(true);
+        } else if (attemptsLeft > 1) {
+          // Retry after a short delay
+          setTimeout(() => attemptSubscribe(attemptsLeft - 1, cleanup), 500);
+        } else {
+          resolved = true;
+          cleanup();
+          resolve(false);
+        }
+      });
+    };
+
+    // Timeout fallback after 5 seconds total
+    const timeoutId = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve(false);
+      }
+    }, 5000);
+
+    // Start subscription attempt with cleanup function
+    attemptSubscribe(retries, () => clearTimeout(timeoutId));
+  });
 }
 
-export function unsubscribeFromInstance(instanceId: string): void {
-  socket?.emit('unsubscribe:instance', instanceId);
+export function unsubscribeFromInstance(instanceId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!socket?.connected) {
+      resolve(false);
+      return;
+    }
+    socket.emit('unsubscribe:instance', instanceId, (response: { success: boolean }) => {
+      resolve(response?.success ?? false);
+    });
+    // Timeout fallback in case callback is not called
+    setTimeout(() => resolve(true), 1000);
+  });
 }
 
 interface LoginApiResponse {
@@ -322,8 +394,8 @@ export const webAPI = {
         method: 'POST',
         body: JSON.stringify(config),
       });
-      // Auto-subscribe to the new instance
-      subscribeToInstance(response.data.id);
+      // Auto-subscribe to the new instance and wait for confirmation
+      await subscribeToInstance(response.data.id);
       // Store the conversation mapping
       if (response.conversationId) {
         instanceConversations.set(response.data.id, response.conversationId);
@@ -391,7 +463,7 @@ export const webAPI = {
         method: 'POST',
         body: JSON.stringify(config),
       });
-      subscribeToInstance(response.data.id);
+      await subscribeToInstance(response.data.id);
       return response.data;
     },
 
@@ -635,6 +707,37 @@ export const webAPI = {
     kickSession: () => Promise.resolve({ success: false as const }),
     getQrCode: () =>
       Promise.resolve({ success: false as const, error: 'Not available in web version' }),
+  },
+
+  // Subagent operations (native Claude Task tool tracking)
+  subagent: {
+    getByInstance: async (instanceId: string): Promise<SubagentInstance[]> => {
+      const response = await apiFetch<{
+        success: boolean;
+        data: SubagentInstance[];
+      }>(`/api/instances/${instanceId}/subagents`);
+      return response.data;
+    },
+
+    getAll: async (): Promise<SubagentInstance[]> => {
+      const response = await apiFetch<{
+        success: boolean;
+        data: SubagentInstance[];
+      }>('/api/subagents');
+      return response.data;
+    },
+
+    onStarted: (
+      callback: (instanceId: string, subagent: SubagentInstance) => void
+    ): (() => void) => {
+      return addEventListener('subagent:started', callback);
+    },
+
+    onCompleted: (
+      callback: (instanceId: string, subagent: SubagentInstance) => void
+    ): (() => void) => {
+      return addEventListener('subagent:completed', callback);
+    },
   },
 };
 

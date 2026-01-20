@@ -550,6 +550,51 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   );
 
+  // Get cluster privacy settings
+  ipcMain.handle(IPC_CHANNELS.CLUSTER_GET_PRIVACY, () => {
+    return dataStore.getNodePrivacy();
+  });
+
+  // Update cluster privacy settings
+  ipcMain.handle(
+    IPC_CHANNELS.CLUSTER_UPDATE_PRIVACY,
+    (_event, privacy: import('@shared/types/cluster').ClusterNodePrivacy) => {
+      const updated = dataStore.updateNodePrivacy(privacy);
+      // Notify cluster of permission change
+      clusterManager.notifyPermissionChange({
+        nodeId: clusterManager.getConfig().nodeId,
+        type: 'node_privacy',
+        timestamp: Date.now(),
+      });
+      return updated;
+    }
+  );
+
+  // Get instance cluster permissions
+  ipcMain.handle(IPC_CHANNELS.INSTANCE_GET_CLUSTER_PERMISSIONS, (_event, instanceId: string) => {
+    return processManager.getInstanceClusterPermissions(instanceId);
+  });
+
+  // Set instance cluster permissions
+  ipcMain.handle(
+    IPC_CHANNELS.INSTANCE_SET_CLUSTER_PERMISSIONS,
+    (
+      _event,
+      instanceId: string,
+      perms: import('@shared/types/cluster').InstanceClusterPermissions
+    ) => {
+      const updated = processManager.setInstanceClusterPermissions(instanceId, perms);
+      // Notify cluster of permission change
+      clusterManager.notifyPermissionChange({
+        nodeId: clusterManager.getConfig().nodeId,
+        type: 'instance_permissions',
+        timestamp: Date.now(),
+        affectedInstanceIds: [instanceId],
+      });
+      return updated;
+    }
+  );
+
   // ==================== UI Settings Handlers ====================
   const uiSettingsStore = UISettingsStore.getInstance();
 

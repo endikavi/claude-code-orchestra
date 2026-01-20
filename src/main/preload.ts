@@ -54,6 +54,9 @@ import type {
   GlobalProject,
   GlobalInstance,
   RemoteInstanceRequest,
+  ClusterNodePrivacy,
+  InstanceClusterPermissions,
+  ClusterPermissionChangeEvent,
 } from '@shared/types/cluster';
 import type { UISettings } from '@shared/types/uiSettings';
 
@@ -385,6 +388,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on(IPC_CHANNELS.CLUSTER_ERROR, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.CLUSTER_ERROR, listener);
     },
+
+    onPermissionsChanged: (callback: (event: ClusterPermissionChangeEvent) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        permEvent: ClusterPermissionChangeEvent
+      ) => callback(permEvent);
+      ipcRenderer.on(IPC_CHANNELS.CLUSTER_PERMISSIONS_CHANGED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.CLUSTER_PERMISSIONS_CHANGED, listener);
+    },
+
+    // Privacy methods
+    getPrivacy: (): Promise<ClusterNodePrivacy> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLUSTER_GET_PRIVACY),
+
+    updatePrivacy: (privacy: Partial<ClusterNodePrivacy>): Promise<ClusterNodePrivacy> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLUSTER_UPDATE_PRIVACY, privacy),
+
+    // Instance cluster permissions
+    getInstancePermissions: (instanceId: string): Promise<InstanceClusterPermissions> =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_GET_CLUSTER_PERMISSIONS, instanceId),
+
+    setInstancePermissions: (
+      instanceId: string,
+      perms: Partial<InstanceClusterPermissions>
+    ): Promise<InstanceClusterPermissions> =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_SET_CLUSTER_PERMISSIONS, instanceId, perms),
   },
 
   // UI Settings operations
@@ -871,6 +900,16 @@ declare global {
         onConnected: (callback: () => void) => () => void;
         onDisconnected: (callback: () => void) => () => void;
         onError: (callback: (error: string) => void) => () => void;
+        onPermissionsChanged: (
+          callback: (event: ClusterPermissionChangeEvent) => void
+        ) => () => void;
+        getPrivacy: () => Promise<ClusterNodePrivacy>;
+        updatePrivacy: (privacy: Partial<ClusterNodePrivacy>) => Promise<ClusterNodePrivacy>;
+        getInstancePermissions: (instanceId: string) => Promise<InstanceClusterPermissions>;
+        setInstancePermissions: (
+          instanceId: string,
+          perms: Partial<InstanceClusterPermissions>
+        ) => Promise<InstanceClusterPermissions>;
       };
       uiSettings: {
         get: () => Promise<UISettings>;

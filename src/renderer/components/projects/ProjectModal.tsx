@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useConversationStore } from '../../stores/conversationStore';
+import { useClusterStore } from '../../stores/clusterStore';
 import { Modal } from '../common/Modal';
 import { ImportSessionsModal } from '../conversations/ImportSessionsModal';
 import type { AvailableShell, HookTemplate, HookTemplateType } from '@shared/types';
+import type { ProjectClusterPermissions } from '@shared/types/clusterPermissions';
 
 const PROJECT_COLORS = [
   '#ef4444',
@@ -30,6 +32,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const { t } = useTranslation();
   const { projects, createProject, updateProject } = useProjectStore();
   const { editingProject } = useUIStore();
+  const { isClusterEnabled, config: clusterConfig } = useClusterStore();
 
   const existingProject = editingProject ? projects.find((p) => p.id === editingProject) : null;
   const isEditing = !!existingProject;
@@ -46,6 +49,14 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+
+  // Cluster permissions state
+  const [clusterShareWithCluster, setClusterShareWithCluster] = useState<boolean | null>(
+    existingProject?.clusterPermissions?.shareWithCluster ?? null
+  );
+  const [clusterAllowRemoteCreation, setClusterAllowRemoteCreation] = useState<boolean | null>(
+    existingProject?.clusterPermissions?.allowRemoteInstanceCreation ?? null
+  );
 
   // Hooks integration state
   const [enableHooksIntegration, setEnableHooksIntegration] = useState(!isEditing);
@@ -140,6 +151,15 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
     try {
       const projectPath = path.trim();
 
+      // Build cluster permissions if cluster is enabled
+      const clusterPermissions: ProjectClusterPermissions | undefined =
+        isClusterEnabled() && clusterConfig?.role !== 'standalone'
+          ? {
+              shareWithCluster: clusterShareWithCluster,
+              allowRemoteInstanceCreation: clusterAllowRemoteCreation,
+            }
+          : undefined;
+
       if (isEditing && existingProject) {
         await updateProject({
           ...existingProject,
@@ -150,6 +170,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           skipPermissions,
           enableMcp,
           preferredShell: preferredShell || undefined,
+          clusterPermissions,
         });
 
         // Handle hooks integration changes
@@ -179,6 +200,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           skipPermissions,
           enableMcp,
           preferredShell: preferredShell || undefined,
+          clusterPermissions,
         });
 
         // Set up hooks for new project if enabled
@@ -446,6 +468,85 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           )}
         </div>
 
+        {/* Cluster Sharing - Only show when cluster is enabled and not standalone */}
+        {isClusterEnabled() && clusterConfig?.role !== 'standalone' && (
+          <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+            <div className="flex items-center gap-2 mb-3">
+              <GlobeIcon className="w-4 h-4 text-blue-500" />
+              <span className="text-sm font-medium text-gray-800 dark:text-white">
+                {t('project.clusterSharing')}
+              </span>
+            </div>
+
+            <div className="space-y-3 ml-6">
+              {/* Visibility */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  {t('project.clusterVisibility')}
+                </label>
+                <select
+                  value={
+                    clusterShareWithCluster === null
+                      ? 'default'
+                      : clusterShareWithCluster
+                        ? 'share'
+                        : 'private'
+                  }
+                  onChange={(e) => {
+                    if (e.target.value === 'default') setClusterShareWithCluster(null);
+                    else if (e.target.value === 'share') setClusterShareWithCluster(true);
+                    else setClusterShareWithCluster(false);
+                  }}
+                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="default">{t('project.useNodeDefault')}</option>
+                  <option value="share">{t('project.shareWithCluster')}</option>
+                  <option value="private">{t('project.dontShare')}</option>
+                </select>
+              </div>
+
+              {/* Allow Remote Instances */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  {t('project.allowRemoteInstances')}
+                </label>
+                <select
+                  value={
+                    clusterAllowRemoteCreation === null
+                      ? 'default'
+                      : clusterAllowRemoteCreation
+                        ? 'yes'
+                        : 'no'
+                  }
+                  onChange={(e) => {
+                    if (e.target.value === 'default') setClusterAllowRemoteCreation(null);
+                    else if (e.target.value === 'yes') setClusterAllowRemoteCreation(true);
+                    else setClusterAllowRemoteCreation(false);
+                  }}
+                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="default">{t('project.useNodeDefault')}</option>
+                  <option value="yes">{t('common.yes', 'Yes')}</option>
+                  <option value="no">{t('common.no', 'No')}</option>
+                </select>
+              </div>
+
+              {/* Privacy indicator */}
+              {clusterShareWithCluster === false && (
+                <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+                  <LockIcon className="w-4 h-4 text-gray-500" />
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    {t(
+                      'project.privateProjectNote',
+                      'This project will not be visible to other cluster nodes'
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Load Session History - Only show when editing */}
         {isEditing && existingProject && (
           <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
@@ -511,11 +612,37 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   );
 }
 
-// Icon component
+// Icon components
 function ChevronIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function GlobeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+      />
+    </svg>
+  );
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+      />
     </svg>
   );
 }

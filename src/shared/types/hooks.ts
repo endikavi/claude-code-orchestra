@@ -7,7 +7,8 @@ export type HookEventType =
   | 'SubagentStop'
   | 'Notification'
   | 'SessionStart'
-  | 'SessionEnd';
+  | 'SessionEnd'
+  | 'PreCompact'; // Before conversation compacting
 
 // Hook command configuration
 export interface HookCommand {
@@ -16,44 +17,58 @@ export interface HookCommand {
   timeout?: number; // Timeout in milliseconds
 }
 
-// Hook matcher for filtering when hooks run
-export interface HookMatcher {
-  tool_name?: string; // Match specific tool names
-  project_path?: string; // Match project path pattern
-}
-
 // Single hook definition
+// matcher is a string pattern: "Write", "Write|Edit|Read", "*", "mcp__.*"
 export interface HookDefinition {
   hooks: HookCommand[];
-  matcher?: HookMatcher;
+  matcher?: string; // String with regex pattern for tool matching
 }
 
 // Complete hooks configuration (matches .claude/settings.json structure)
-export interface HooksConfig {
-  hooks: {
-    [K in HookEventType]?: HookDefinition[];
-  };
-}
+// Note: In settings.json, hooks are NOT wrapped in a "hooks" key
+// The event types are at the root level
+export type HooksConfig = {
+  [K in HookEventType]?: HookDefinition[];
+};
 
 // Hook execution input (what Claude sends to hook stdin)
 export interface HookInput {
+  // Standard Claude Code fields
   session_id: string;
-  instance_id?: string; // Dashboard-specific extension
-  project_path?: string;
+  hook_event_name?: string; // The event that triggered this hook
+  transcript_path?: string; // Path to conversation transcript
+  cwd?: string; // Current working directory
+  permission_mode?: string; // Current permission mode
+  // Tool-specific fields (for PreToolUse/PostToolUse)
   tool_name?: string;
   tool_input?: Record<string, unknown>;
+  tool_result?: unknown; // Result from tool execution (PostToolUse only)
+  // Notification fields
   notification_type?: string;
   message?: string;
+  // Dashboard-specific extensions
+  instance_id?: string;
+  project_path?: string;
   timestamp?: number;
 }
 
-// Hook output for permission decisions
-export interface HookPermissionOutput {
+// Complete hook output format (for any hook)
+export interface HookOutput {
+  continue?: boolean; // Whether to continue execution (default: true)
+  suppressOutput?: boolean; // Whether to suppress this hook's output (default: false)
   hookSpecificOutput?: {
+    // For permission hooks
     permissionDecision?: 'allow' | 'deny' | 'ask';
     permissionDecisionReason?: string;
+    // For general hooks
+    hookEventName?: string;
+    additionalContext?: string; // Context injected to the model
+    message?: string; // Message shown to user
   };
 }
+
+// Alias for backward compatibility
+export type HookPermissionOutput = HookOutput;
 
 // Tool use event data from PostToolUse hook
 export interface ToolUseEvent {

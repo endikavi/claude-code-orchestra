@@ -1,6 +1,6 @@
 {
   "name": "claude-code-orchestra",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "Desktop app for managing Claude Code CLI instances",
   "author": "Endika Vicioso Marquinez",
   "license": "AGPL-3.0",

@@ -8,6 +8,9 @@ import type {
   StreamMessage,
   InstanceStatus,
 } from './index';
+import type { ClusterNodePrivacy, ClusterPermissionChangeEvent } from './clusterPermissions';
+import { DEFAULT_NODE_PRIVACY } from './clusterPermissions';
+export * from './clusterPermissions';
 
 // ==================== Node Types ====================
 
@@ -29,6 +32,8 @@ export interface ClusterNode {
   instances: ClaudeInstance[];
   lastSeen?: number;
   error?: string;
+  /** Privacy settings for this node (optional, provided by node itself) */
+  privacy?: ClusterNodePrivacy;
 }
 
 /** Minimal node info for identification */
@@ -65,6 +70,7 @@ export interface ClusterConfig {
   primaryHost?: string; // Host of primary node (if this node is secondary)
   primaryPort: number;
   sharedSecret: string; // Shared secret for authentication between nodes
+  privacy: ClusterNodePrivacy; // Privacy and permission settings for this node
 }
 
 /** Default cluster configuration */
@@ -76,6 +82,7 @@ export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
   primaryHost: '',
   primaryPort: 3847,
   sharedSecret: '',
+  privacy: DEFAULT_NODE_PRIVACY,
 };
 
 // ==================== Request/Response Types ====================
@@ -88,6 +95,8 @@ export interface RemoteInstanceRequest {
   mode: InstanceMode;
   prompt?: string;
   planMode?: boolean;
+  /** ID of the node that initiated the request */
+  sourceNodeId?: string;
 }
 
 /** Request for a secondary node to register with primary */
@@ -152,6 +161,9 @@ export interface ClusterClientToServerEvents {
     cols: number,
     rows: number
   ) => void;
+
+  // Permission events (secondary -> primary)
+  'permissions:updated': (event: ClusterPermissionChangeEvent) => void;
 }
 
 /** Events sent from primary to nodes */
@@ -183,6 +195,10 @@ export interface ClusterServerToClientEvents {
   'instance:rawOutput': (instanceId: string, nodeId: string, data: string) => void;
   'instance:sessionId': (instanceId: string, nodeId: string, sessionId: string) => void;
   'instance:terminalTitle': (instanceId: string, nodeId: string, title: string) => void;
+
+  // Permission events
+  'permissions:changed': (event: ClusterPermissionChangeEvent) => void;
+  'permissions:denied': (action: string, reason: string) => void;
 }
 
 // ==================== Authentication Types ====================

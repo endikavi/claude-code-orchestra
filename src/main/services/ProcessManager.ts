@@ -3,6 +3,7 @@ import { ClaudeInstance, ClaudeInstanceConfig } from './ClaudeInstance';
 import { ShellInstance } from './ShellInstance';
 import { DataStore } from './DataStore';
 import { getInstanceBroadcaster, type InstanceEventType } from './InstanceBroadcaster';
+import { getClusterPermissionValidator } from './ClusterPermissionValidator';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ShellInstance as ShellInstanceType,
@@ -14,7 +15,7 @@ import type {
 } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
 import type { InstanceOutputBuffer } from '@shared/types/remote';
-import { IPC_CHANNELS } from '../ipc/channels';
+import type { InstanceClusterPermissions } from '@shared/types/cluster';
 
 // BrowserWindow type for optional Electron dependency
 type BrowserWindowType = import('electron').BrowserWindow;
@@ -34,6 +35,7 @@ export class ProcessManager extends EventEmitter {
   private shellOutputs: Map<string, string> = new Map(); // shellId -> raw output buffer
   private instanceConversations: Map<string, string> = new Map(); // instanceId -> conversationId
   private instanceOutputs: Map<string, InstanceOutputBuffer> = new Map(); // instanceId -> output buffer
+  private pendingSessionIds: Map<string, string> = new Map(); // instanceId -> sessionId (for race condition fix)
   private dataStore: DataStore;
   private mainWindow: BrowserWindowType | null = null;
 
@@ -50,6 +52,16 @@ export class ProcessManager extends EventEmitter {
    */
   setInstanceConversation(instanceId: string, conversationId: string): void {
     this.instanceConversations.set(instanceId, conversationId);
+
+    // Check if there's a pending sessionId that arrived before this mapping was set (race condition fix)
+    const pendingSessionId = this.pendingSessionIds.get(instanceId);
+    if (pendingSessionId) {
+      console.log(
+        `[ProcessManager] Applying pending sessionId for instance ${instanceId}: ${pendingSessionId}`
+      );
+      this.dataStore.updateConversation(conversationId, { sessionId: pendingSessionId });
+      this.pendingSessionIds.delete(instanceId);
+    }
   }
 
   /**
@@ -98,6 +110,12 @@ export class ProcessManager extends EventEmitter {
 
     this.setupInstanceListeners(instance);
     this.instances.set(instance.id, instance);
+
+    // Set default cluster permissions for this instance
+    this.dataStore.setInstanceClusterPermissions(instance.id, {
+      shareWithCluster: true,
+      allowRemoteInput: true,
+    });
 
     // Start the instance
     instance.start();
@@ -301,6 +319,12 @@ export class ProcessManager extends EventEmitter {
       const conversationId = this.instanceConversations.get(instance.id);
       if (conversationId) {
         this.dataStore.updateConversation(conversationId, { sessionId });
+      } else {
+        // Store sessionId for later - conversation mapping may not exist yet (race condition fix)
+        this.pendingSessionIds.set(instance.id, sessionId);
+        console.log(
+          `[ProcessManager] Stored pending sessionId for instance ${instance.id}: ${sessionId}`
+        );
       }
     });
 
@@ -309,7 +333,7 @@ export class ProcessManager extends EventEmitter {
       console.log(
         `[ProcessManager] Received subagent:started for instance ${data.instanceId}, subagent ${data.subagent.id}`
       );
-      this.sendToRenderer(IPC_CHANNELS.SUBAGENT_STARTED, data.instanceId, data.subagent);
+      this.broadcastInstanceEvent('subagentStarted', data.instanceId, data.subagent);
     });
 
     instance.on(
@@ -318,7 +342,7 @@ export class ProcessManager extends EventEmitter {
         console.log(
           `[ProcessManager] Received subagent:completed for instance ${data.instanceId}, subagent ${data.subagent.id}`
         );
-        this.sendToRenderer(IPC_CHANNELS.SUBAGENT_COMPLETED, data.instanceId, data.subagent);
+        this.broadcastInstanceEvent('subagentCompleted', data.instanceId, data.subagent);
       }
     );
   }
@@ -579,6 +603,7 @@ export class ProcessManager extends EventEmitter {
         this.instances.delete(id);
         this.instanceOutputs.delete(id);
         this.instanceConversations.delete(id);
+        this.pendingSessionIds.delete(id);
       }
     }
     for (const [id, shell] of this.shellInstances.entries()) {
@@ -596,6 +621,9 @@ export class ProcessManager extends EventEmitter {
     this.instances.delete(id);
     this.instanceOutputs.delete(id);
     this.instanceConversations.delete(id);
+    this.pendingSessionIds.delete(id);
+    // Clean up cluster permissions for this instance
+    this.dataStore.deleteInstanceClusterPermissions(id);
     this.emit('instanceRemoved', id);
   }
 
@@ -610,6 +638,55 @@ export class ProcessManager extends EventEmitter {
       }
     }
     return count;
+  }
+
+  // ==================== Cluster Permission Methods ====================
+
+  /**
+   * Send input to an instance from a remote node
+   * Validates permissions before sending
+   * @returns true if input was sent, false if denied
+   */
+  sendRemoteInput(instanceId: string, input: string, sourceNodeId: string): boolean {
+    const instance = this.instances.get(instanceId);
+    if (!instance) {
+      console.log(`[ProcessManager] sendRemoteInput: instance ${instanceId} not found`);
+      return false;
+    }
+
+    const validator = getClusterPermissionValidator();
+    const config = this.dataStore.getClusterConfig();
+
+    // Validate permission
+    const check = validator.validateAction('send_input', sourceNodeId, config.nodeId, instanceId);
+
+    if (!check.allowed) {
+      console.log(
+        `[ProcessManager] sendRemoteInput denied for instance ${instanceId}: ${check.reason}`
+      );
+      return false;
+    }
+
+    // Permission granted, send input
+    instance.sendInput(input);
+    return true;
+  }
+
+  /**
+   * Get cluster permissions for an instance
+   */
+  getInstanceClusterPermissions(instanceId: string): InstanceClusterPermissions {
+    return this.dataStore.getInstanceClusterPermissions(instanceId);
+  }
+
+  /**
+   * Update cluster permissions for an instance
+   */
+  setInstanceClusterPermissions(
+    instanceId: string,
+    perms: Partial<InstanceClusterPermissions>
+  ): InstanceClusterPermissions {
+    return this.dataStore.setInstanceClusterPermissions(instanceId, perms);
   }
 }
 

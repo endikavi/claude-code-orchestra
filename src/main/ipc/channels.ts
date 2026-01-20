@@ -87,6 +87,16 @@ export const IPC_CHANNELS = {
   CLUSTER_CONNECTED: 'cluster:connected',
   CLUSTER_DISCONNECTED: 'cluster:disconnected',
   CLUSTER_ERROR: 'cluster:error',
+  CLUSTER_PERMISSIONS_CHANGED: 'cluster:permissionsChanged',
+  CLUSTER_PERMISSION_DENIED: 'cluster:permissionDenied',
+
+  // Cluster privacy operations
+  CLUSTER_GET_PRIVACY: 'cluster:getPrivacy',
+  CLUSTER_UPDATE_PRIVACY: 'cluster:updatePrivacy',
+
+  // Instance cluster permission operations
+  INSTANCE_GET_CLUSTER_PERMISSIONS: 'instance:getClusterPermissions',
+  INSTANCE_SET_CLUSTER_PERMISSIONS: 'instance:setClusterPermissions',
 
   // UI Settings operations
   UI_SETTINGS_GET: 'uiSettings:get',

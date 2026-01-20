@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { DataStore } from '../DataStore';
 import { getProcessManager } from '../ProcessManager';
 import { getClusterManager } from '../ClusterManager';
+import { getSubagentTracker } from '../SubagentTracker';
 import { validators } from '../../ipc/validators';
 import type { ClaudeModel, InstanceMode } from '@shared/types';
 import type { AuthenticatedRequest } from './authRoutes';
@@ -199,6 +200,14 @@ export function createInstanceRoutes(deps: InstanceRoutesDeps): Router {
       const message = error instanceof Error ? error.message : 'Unknown error';
       res.status(400).json({ success: false, error: message });
     }
+  });
+
+  // Get subagents for a specific instance
+  router.get('/:id/subagents', deps.authMiddleware, (req: Request, res: Response) => {
+    const instanceId = String(req.params.id);
+    const tracker = getSubagentTracker();
+    const subagents = tracker.getSubagents(instanceId);
+    res.json({ success: true, data: subagents });
   });
 
   return router;

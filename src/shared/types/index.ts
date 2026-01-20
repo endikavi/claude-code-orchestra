@@ -37,6 +37,9 @@ export interface AvailableShell {
   canRunClaude: boolean; // Can execute claude command (Windows: powershell recommended)
 }
 
+// Import cluster permissions types
+import type { ProjectClusterPermissions } from './clusterPermissions';
+
 // Project interface
 export interface Project {
   id: string;
@@ -48,6 +51,7 @@ export interface Project {
   skipPermissions?: boolean; // Launch instances with --dangerously-skip-permissions
   preferredShell?: string; // Preferred shell path for terminal instances
   enableMcp?: boolean; // Enable MCP server integration for Claude instances
+  clusterPermissions?: ProjectClusterPermissions; // Cluster sharing and permission settings
   createdAt: number;
   updatedAt: number;
 }

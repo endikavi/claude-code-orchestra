@@ -146,7 +146,13 @@
     "saveChanges": "Guardar Cambios",
     "nameRequired": "El nombre del proyecto es obligatorio",
     "pathRequired": "La ruta del proyecto es obligatoria",
-    "failedToSave": "Error al guardar el proyecto"
+    "failedToSave": "Error al guardar el proyecto",
+    "clusterSharing": "Compartir en Clúster",
+    "clusterVisibility": "Visibilidad en el clúster",
+    "useNodeDefault": "Usar default del nodo",
+    "shareWithCluster": "Compartir con el clúster",
+    "dontShare": "Mantener privado",
+    "allowRemoteInstances": "Permitir instancias remotas"
   },
   "instance": {
     "newInstance": "Nueva Instancia de Claude",
@@ -157,6 +163,9 @@
     "startInstance": "Iniciar Instancia",
     "promptRequired": "El prompt es obligatorio",
     "failedToCreate": "Error al crear la instancia",
+    "clusterPrivacy": "Privacidad del Clúster",
+    "shareWithCluster": "Compartir con el clúster",
+    "allowRemoteInput": "Permitir input remoto",
     "planMode": "Iniciar en modo plan",
     "planModeDesc": "Claude primero creará un plan de implementación antes de ejecutar cualquier cambio",
     "modes": {
@@ -280,7 +289,27 @@
     "connectedNodes": "Nodos Conectados",
     "thisNode": "Este nodo",
     "projects": "proyectos",
-    "instances": "instancias"
+    "instances": "instancias",
+    "privacy": {
+      "title": "Privacidad del Clúster",
+      "description": "Controla qué pueden ver y hacer otros nodos",
+      "defaultVisibility": "Visibilidad por Defecto",
+      "shareProjects": "Compartir proyectos por defecto",
+      "shareInstances": "Compartir instancias por defecto",
+      "remoteControl": "Control Remoto",
+      "allowRemoteCreate": "Permitir creación remota de instancias",
+      "allowRemoteInput": "Permitir input remoto",
+      "allowRemoteKill": "Permitir kill remoto",
+      "trustedNodes": "Nodos de Confianza",
+      "trustedNodesDesc": "Los nodos de confianza ignoran todas las restricciones y tienen acceso completo",
+      "trustedNodesList": "IDs de nodos de confianza:",
+      "noRemoteNodes": "No hay nodos remotos conectados",
+      "trusted": "Confiable",
+      "notTrusted": "No confiable",
+      "addTrust": "Añadir a confiables",
+      "removeTrust": "Quitar de confiables",
+      "removeFromTrusted": "Quitar de confiables"
+    }
   },
   "viewer": {
     "readOnly": "Solo lectura",
@@ -372,10 +401,31 @@
     "howSubagentsWork": "Cómo funcionan los subagentes",
     "subagentsExplanation": "Claude puede crear subagentes usando la herramienta Task para manejar operaciones complejas en paralelo. Estos subagentes se ejecutan dentro de la misma sesión y su progreso se rastrea aquí automáticamente.",
     "more": "más",
+    "allProjects": "Todos los Proyectos",
+    "noProject": "Sin Proyecto",
+    "instance": "Instancia",
+    "instances": "instancias",
+    "activeSubagents": "subagentes activos",
+    "totalSubagents": "subagentes totales",
+    "duration": "Duración",
+    "result": "Resultado",
+    "error": "Error",
+    "prompt": "Prompt",
+    "showPrompt": "Ver prompt",
+    "hidePrompt": "Ocultar prompt",
+    "collapseAll": "Colapsar todo",
+    "expandAll": "Expandir todo",
+    "noActiveSubagents": "Sin subagentes activos",
     "status": {
       "running": "Ejecutando",
       "completed": "Completado",
       "error": "Error"
+    },
+    "types": {
+      "Explore": "Explorar",
+      "Plan": "Planificar",
+      "Bash": "Bash",
+      "general-purpose": "General"
     }
   }
 }

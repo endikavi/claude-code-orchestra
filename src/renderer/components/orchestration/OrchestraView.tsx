@@ -1,45 +1,140 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOrchestrationStore } from '../../stores/orchestrationStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { SubagentCard } from './SubagentCard';
+import type { SubagentInstance } from '@shared/types';
+
+interface ProjectGroup {
+  projectId: string;
+  projectName: string;
+  projectColor?: string;
+  instances: {
+    instanceId: string;
+    instanceTitle: string;
+    status: string;
+    subagents: SubagentInstance[];
+    runningCount: number;
+    completedCount: number;
+  }[];
+  totalRunning: number;
+  totalCompleted: number;
+}
 
 export function OrchestraView() {
   const { t } = useTranslation();
-  const { selectedProjectId } = useProjectStore();
+  const { projects } = useProjectStore();
   const { instances } = useInstanceStore();
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(['all']));
+  const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
   const {
     isLoading,
     subagentsByInstance,
-    getSubagentsForInstance,
     getRunningSubagentCount,
     getCompletedSubagentCount,
     getTotalRunningSubagents,
     getTotalCompletedSubagents,
   } = useOrchestrationStore();
 
-  // Event listeners are now set up globally in App.tsx
+  // Group instances by project
+  const projectGroups = useMemo((): ProjectGroup[] => {
+    const groups = new Map<string, ProjectGroup>();
 
-  // Get instances with subagents (filtered by project if selected)
-  const instancesWithSubagents = Object.keys(subagentsByInstance).filter((instanceId) => {
-    const subagents = subagentsByInstance[instanceId];
-    if (!subagents || subagents.length === 0) return false;
-    // Filter by project if selected
-    if (selectedProjectId) {
+    // Process all instances with subagents
+    Object.keys(subagentsByInstance).forEach((instanceId) => {
+      const subagents = subagentsByInstance[instanceId];
+      if (!subagents || subagents.length === 0) return;
+
       const instance = instances.find((i) => i.id === instanceId);
-      return instance?.projectId === selectedProjectId;
-    }
-    return true;
-  });
+      const projectId = instance?.projectId || 'no-project';
+      const project = projects.find((p) => p.id === projectId);
 
-  // Get selected instance's subagents
-  const selectedSubagents = selectedInstanceId ? getSubagentsForInstance(selectedInstanceId) : [];
+      if (!groups.has(projectId)) {
+        groups.set(projectId, {
+          projectId,
+          projectName: project?.name || t('orchestration.noProject'),
+          projectColor: project?.color,
+          instances: [],
+          totalRunning: 0,
+          totalCompleted: 0,
+        });
+      }
+
+      const group = groups.get(projectId);
+      if (!group) return;
+
+      const runningCount = getRunningSubagentCount(instanceId);
+      const completedCount = getCompletedSubagentCount(instanceId);
+
+      group.instances.push({
+        instanceId,
+        instanceTitle: instance?.terminalTitle || `Instance ${instanceId.slice(0, 8)}`,
+        status: instance?.status || 'unknown',
+        subagents,
+        runningCount,
+        completedCount,
+      });
+
+      group.totalRunning += runningCount;
+      group.totalCompleted += completedCount;
+    });
+
+    // Sort groups: projects with running subagents first, then by name
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.totalRunning > 0 && b.totalRunning === 0) return -1;
+      if (a.totalRunning === 0 && b.totalRunning > 0) return 1;
+      return a.projectName.localeCompare(b.projectName);
+    });
+  }, [
+    subagentsByInstance,
+    instances,
+    projects,
+    t,
+    getRunningSubagentCount,
+    getCompletedSubagentCount,
+  ]);
+
+  const toggleProject = (projectId: string) => {
+    setExpandedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      return next;
+    });
+  };
+
+  const toggleInstance = (instanceId: string) => {
+    setExpandedInstances((prev) => {
+      const next = new Set(prev);
+      if (next.has(instanceId)) {
+        next.delete(instanceId);
+      } else {
+        next.add(instanceId);
+      }
+      return next;
+    });
+  };
+
+  const expandAllProjects = () => {
+    setExpandedProjects(new Set(projectGroups.map((g) => g.projectId)));
+    setExpandedInstances(
+      new Set(projectGroups.flatMap((g) => g.instances.map((i) => i.instanceId)))
+    );
+  };
+
+  const collapseAllProjects = () => {
+    setExpandedProjects(new Set());
+    setExpandedInstances(new Set());
+  };
 
   // Totals
   const totalRunning = getTotalRunningSubagents();
   const totalCompleted = getTotalCompletedSubagents();
+  const totalSubagents = totalRunning + totalCompleted;
 
   if (isLoading) {
     return (
@@ -53,7 +148,7 @@ export function OrchestraView() {
   }
 
   // Empty state
-  if (instancesWithSubagents.length === 0) {
+  if (projectGroups.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center max-w-md">
@@ -92,151 +187,207 @@ export function OrchestraView() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+        <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('orchestration.orchestraView')}
           </h2>
-          {/* Stats */}
-          {totalRunning > 0 && (
-            <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 rounded-full flex items-center gap-1">
-              <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
-              {totalRunning} {t('orchestration.running')}
+
+          {/* Stats Pills */}
+          <div className="flex items-center gap-2">
+            {totalRunning > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 rounded-full">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                {totalRunning} {t('orchestration.running')}
+              </span>
+            )}
+            <span className="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded-full">
+              {totalSubagents} {t('orchestration.totalSubagents')}
             </span>
-          )}
-          <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded-full">
-            {totalCompleted} {t('orchestration.completed')}
-          </span>
+          </div>
         </div>
 
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {instancesWithSubagents.length} {t('orchestration.instancesWithSubagents')}
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={expandAllProjects}
+            className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+          >
+            {t('orchestration.expandAll')}
+          </button>
+          <button
+            onClick={collapseAllProjects}
+            className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+          >
+            {t('orchestration.collapseAll')}
+          </button>
+        </div>
+      </div>
+
+      {/* Content - Project Groups */}
+      <div className="flex-1 overflow-auto p-4 space-y-4">
+        {projectGroups.map((group) => (
+          <ProjectGroupCard
+            key={group.projectId}
+            group={group}
+            isExpanded={expandedProjects.has(group.projectId)}
+            expandedInstances={expandedInstances}
+            onToggleProject={() => toggleProject(group.projectId)}
+            onToggleInstance={toggleInstance}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface ProjectGroupCardProps {
+  group: ProjectGroup;
+  isExpanded: boolean;
+  expandedInstances: Set<string>;
+  onToggleProject: () => void;
+  onToggleInstance: (instanceId: string) => void;
+}
+
+function ProjectGroupCard({
+  group,
+  isExpanded,
+  expandedInstances,
+  onToggleProject,
+  onToggleInstance,
+}: ProjectGroupCardProps) {
+  const { t } = useTranslation();
+
+  const getStatusIndicator = (status: string) => {
+    if (status === 'running' || status === 'tool_executing') {
+      return (
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
         </span>
-      </div>
+      );
+    }
+    if (status === 'completed') {
+      return <span className="h-2 w-2 rounded-full bg-blue-500" />;
+    }
+    if (status === 'error' || status === 'killed') {
+      return <span className="h-2 w-2 rounded-full bg-red-500" />;
+    }
+    return <span className="h-2 w-2 rounded-full bg-gray-400" />;
+  };
 
-      {/* Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Instances List */}
-        <div
-          className={`${
-            selectedInstanceId ? 'w-80' : 'w-full'
-          } border-r border-gray-200 dark:border-gray-700 overflow-auto`}
-        >
-          <div className="p-4 space-y-3">
-            {instancesWithSubagents.map((instanceId) => {
-              const instance = instances.find((i) => i.id === instanceId);
-              const subagents = getSubagentsForInstance(instanceId);
-              const runningCount = getRunningSubagentCount(instanceId);
-              const completedCount = getCompletedSubagentCount(instanceId);
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      {/* Project Header */}
+      <button
+        onClick={onToggleProject}
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          {/* Project Color Indicator */}
+          <div
+            className="w-1 h-8 rounded-full"
+            style={{ backgroundColor: group.projectColor || '#6B7280' }}
+          />
 
-              return (
-                <div
-                  key={instanceId}
-                  className={`
-                    p-4 rounded-lg border cursor-pointer transition-all
-                    ${
-                      selectedInstanceId === instanceId
-                        ? 'border-claude-orange bg-claude-orange/10'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-claude-orange/50'
-                    }
-                  `}
-                  onClick={() => setSelectedInstanceId(instanceId)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-2 w-2 rounded-full ${
-                          instance?.status === 'running' || instance?.status === 'tool_executing'
-                            ? 'bg-green-500'
-                            : instance?.status === 'completed'
-                              ? 'bg-blue-500'
-                              : 'bg-gray-400'
-                        }`}
-                      />
-                      <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
-                        {instance?.terminalTitle || `Instance ${instanceId.slice(0, 8)}`}
-                      </span>
-                    </div>
-                    {runningCount > 0 && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
-                        {runningCount}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Subagent Preview */}
-                  <div className="space-y-1">
-                    {subagents.slice(0, 3).map((subagent) => (
-                      <div
-                        key={subagent.id}
-                        className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400"
-                      >
-                        <div
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            subagent.status === 'running'
-                              ? 'bg-green-500'
-                              : subagent.status === 'completed'
-                                ? 'bg-blue-500'
-                                : 'bg-red-500'
-                          }`}
-                        />
-                        <span className="truncate">{subagent.description}</span>
-                      </div>
-                    ))}
-                    {subagents.length > 3 && (
-                      <div className="text-xs text-gray-500 ml-4">
-                        +{subagents.length - 3} {t('orchestration.more')}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Stats */}
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    <span>
-                      {subagents.length} {t('orchestration.subagents')}
-                    </span>
-                    <span>
-                      {completedCount} {t('orchestration.completed')}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Project Info */}
+          <div className="text-left">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">{group.projectName}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {group.instances.length} {t('orchestration.instances')}
+            </p>
           </div>
         </div>
 
-        {/* Subagent Detail */}
-        {selectedInstanceId && (
-          <div className="flex-1 overflow-auto p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900 dark:text-gray-100">
-                {t('orchestration.subagentDetails')}
-              </h3>
-              <button
-                onClick={() => setSelectedInstanceId(null)}
-                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-3">
-              {selectedSubagents.map((subagent) => (
-                <SubagentCard key={subagent.id} subagent={subagent} />
-              ))}
-            </div>
+        <div className="flex items-center gap-3">
+          {/* Project Stats */}
+          <div className="flex items-center gap-2">
+            {group.totalRunning > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 rounded-full">
+                <div className="h-1.5 w-1.5 bg-green-500 rounded-full animate-pulse" />
+                {group.totalRunning}
+              </span>
+            )}
+            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 rounded-full">
+              {group.totalCompleted} {t('orchestration.completed')}
+            </span>
           </div>
-        )}
-      </div>
+
+          {/* Expand/Collapse Icon */}
+          <svg
+            className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Instances */}
+      {isExpanded && (
+        <div className="border-t border-gray-200 dark:border-gray-700">
+          {group.instances.map((inst, idx) => (
+            <div
+              key={inst.instanceId}
+              className={`${idx !== 0 ? 'border-t border-gray-100 dark:border-gray-700/50' : ''}`}
+            >
+              {/* Instance Header */}
+              <button
+                onClick={() => onToggleInstance(inst.instanceId)}
+                className="w-full flex items-center justify-between p-3 pl-8 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  {getStatusIndicator(inst.status)}
+                  <span className="font-medium text-sm text-gray-800 dark:text-gray-200">
+                    {inst.instanceTitle}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    ({inst.subagents.length} {t('orchestration.subagents')})
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {inst.runningCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 rounded">
+                      <div className="h-1.5 w-1.5 bg-green-500 rounded-full animate-pulse" />
+                      {inst.runningCount}
+                    </span>
+                  )}
+                  <svg
+                    className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${expandedInstances.has(inst.instanceId) ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </div>
+              </button>
+
+              {/* Subagents List */}
+              {expandedInstances.has(inst.instanceId) && (
+                <div className="pl-12 pr-4 pb-4 space-y-2">
+                  {inst.subagents.map((subagent) => (
+                    <SubagentCard key={subagent.id} subagent={subagent} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ type BrowserWindowType = import('electron').BrowserWindow;
 
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
+import { getClusterPermissionValidator } from './ClusterPermissionValidator';
 import type {
   ClusterConfig,
   ClusterNode,
@@ -22,6 +23,7 @@ import type {
   ClusterClientToServerEvents,
   GlobalProject,
   GlobalInstance,
+  ClusterPermissionChangeEvent,
 } from '@shared/types/cluster';
 import type { Project, ClaudeInstance, StreamMessage, InstanceStatus } from '@shared/types';
 
@@ -671,6 +673,21 @@ export class ClusterManager extends EventEmitter {
         }
       });
 
+      // Handle permission change notifications from secondary nodes
+      socket.on('permissions:updated', (event: ClusterPermissionChangeEvent) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          console.log(
+            `[ClusterManager] Received permissions:updated from ${connectedNodeId}:`,
+            event.type
+          );
+          // Broadcast to all nodes including the sender
+          this.io?.emit('permissions:changed', event);
+          // Update local renderer
+          this.sendToRenderer('cluster:permissionsChanged', event);
+        }
+      });
+
       // Handle disconnect
       socket.on('disconnect', () => {
         const disconnectedNodeId = this.clusterSockets.get(socket.id);
@@ -1132,6 +1149,20 @@ export class ClusterManager extends EventEmitter {
         this.sendToRenderer('instance:terminalTitle', instanceId, title);
       }
     });
+
+    // Handle permission change notifications from primary
+    this.clientSocket.on('permissions:changed', (event: ClusterPermissionChangeEvent) => {
+      console.log('[ClusterManager] Received permissions:changed:', event.type);
+      // Forward to renderer
+      this.sendToRenderer('cluster:permissionsChanged', event);
+      this.emit('permissionsChanged', event);
+    });
+
+    // Handle permission denied notifications
+    this.clientSocket.on('permissions:denied', (action: string, reason: string) => {
+      console.log(`[ClusterManager] Permission denied: ${action} - ${reason}`);
+      this.sendToRenderer('cluster:permissionDenied', { action, reason });
+    });
   }
 
   /**
@@ -1359,18 +1390,24 @@ export class ClusterManager extends EventEmitter {
 
   /**
    * Get all projects from all nodes (global view)
+   * Filters out projects that are not shared with the cluster based on permissions
    */
   public getAllGlobalProjects(): GlobalProject[] {
     const globalProjects: GlobalProject[] = [];
+    const validator = getClusterPermissionValidator();
 
     for (const node of this.nodes.values()) {
       for (const project of node.projects) {
-        globalProjects.push({
-          ...project,
-          nodeId: node.id,
-          nodeName: node.name,
-          isLocal: node.id === this.localNodeId,
-        });
+        // For local projects, include all; for remote, check if shared
+        const isLocal = node.id === this.localNodeId;
+        if (isLocal || validator.shouldShareProject(project)) {
+          globalProjects.push({
+            ...project,
+            nodeId: node.id,
+            nodeName: node.name,
+            isLocal,
+          });
+        }
       }
     }
 
@@ -1379,18 +1416,24 @@ export class ClusterManager extends EventEmitter {
 
   /**
    * Get all instances from all nodes (global view)
+   * Filters out instances that are not shared with the cluster based on permissions
    */
   public getAllGlobalInstances(): GlobalInstance[] {
     const globalInstances: GlobalInstance[] = [];
+    const validator = getClusterPermissionValidator();
 
     for (const node of this.nodes.values()) {
       for (const instance of node.instances) {
-        globalInstances.push({
-          ...instance,
-          nodeId: node.id,
-          nodeName: node.name,
-          isLocal: node.id === this.localNodeId,
-        });
+        // For local instances, include all; for remote, check if shared
+        const isLocal = node.id === this.localNodeId;
+        if (isLocal || validator.shouldShareInstance(instance.id, instance.projectId)) {
+          globalInstances.push({
+            ...instance,
+            nodeId: node.id,
+            nodeName: node.name,
+            isLocal,
+          });
+        }
       }
     }
 
@@ -1566,6 +1609,36 @@ export class ClusterManager extends EventEmitter {
         this.clientSocket.emit('instance:terminalTitle', instanceId, data as string);
         break;
     }
+  }
+
+  /**
+   * Notify cluster of permission changes
+   * Broadcasts permission change event to all connected nodes
+   */
+  public notifyPermissionChange(event: ClusterPermissionChangeEvent): void {
+    const config = this.getConfig();
+
+    console.log('[ClusterManager] notifyPermissionChange:', event.type);
+
+    // If cluster is not enabled, nothing to do
+    if (!config.enabled) {
+      return;
+    }
+
+    if (config.role === 'primary' && this.serverRunning && this.io) {
+      // If primary, broadcast to all connected nodes
+      this.io.emit('permissions:changed', event);
+    } else if (config.role === 'secondary' && this.clientSocket?.connected) {
+      // If secondary, notify primary
+      this.clientSocket.emit('permissions:updated', event);
+    }
+
+    // Also emit locally for UI update
+    this.emit('permissionsChanged', event);
+    this.sendToRenderer('cluster:permissionsChanged', event);
+
+    // Broadcast cluster state to reflect permission changes
+    this.broadcastClusterState();
   }
 
   /**
