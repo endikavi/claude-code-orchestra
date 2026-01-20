@@ -1,5 +1,27 @@
 import { EventEmitter } from 'events';
 import type { StreamMessage, InstanceStatus } from '@shared/types';
+import type { SubagentStartedEvent, SubagentCompletedEvent } from '@shared/types/orchestration';
+
+// Type for tool_use content block
+interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input?: {
+    description?: string;
+    prompt?: string;
+    subagent_type?: string;
+    [key: string]: unknown;
+  };
+}
+
+// Type for tool_result content block
+interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content?: string | Array<{ type: string; text?: string }>;
+  is_error?: boolean;
+}
 
 /**
  * Parses the stream-json output from Claude CLI
@@ -65,9 +87,13 @@ export class StreamJSONParser extends EventEmitter {
       case 'assistant':
         this.emit('assistant', message);
         this.processAssistantMessage(message);
+        // Check for Task tool usage (subagent spawning)
+        this.detectSubagentStart(message);
         break;
       case 'user':
         this.emit('user', message);
+        // Check for tool_result (subagent completion)
+        this.detectSubagentCompletion(message);
         break;
       case 'result':
         this.emit('result', message);
@@ -95,6 +121,69 @@ export class StreamJSONParser extends EventEmitter {
         case 'thinking':
           this.emit('thinking', block.thinking);
           break;
+      }
+    }
+  }
+
+  /**
+   * Detect when Claude spawns a subagent using the Task tool
+   */
+  private detectSubagentStart(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    for (const block of message.message.content) {
+      const toolBlock = block as ToolUseBlock;
+      // Debug: Log all tool_use blocks to understand the structure
+      if (toolBlock.type === 'tool_use') {
+        console.log(
+          `[StreamJSONParser] tool_use detected: name="${toolBlock.name}", id="${toolBlock.id}"`
+        );
+        if (toolBlock.input) {
+          console.log(`[StreamJSONParser] tool_use input keys:`, Object.keys(toolBlock.input));
+        }
+      }
+      if (toolBlock.type === 'tool_use' && toolBlock.name === 'Task') {
+        console.log(`[StreamJSONParser] Task tool detected! Creating subagent event`);
+        const event: SubagentStartedEvent = {
+          id: toolBlock.id,
+          description: toolBlock.input?.description || 'Unknown task',
+          prompt: toolBlock.input?.prompt || '',
+          subagentType: toolBlock.input?.subagent_type || 'general-purpose',
+        };
+        this.emit('subagent_started', event);
+      }
+    }
+  }
+
+  /**
+   * Detect when a subagent completes (tool_result for a Task tool call)
+   * Note: We emit this for ALL tool_results so the tracker can match them
+   */
+  private detectSubagentCompletion(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    for (const block of message.message.content) {
+      const resultBlock = block as ToolResultBlock;
+      if (resultBlock.type === 'tool_result') {
+        // Extract result content
+        let resultText: string;
+        if (typeof resultBlock.content === 'string') {
+          resultText = resultBlock.content;
+        } else if (Array.isArray(resultBlock.content)) {
+          resultText = resultBlock.content
+            .filter((item) => item.type === 'text' && item.text)
+            .map((item) => item.text)
+            .join('\n');
+        } else {
+          resultText = '';
+        }
+
+        const event: SubagentCompletedEvent = {
+          id: resultBlock.tool_use_id,
+          result: resultText,
+          isError: resultBlock.is_error || false,
+        };
+        this.emit('subagent_completed', event);
       }
     }
   }

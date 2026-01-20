@@ -64,6 +64,9 @@ export class DataStore {
     // Migration: Add preferredShell column if it doesn't exist
     this.migrateAddPreferredShell();
 
+    // Migration: Add enableMcp column if it doesn't exist
+    this.migrateAddEnableMcp();
+
     // Create index on path for faster lookups
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path)
@@ -165,10 +168,12 @@ export class DataStore {
     const existingCluster = this.db.prepare('SELECT * FROM cluster_config WHERE id = 1').get();
     if (!existingCluster) {
       const generatedNodeId = randomUUID();
-      this.db.exec(`
-        INSERT INTO cluster_config (id, enabled, role, nodeId, nodeName, primaryHost, primaryPort, sharedSecret)
-        VALUES (1, 0, 'standalone', '${generatedNodeId}', 'My Computer', '', 3847, '')
-      `);
+      this.db
+        .prepare(
+          `INSERT INTO cluster_config (id, enabled, role, nodeId, nodeName, primaryHost, primaryPort, sharedSecret)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(1, 0, 'standalone', generatedNodeId, 'My Computer', '', 3847, '');
     }
 
     // Create app_settings table for persistent settings like JWT secret
@@ -190,10 +195,9 @@ export class DataStore {
     // Insert default security config if not exists
     const existingSecurity = this.db.prepare('SELECT * FROM security_config WHERE id = 1').get();
     if (!existingSecurity) {
-      this.db.exec(`
-        INSERT INTO security_config (id, config)
-        VALUES (1, '${JSON.stringify(DEFAULT_SECURITY_CONFIG)}')
-      `);
+      this.db
+        .prepare(`INSERT INTO security_config (id, config) VALUES (?, ?)`)
+        .run(1, JSON.stringify(DEFAULT_SECURITY_CONFIG));
     }
 
     // Create ip_access_rules table
@@ -271,7 +275,8 @@ export class DataStore {
 
       if (!hasColumn) {
         // Add column with current hostname as default for existing projects
-        const currentHostname = hostname();
+        // Sanitize hostname to prevent SQL injection (escape single quotes)
+        const currentHostname = hostname().replace(/'/g, "''");
         this.db.exec(`ALTER TABLE projects ADD COLUMN hostname TEXT DEFAULT '${currentHostname}'`);
       }
     } catch (error) {
@@ -297,6 +302,21 @@ export class DataStore {
     }
   }
 
+  private migrateAddEnableMcp(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'enableMcp'
+      );
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN enableMcp INTEGER DEFAULT 0');
+      }
+    } catch (error) {
+      console.warn('Migration enableMcp:', error);
+    }
+  }
+
   // Project CRUD operations
   createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Project {
     const now = Date.now();
@@ -309,14 +329,15 @@ export class DataStore {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, createdAt, updatedAt)
-      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @createdAt, @updatedAt)
+      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, enableMcp, createdAt, updatedAt)
+      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @enableMcp, @createdAt, @updatedAt)
     `);
 
     stmt.run({
       ...project,
       skipPermissions: project.skipPermissions ? 1 : 0,
       preferredShell: project.preferredShell ?? null,
+      enableMcp: project.enableMcp ? 1 : 0,
     });
     return project;
   }
@@ -331,7 +352,7 @@ export class DataStore {
       UPDATE projects
       SET name = @name, path = @path, description = @description,
           color = @color, hostname = @hostname, skipPermissions = @skipPermissions,
-          preferredShell = @preferredShell, updatedAt = @updatedAt
+          preferredShell = @preferredShell, enableMcp = @enableMcp, updatedAt = @updatedAt
       WHERE id = @id
     `);
 
@@ -344,6 +365,7 @@ export class DataStore {
       hostname: updatedProject.hostname ?? null,
       skipPermissions: updatedProject.skipPermissions ? 1 : 0,
       preferredShell: updatedProject.preferredShell ?? null,
+      enableMcp: updatedProject.enableMcp ? 1 : 0,
       updatedAt: updatedProject.updatedAt,
     });
     if (result.changes === 0) {
@@ -374,6 +396,7 @@ export class DataStore {
       hostname: row.hostname as string | undefined,
       skipPermissions: row.skipPermissions === 1,
       preferredShell: row.preferredShell as string | undefined,
+      enableMcp: row.enableMcp === 1,
       createdAt: row.createdAt as number,
       updatedAt: row.updatedAt as number,
     };

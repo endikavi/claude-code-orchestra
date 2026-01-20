@@ -172,6 +172,8 @@ Orchestra reads configuration from:
 
 - [Architecture](./docs/architecture.md)
 - [Features](./docs/features.md)
+- [Headless/Server Deployment](./docs/headless-deployment.md)
+- [Remote Access](./docs/remote-access.md)
 - [Roadmap](./docs/roadmap.md)
 
 ## Reporting Issues

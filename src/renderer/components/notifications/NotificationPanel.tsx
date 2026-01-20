@@ -27,7 +27,7 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
 
   useEffect(() => {
     if (isOpen) {
-      loadNotifications();
+      void loadNotifications();
     }
   }, [isOpen, loadNotifications]);
 

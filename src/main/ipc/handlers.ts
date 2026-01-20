@@ -38,6 +38,7 @@ import { getSkillManager } from '../services/SkillManager';
 import { getPermissionManager } from '../services/PermissionManager';
 import { getMetricsService } from '../services/MetricsService';
 import { getGitStatusManager } from '../services/GitStatusManager';
+import { getSubagentTracker } from '../services/SubagentTracker';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   const dataStore = DataStore.getInstance();
@@ -837,6 +838,17 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_CHANNELS.GIT_REFRESH, async (_event, projectId: string) => {
     return gitStatusManager.refresh(projectId);
+  });
+
+  // ==================== Subagent Handlers (Native Claude Task Tool Tracking) ====================
+  const subagentTracker = getSubagentTracker();
+
+  ipcMain.handle(IPC_CHANNELS.SUBAGENT_GET_BY_INSTANCE, (_event, instanceId: string) => {
+    return subagentTracker.getSubagents(instanceId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SUBAGENT_GET_ALL, () => {
+    return subagentTracker.getAllSubagents();
   });
 
   // External terminal handler (legacy)

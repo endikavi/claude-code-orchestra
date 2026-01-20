@@ -1,0 +1,17 @@
+{
+  "server": {
+    "port": 3847,
+    "password": "your-secure-password-here",
+    "allowAnyCors": false
+  },
+  "cluster": {
+    "role": "standalone",
+    "nodeName": "Orchestra-Server-1",
+    "primaryHost": "192.168.1.100",
+    "primaryPort": 3848,
+    "sharedSecret": "your-cluster-shared-secret"
+  },
+  "paths": {
+    "dataDir": "/var/lib/claude-orchestra"
+  }
+}

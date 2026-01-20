@@ -1,10 +1,18 @@
-import { app } from 'electron';
 import { join } from 'path';
 import { homedir } from 'os';
+import {
+  getUserDataPath as getProviderUserDataPath,
+  isElectronAvailable,
+  isHeadlessMode,
+  setUserDataPath,
+} from './pathProvider';
+
+// Re-export from pathProvider for backward compatibility
+export { isElectronAvailable, isHeadlessMode, setUserDataPath };
 
 // Get the user data directory for the app
 export function getUserDataPath(): string {
-  return app.getPath('userData');
+  return getProviderUserDataPath();
 }
 
 // Get the database file path

@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
+    "declaration": false,
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist/cli",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@main/*": ["src/main/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  },
+  "include": [
+    "src/main/cli/**/*",
+    "src/main/services/**/*",
+    "src/main/utils/**/*",
+    "src/main/ipc/channels.ts",
+    "src/main/ipc/validators.ts",
+    "src/shared/**/*"
+  ],
+  "exclude": [
+    "src/main/index.ts",
+    "src/main/preload.ts",
+    "src/main/ipc/handlers.ts",
+    "src/main/services/UISettingsStore.ts",
+    "src/renderer/**/*",
+    "src/web/**/*",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/test/**"
+  ]
+}

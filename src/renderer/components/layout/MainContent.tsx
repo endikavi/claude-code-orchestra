@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
@@ -14,14 +13,12 @@ import { InstanceTabs } from '../instances/InstanceTabs';
 import { TerminalView } from '../terminal/TerminalView';
 import { ShellTerminalView } from '../terminal/ShellTerminalView';
 import { StructuredView } from '../structured/StructuredView';
-import { EmptyState } from '../common/EmptyState';
 import { ConversationHistory } from '../conversations/ConversationHistory';
 import { ConversationViewer } from '../conversations/ConversationViewer';
 import { MobileKeyboard } from '../terminal/MobileKeyboard';
-import { ModeToggleButton } from '../terminal/ModeToggleButton';
+import { OrchestraView } from '../orchestration/OrchestraView';
 
 export function MainContent() {
-  const { t } = useTranslation();
   const { selectedProjectId } = useProjectStore();
   const {
     instances: allInstances,
@@ -32,7 +29,6 @@ export function MainContent() {
   const { globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { viewingConversation } = useConversationStore();
   const {
-    viewMode,
     showProjectModal,
     showInstanceModal,
     showSettingsModal,
@@ -62,16 +58,21 @@ export function MainContent() {
 
     return local;
     // Note: allInstances is included to trigger recalculation when instances change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances, allInstances]);
 
   const hasInstances = projectInstances.length > 0;
-  const isViewingHistory = viewMode === 'structured' && viewingConversation !== null;
+
+  // View mode for instances - always terminal for interactive use
+  const effectiveViewMode = 'terminal';
+
+  const isViewingHistory = viewingConversation !== null;
 
   return (
     <main className="flex-1 flex flex-col bg-claude-cream dark:bg-gray-900 overflow-hidden">
       {selectedProjectId ? (
         <>
-          {/* Instance tabs - hide when viewing history in structured mode */}
+          {/* Header with tabs */}
           {!isViewingHistory && <InstanceTabs />}
 
           {/* Main content area */}
@@ -82,7 +83,7 @@ export function MainContent() {
               // Shell is selected - always show terminal view for shell
               <ShellTerminalView key={selectedShellId} shellId={selectedShellId} />
             ) : hasInstances && selectedInstanceId ? (
-              viewMode === 'terminal' ? (
+              effectiveViewMode === 'terminal' ? (
                 <TerminalView key={selectedInstanceId} instanceId={selectedInstanceId} />
               ) : (
                 <StructuredView key={selectedInstanceId} instanceId={selectedInstanceId} />
@@ -96,25 +97,14 @@ export function MainContent() {
           </div>
         </>
       ) : (
-        <EmptyState
-          icon={<FolderEmptyIcon />}
-          title={t('emptyState.noProjectSelected')}
-          description={t('emptyState.selectProject')}
-          action={{
-            label: t('project.addProject'),
-            onClick: () => setShowProjectModal(true),
-          }}
-        />
+        // Home view: Orchestra dashboard (subagent tracking)
+        <OrchestraView />
       )}
 
       {/* Modals */}
       {showProjectModal && <ProjectModal onClose={() => setShowProjectModal(false)} />}
       {showInstanceModal && selectedProjectId && (
-        <InstanceModal
-          projectId={selectedProjectId}
-          viewMode={viewMode}
-          onClose={() => setShowInstanceModal(false)}
-        />
+        <InstanceModal projectId={selectedProjectId} onClose={() => setShowInstanceModal(false)} />
       )}
       {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
       {showLocalSettingsModal && localSettingsProjectPath && (
@@ -124,34 +114,11 @@ export function MainContent() {
         />
       )}
 
-      {/* Mode toggle button for Claude instances (mobile only) */}
-      {selectedInstanceId && viewMode === 'terminal' && !selectedShellId && isMobile && (
-        <ModeToggleButton instanceId={selectedInstanceId} />
-      )}
-
       {/* Mobile keyboard for terminal interaction */}
-      {isMobile && selectedInstanceId && viewMode === 'terminal' && !selectedShellId && (
+      {isMobile && selectedInstanceId && effectiveViewMode === 'terminal' && !selectedShellId && (
         <MobileKeyboard instanceId={selectedInstanceId} />
       )}
       {/* Note: Shell terminals use direct input, no mobile keyboard needed */}
     </main>
-  );
-}
-
-function FolderEmptyIcon() {
-  return (
-    <svg
-      className="w-16 h-16 text-gray-400 dark:text-gray-600"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-      />
-    </svg>
   );
 }

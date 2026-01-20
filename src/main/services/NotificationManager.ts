@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
-import { Notification, BrowserWindow } from 'electron';
+import { isElectronAvailable } from '../utils/paths';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   type DashboardNotification,
@@ -13,6 +13,24 @@ import {
   type HookNotificationInput,
 } from '@shared/types';
 import { DataStore } from './DataStore';
+
+// BrowserWindow type for optional Electron dependency
+type BrowserWindowType = import('electron').BrowserWindow;
+
+// Lazy load Electron Notification class
+// Returns the Notification constructor or null if not available
+function getElectronNotification(): typeof import('electron').Notification | null {
+  if (!isElectronAvailable()) {
+    return null;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Notification } = require('electron');
+    return Notification;
+  } catch {
+    return null;
+  }
+}
 
 // Max notifications to keep in memory
 const MAX_NOTIFICATIONS = 500;
@@ -28,7 +46,7 @@ export class NotificationManager extends EventEmitter {
   private notifications: Map<string, DashboardNotification> = new Map();
   private preferences: NotificationPreferences;
   private cleanupInterval: NodeJS.Timeout | null = null;
-  private mainWindow: BrowserWindow | null = null;
+  private mainWindow: BrowserWindowType | null = null;
 
   // Deduplication cache: key -> timestamp of last notification
   private recentNotifications: Map<string, number> = new Map();
@@ -49,7 +67,7 @@ export class NotificationManager extends EventEmitter {
   /**
    * Set the main window for IPC communication
    */
-  public setMainWindow(window: BrowserWindow): void {
+  public setMainWindow(window: BrowserWindowType): void {
     this.mainWindow = window;
   }
 
@@ -333,12 +351,20 @@ export class NotificationManager extends EventEmitter {
    * Show a native OS notification
    */
   private showNativeNotification(notification: DashboardNotification): void {
-    if (!Notification.isSupported()) {
+    const ElectronNotification = getElectronNotification();
+
+    // Skip native notifications in headless mode
+    if (!ElectronNotification) {
+      console.log('[NotificationManager] Native notifications not available in headless mode');
+      return;
+    }
+
+    if (!ElectronNotification.isSupported()) {
       console.log('[NotificationManager] Native notifications not supported');
       return;
     }
 
-    const nativeNotification = new Notification({
+    const nativeNotification = new ElectronNotification({
       title: notification.title,
       body: notification.message,
       urgency: notification.priority === 'urgent' ? 'critical' : 'normal',

@@ -30,13 +30,13 @@ export function PermissionRulesPanel() {
   const [activeTab, setActiveTab] = useState<'rules' | 'log'>('rules');
 
   useEffect(() => {
-    loadConfig();
-    loadStats();
+    void loadConfig();
+    void loadStats();
   }, [loadConfig, loadStats]);
 
   useEffect(() => {
     if (activeTab === 'log') {
-      loadLog({ limit: 50 });
+      void loadLog({ limit: 50 });
     }
   }, [activeTab, loadLog]);
 

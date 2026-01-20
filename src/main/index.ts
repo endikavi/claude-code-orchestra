@@ -98,10 +98,10 @@ app
 
     // Auto-start cluster if it was enabled
     const clusterConfig = dataStore.getClusterConfig();
-    if (clusterConfig.enabled && clusterConfig.role !== 'standalone') {
+    if (clusterConfig.enabled && clusterConfig.role !== 'standalone' && mainWindow) {
       try {
         const clusterManager = getClusterManager();
-        clusterManager.setMainWindow(mainWindow!);
+        clusterManager.setMainWindow(mainWindow);
         await clusterManager.start();
         console.log(`[Main] Cluster auto-started as ${clusterConfig.role}`);
       } catch (error) {

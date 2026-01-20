@@ -14,8 +14,6 @@ export function TitleBar() {
   const {
     theme,
     toggleTheme,
-    viewMode,
-    toggleViewMode,
     setShowSettingsModal,
     setSidebarMobileOpen,
     toggleSidebar,
@@ -87,29 +85,6 @@ export function TitleBar() {
 
       {/* Center controls */}
       <div className="flex items-center gap-1 sm:gap-2 no-drag">
-        {/* View mode toggle */}
-        <button
-          onClick={toggleViewMode}
-          className="px-2 sm:px-3 py-1 text-xs rounded-md bg-claude-tan/30 dark:bg-gray-700 hover:bg-claude-tan/50 dark:hover:bg-gray-600 transition-colors flex items-center gap-1 sm:gap-2"
-          title={
-            viewMode === 'terminal'
-              ? t('titleBar.switchToStructured')
-              : t('titleBar.switchToTerminal')
-          }
-        >
-          {viewMode === 'terminal' ? (
-            <>
-              <TerminalIcon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t('titleBar.terminal')}</span>
-            </>
-          ) : (
-            <>
-              <GridIcon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t('titleBar.structured')}</span>
-            </>
-          )}
-        </button>
-
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
@@ -181,32 +156,6 @@ export function TitleBar() {
 }
 
 // Icons
-function TerminalIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-      />
-    </svg>
-  );
-}
-
-function GridIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-      />
-    </svg>
-  );
-}
-
 function SunIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">

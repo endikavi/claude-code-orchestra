@@ -250,7 +250,7 @@ export class GitStatusManager {
         windowsHide: true,
       });
       return stdout.trim();
-    } catch (error) {
+    } catch {
       // Return empty string on error (e.g., no commits yet, no upstream)
       return '';
     }

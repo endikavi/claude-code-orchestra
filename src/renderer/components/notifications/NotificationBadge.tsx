@@ -9,7 +9,7 @@ export function NotificationBadge({ onClick }: NotificationBadgeProps) {
   const { stats, loadStats, setupListeners, cleanup } = useNotificationStore();
 
   useEffect(() => {
-    loadStats();
+    void loadStats();
     setupListeners();
 
     return () => {

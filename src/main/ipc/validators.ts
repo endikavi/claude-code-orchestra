@@ -128,6 +128,7 @@ export const validators = {
       description: typeof obj.description === 'string' ? obj.description : undefined,
       color: typeof obj.color === 'string' ? obj.color : undefined,
       skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
+      enableMcp: typeof obj.enableMcp === 'boolean' ? obj.enableMcp : undefined,
     };
   },
 
@@ -164,6 +165,7 @@ export const validators = {
       color: typeof obj.color === 'string' ? obj.color : undefined,
       hostname: typeof obj.hostname === 'string' ? obj.hostname : undefined,
       skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
+      enableMcp: typeof obj.enableMcp === 'boolean' ? obj.enableMcp : undefined,
       preferredShell: typeof obj.preferredShell === 'string' ? obj.preferredShell : undefined,
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
@@ -189,6 +191,7 @@ export const validators = {
     mode: InstanceMode;
     prompt?: string;
     planMode?: boolean;
+    isDirector?: boolean;
   } {
     if (!data || typeof data !== 'object') {
       throw new IpcValidationError('instance:create', 'Invalid instance config');
@@ -220,6 +223,7 @@ export const validators = {
       mode: obj.mode,
       prompt: typeof obj.prompt === 'string' ? obj.prompt : undefined,
       planMode: obj.planMode === true,
+      isDirector: obj.isDirector === true,
     };
   },
 

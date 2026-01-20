@@ -56,3 +56,6 @@ coverage/
 
 # Claude Code local config
 .claude/
+
+# MCP configuration (contains instance-specific tokens)
+.mcp.json

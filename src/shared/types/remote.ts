@@ -1,4 +1,11 @@
-import type { Project, ClaudeInstance, Conversation, StreamMessage, InstanceStatus } from './index';
+import type {
+  Project,
+  ClaudeInstance,
+  Conversation,
+  StreamMessage,
+  InstanceStatus,
+  SubagentInstance,
+} from './index';
 
 // Remote access configuration
 export interface RemoteConfig {
@@ -52,6 +59,9 @@ export interface ServerToClientEvents {
   }) => void;
   'sync:state': (state: SyncState) => void;
   'session:kicked': (reason: string) => void;
+  // Subagent events (native Claude Task tool tracking)
+  'subagent:started': (data: { instanceId: string; subagent: SubagentInstance }) => void;
+  'subagent:completed': (data: { instanceId: string; subagent: SubagentInstance }) => void;
 }
 
 // WebSocket events (Client -> Server)

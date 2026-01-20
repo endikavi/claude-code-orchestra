@@ -3,8 +3,10 @@ import { createServer, Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket as ServerSocket } from 'socket.io';
 import { io, Socket as ClientSocket } from 'socket.io-client';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { BrowserWindow } from 'electron';
 import { networkInterfaces } from 'os';
+
+// BrowserWindow type for optional Electron dependency
+type BrowserWindowType = import('electron').BrowserWindow;
 
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
@@ -119,7 +121,7 @@ export class ClusterManager extends EventEmitter {
   private static instance: ClusterManager | null = null;
 
   private dataStore: DataStore;
-  private mainWindow: BrowserWindow | null = null;
+  private mainWindow: BrowserWindowType | null = null;
 
   // State
   private nodes: Map<string, ClusterNode> = new Map();
@@ -175,7 +177,7 @@ export class ClusterManager extends EventEmitter {
   /**
    * Set the main window for IPC communication
    */
-  public setMainWindow(window: BrowserWindow): void {
+  public setMainWindow(window: BrowserWindowType): void {
     this.mainWindow = window;
   }
 

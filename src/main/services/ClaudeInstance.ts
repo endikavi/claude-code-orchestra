@@ -1,8 +1,13 @@
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { StreamJSONParser } from './StreamJSONParser';
 import { DataStore } from './DataStore';
+import { getWebServer } from './WebServer';
+import { getSubagentTracker } from './SubagentTracker';
+import { getUserDataPath } from '../utils/paths';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ClaudeModel,
@@ -10,7 +15,81 @@ import type {
   InstanceStatus,
   StreamMessage,
 } from '@shared/types';
+import type { SubagentStartedEvent, SubagentCompletedEvent } from '@shared/types/orchestration';
 import { randomUUID } from 'crypto';
+
+// MCP Bridge script content (embedded to avoid path issues in packaged app)
+const MCP_BRIDGE_SCRIPT = `#!/usr/bin/env node
+const http = require('http');
+const readline = require('readline');
+
+const MCP_URL = process.env.ORCHESTRA_MCP_URL || 'http://localhost:3847/mcp';
+const MCP_TOKEN = process.env.ORCHESTRA_MCP_TOKEN || '';
+const url = new URL(MCP_URL);
+
+function sendRequest(request) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify(request);
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 80,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'X-Instance-Token': MCP_TOKEN,
+      },
+    };
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error('Invalid JSON: ' + data)); }
+      });
+    });
+    req.on('error', reject);
+    req.write(postData);
+    req.end();
+  });
+}
+
+function writeResponse(response) {
+  process.stdout.write(JSON.stringify(response) + '\\n');
+}
+
+function handleInitialize(request) {
+  return {
+    jsonrpc: '2.0',
+    id: request.id,
+    result: {
+      protocolVersion: '2024-11-05',
+      capabilities: { tools: {} },
+      serverInfo: { name: 'orchestra', version: '1.0.0' },
+    },
+  };
+}
+
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+rl.on('line', async (line) => {
+  if (!line.trim()) return;
+  try {
+    const request = JSON.parse(line);
+    if (request.method === 'initialize') { writeResponse(handleInitialize(request)); return; }
+    if (request.method === 'notifications/initialized') return;
+    try {
+      const response = await sendRequest(request);
+      writeResponse(response);
+    } catch (error) {
+      writeResponse({ jsonrpc: '2.0', id: request.id, error: { code: -32603, message: error.message } });
+    }
+  } catch (e) {
+    writeResponse({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+  }
+});
+rl.on('close', () => process.exit(0));
+`;
 
 // Cache for Claude CLI path
 let cachedClaudePath: string | null = null;
@@ -22,9 +101,6 @@ function findClaudePath(): string {
   if (cachedClaudePath) {
     return cachedClaudePath;
   }
-
-  const fs = require('fs');
-  const path = require('path');
 
   // On Windows, check common npm global installation paths first
   if (process.platform === 'win32') {
@@ -93,6 +169,7 @@ export interface ClaudeInstanceConfig {
   skipPermissions?: boolean;
   resumeSessionId?: string; // For --resume flag
   planMode?: boolean; // For --plan flag
+  enableMcp?: boolean; // Enable MCP server integration
 }
 
 export class ClaudeInstance extends EventEmitter {
@@ -105,8 +182,10 @@ export class ClaudeInstance extends EventEmitter {
   public readonly skipPermissions: boolean;
   public readonly resumeSessionId?: string;
   public readonly planMode: boolean;
+  public readonly enableMcp: boolean;
 
   private ptyProcess: pty.IPty | null = null;
+  private mcpToken?: string; // Token for MCP authentication
   private parser: StreamJSONParser;
   private _status: InstanceStatus = 'starting';
   private _error?: string;
@@ -129,6 +208,7 @@ export class ClaudeInstance extends EventEmitter {
     this.skipPermissions = config.skipPermissions ?? false;
     this.resumeSessionId = config.resumeSessionId;
     this.planMode = config.planMode ?? false;
+    this.enableMcp = config.enableMcp ?? false;
     this.createdAt = Date.now();
 
     this.parser = new StreamJSONParser();
@@ -168,6 +248,29 @@ export class ClaudeInstance extends EventEmitter {
 
     this.parser.on('thinking', (text: string) => {
       this.emit('thinking', text);
+    });
+
+    // Subagent tracking (native Claude Task tool)
+    this.parser.on('subagent_started', (data: SubagentStartedEvent) => {
+      console.log(`[ClaudeInstance ${this.id}] subagent_started event received:`, data);
+      const tracker = getSubagentTracker();
+      const subagent = tracker.startSubagent(this.id, data);
+      console.log(
+        `[ClaudeInstance ${this.id}] Emitting subagent:started for subagent ${subagent.id}`
+      );
+      this.emit('subagent:started', { instanceId: this.id, subagent });
+    });
+
+    this.parser.on('subagent_completed', (data: SubagentCompletedEvent) => {
+      console.log(`[ClaudeInstance ${this.id}] subagent_completed event received:`, data);
+      const tracker = getSubagentTracker();
+      const subagent = tracker.completeSubagent(this.id, data);
+      if (subagent) {
+        console.log(
+          `[ClaudeInstance ${this.id}] Emitting subagent:completed for subagent ${subagent.id}`
+        );
+        this.emit('subagent:completed', { instanceId: this.id, subagent });
+      }
     });
   }
 
@@ -240,9 +343,114 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
+   * Setup MCP configuration for this instance (synchronous)
+   * Generates a token and registers it with the MCP server
+   */
+  private setupMcpConfiguration(): void {
+    console.log(`[ClaudeInstance] setupMcpConfiguration called, enableMcp=${this.enableMcp}`);
+
+    if (!this.enableMcp) {
+      console.log(`[ClaudeInstance] MCP disabled for this instance, skipping setup`);
+      return;
+    }
+
+    console.log(`[ClaudeInstance] Setting up MCP for instance ${this.id}`);
+    const dataStore = DataStore.getInstance();
+    const remoteConfig = dataStore.getRemoteConfig();
+    const apiUrl = `http://localhost:${remoteConfig.port}`;
+
+    // Generate unique token for this instance
+    this.mcpToken = randomUUID();
+
+    // Register token with MCP server
+    const webServer = getWebServer();
+    webServer.registerMcpToken(this.mcpToken, {
+      instanceId: this.id,
+      projectId: this.projectId,
+      projectPath: this.projectPath,
+      instanceToken: this.mcpToken,
+    });
+
+    // Write MCP configuration to project's .mcp.json (Claude Code reads MCP from here)
+    // Note: Claude Code only reads MCP servers from .mcp.json (project root) or ~/.claude.json (user home)
+    // It does NOT read from .claude/settings.json
+    const mcpConfigPath = path.join(this.projectPath, '.mcp.json');
+
+    try {
+      // Read existing .mcp.json or create new
+      let mcpConfig: Record<string, unknown> = {};
+      if (fs.existsSync(mcpConfigPath)) {
+        try {
+          const content = fs.readFileSync(mcpConfigPath, 'utf-8');
+          mcpConfig = JSON.parse(content);
+        } catch {
+          // Invalid JSON, start fresh
+          mcpConfig = {};
+        }
+      }
+
+      // Ensure mcpServers object exists
+      if (!mcpConfig.mcpServers || typeof mcpConfig.mcpServers !== 'object') {
+        mcpConfig.mcpServers = {};
+      }
+
+      // Add Orchestra MCP server configuration
+      // Write bridge script to userData directory
+      const bridgePath = path.join(getUserDataPath(), 'mcp-bridge.js');
+      if (!fs.existsSync(bridgePath)) {
+        fs.writeFileSync(bridgePath, MCP_BRIDGE_SCRIPT, 'utf-8');
+        console.log(`[ClaudeInstance] MCP bridge script written to ${bridgePath}`);
+      }
+
+      const mcpServers = mcpConfig.mcpServers as Record<string, unknown>;
+      mcpServers['orchestra'] = {
+        command: 'node',
+        args: [bridgePath],
+        env: {
+          ORCHESTRA_MCP_TOKEN: this.mcpToken,
+          ORCHESTRA_MCP_URL: `${apiUrl}/mcp`,
+        },
+      };
+
+      // Write .mcp.json back
+      fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), 'utf-8');
+      console.log(`[ClaudeInstance] MCP configuration written to ${mcpConfigPath}`);
+    } catch (error) {
+      console.error('[ClaudeInstance] Failed to write MCP configuration:', error);
+    }
+  }
+
+  /**
+   * Cleanup MCP resources when instance terminates
+   */
+  private cleanupMcpResources(): void {
+    if (this.mcpToken) {
+      try {
+        const webServer = getWebServer();
+        webServer.unregisterMcpToken(this.mcpToken);
+        console.log(`[ClaudeInstance] Unregistered MCP token for instance ${this.id}`);
+      } catch (error) {
+        console.error('[ClaudeInstance] Failed to unregister MCP token:', error);
+      }
+    }
+  }
+
+  /**
    * Start the Claude CLI process
    */
   start(): void {
+    // Log instance details for debugging
+    console.log(`[ClaudeInstance] Starting instance ${this.id}`);
+    console.log(`[ClaudeInstance]   mode: ${this.mode}`);
+    console.log(
+      `[ClaudeInstance]   prompt: ${this.prompt ? this.prompt.substring(0, 100) + '...' : '(none)'}`
+    );
+
+    // Setup MCP configuration if enabled (must complete before starting Claude)
+    if (this.enableMcp) {
+      this.setupMcpConfiguration();
+    }
+
     const args = this.buildArgs();
     const claudePath = findClaudePath();
 
@@ -275,22 +483,34 @@ export class ClaudeInstance extends EventEmitter {
       // Use full process.env to ensure PATH includes Node.js and other required tools
       // The claude.cmd script needs node to be available
       // Also inject dashboard environment variables for hooks integration
+      const apiUrl = `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`;
+
+      // Build environment variables
+      const envVars: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        FORCE_COLOR: '1',
+        TERM: 'xterm-256color',
+        // Dashboard integration environment variables
+        // These are used by hook scripts to communicate with the dashboard
+        CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
+        CLAUDE_DASHBOARD_PROJECT_ID: this.projectId,
+        CLAUDE_DASHBOARD_PROJECT_PATH: this.projectPath,
+        CLAUDE_DASHBOARD_API_URL: apiUrl,
+      };
+
+      // Add MCP-specific environment variables if enabled
+      if (this.enableMcp && this.mcpToken) {
+        envVars.ORCHESTRA_MCP_ENABLED = 'true';
+        envVars.ORCHESTRA_MCP_TOKEN = this.mcpToken;
+        envVars.ORCHESTRA_MCP_URL = `${apiUrl}/mcp`;
+      }
+
       this.ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
         cwd: this.projectPath,
-        env: {
-          ...process.env,
-          FORCE_COLOR: '1',
-          TERM: 'xterm-256color',
-          // Dashboard integration environment variables
-          // These are used by hook scripts to communicate with the dashboard
-          CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
-          CLAUDE_DASHBOARD_PROJECT_ID: this.projectId,
-          CLAUDE_DASHBOARD_PROJECT_PATH: this.projectPath,
-          CLAUDE_DASHBOARD_API_URL: `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`,
-        } as Record<string, string>,
+        env: envVars,
       });
 
       this._status = 'starting';
@@ -325,6 +545,12 @@ export class ClaudeInstance extends EventEmitter {
         // Clean up idle timer
         this.clearIdleTimer();
 
+        // Clean up MCP resources
+        this.cleanupMcpResources();
+
+        // Note: We don't clear subagents on exit - they remain for UI display
+        // They will be cleared when the instance is explicitly killed or removed
+
         this.parser.flush();
 
         if (exitCode === 0) {
@@ -339,14 +565,20 @@ export class ClaudeInstance extends EventEmitter {
         this.ptyProcess = null;
       });
 
-      // For stream-json mode, send the initial prompt via stdin after a short delay
+      // For stream-json mode, send the initial prompt via stdin after a delay
       // This allows Claude to initialize before receiving input
       if (this.mode === 'stream-json' && this.prompt) {
+        console.log(
+          `[ClaudeInstance] Will send prompt after delay: ${this.prompt.substring(0, 100)}...`
+        );
         setTimeout(() => {
           if (this.ptyProcess) {
+            console.log(`[ClaudeInstance] Sending prompt to instance ${this.id}`);
             this.sendInput(this.prompt + '\r');
+          } else {
+            console.log(`[ClaudeInstance] ptyProcess is null, cannot send prompt`);
           }
-        }, 500);
+        }, 1500); // Increased delay to ensure Claude is ready
       }
     } catch (error) {
       this._status = 'error';
@@ -477,6 +709,13 @@ export class ClaudeInstance extends EventEmitter {
   kill(): void {
     // Clean up idle timer
     this.clearIdleTimer();
+
+    // Clean up MCP resources
+    this.cleanupMcpResources();
+
+    // Clean up subagent tracking
+    const tracker = getSubagentTracker();
+    tracker.clearSubagents(this.id);
 
     if (this.ptyProcess) {
       this._status = 'killed';

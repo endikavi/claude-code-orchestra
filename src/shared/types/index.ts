@@ -47,6 +47,7 @@ export interface Project {
   hostname?: string; // Machine hostname where project is located
   skipPermissions?: boolean; // Launch instances with --dangerously-skip-permissions
   preferredShell?: string; // Preferred shell path for terminal instances
+  enableMcp?: boolean; // Enable MCP server integration for Claude instances
   createdAt: number;
   updatedAt: number;
 }
@@ -273,6 +274,9 @@ export * from './permissions';
 
 // Re-export metrics types
 export * from './metrics';
+
+// Re-export orchestration types
+export * from './orchestration';
 
 // Git status types
 export interface GitStatus {

@@ -4,49 +4,49 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import cors from 'cors';
 import { join } from 'path';
 import { networkInterfaces } from 'os';
-import { app as electronApp } from 'electron';
 import { EventEmitter } from 'events';
+import { isElectronAvailable, isHeadlessMode } from '../utils/paths';
+
+// Lazy load Electron app to support headless mode
+function getElectronApp(): { isPackaged: boolean; getPath: (name: string) => string } | null {
+  if (!isElectronAvailable()) {
+    return null;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron');
+    return app;
+  } catch {
+    return null;
+  }
+}
 
 import { getAuthService } from './AuthService';
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
 import { getClusterManager } from './ClusterManager';
 import { getAuditLogger } from './AuditLogger';
-import { getFileLockManager } from './FileLockManager';
-import { validators, IpcValidationError } from '../ipc/validators';
+import { getStateSyncManager } from './managers/StateSyncManager';
+import { McpServer } from './mcp/McpServer';
+import { MetricsService } from './MetricsService';
+import { GitStatusManager } from './GitStatusManager';
+import type { McpRequest, McpToolContext } from '@shared/types/mcp';
+import {
+  createAuthRoutes,
+  createProjectRoutes,
+  createInstanceRoutes,
+  createConversationRoutes,
+  createHookRoutes,
+  type AuthenticatedRequest,
+} from './routes';
 import type {
   RemoteServerStatus,
-  LoginRequest,
-  LoginResponse,
-  ApiResponse,
   ServerToClientEvents,
   ClientToServerEvents,
   SyncState,
-  TokenPayload,
-  RemoteSession,
 } from '@shared/types/remote';
 import { DEFAULT_REMOTE_PORT } from '@shared/types/remote';
-import type {
-  ClaudeModel,
-  InstanceMode,
-  StreamMessage,
-  InstanceStatus,
-  ToolUseEvent,
-  StopEvent,
-  StatusUpdateEvent,
-  HookNotificationInput,
-  PermissionCheckRequest,
-  PermissionCheckResponse,
-} from '@shared/types';
-import { getNotificationManager } from './NotificationManager';
-import { getPermissionManager } from './PermissionManager';
-import { getMetricsService } from './MetricsService';
-
-// Extend Express Request to include session info
-interface AuthenticatedRequest extends Request {
-  session?: RemoteSession;
-  tokenPayload?: TokenPayload;
-}
+import type { StreamMessage, InstanceStatus } from '@shared/types';
 
 export class WebServer extends EventEmitter {
   private static instance: WebServer | null = null;
@@ -60,6 +60,7 @@ export class WebServer extends EventEmitter {
   private clusterStateHandler: (() => void) | null = null;
   private processManagerHandler: (() => void) | null = null;
   private mainWindow: import('electron').BrowserWindow | null = null;
+  private mcpServer: McpServer | null = null;
 
   private constructor() {
     super();
@@ -323,1159 +324,189 @@ export class WebServer extends EventEmitter {
     next();
   };
 
-  /**
-   * Extract file paths from tool input for activity tracking
-   */
-  private extractFilesFromToolInput(
-    toolName: string,
-    toolInput: Record<string, unknown> | null | undefined
-  ): string[] {
-    if (!toolInput) return [];
-
-    const files: string[] = [];
-
-    switch (toolName) {
-      case 'Write':
-      case 'Edit':
-      case 'Read':
-        if (typeof toolInput.file_path === 'string') {
-          files.push(toolInput.file_path);
-        }
-        break;
-
-      case 'Bash': {
-        // Heuristic: extract file paths from common command patterns
-        const command = toolInput.command;
-        if (typeof command === 'string') {
-          // Match common file operations: cat, grep, sed, cp, mv, rm, touch, mkdir
-          const filePattern =
-            /(?:cat|grep|sed|cp|mv|rm|touch|mkdir|ls|chmod|chown|head|tail|less|more|vi|vim|nano|code|git\s+add|git\s+rm)\s+["']?([^\s"'|><&;]+)/g;
-          let match;
-          while ((match = filePattern.exec(command)) !== null) {
-            const path = match[1];
-            // Filter out flags and common non-file arguments
-            if (
-              (path && !path.startsWith('-') && !path.startsWith('$') && path.includes('/')) ||
-              path.includes('.')
-            ) {
-              files.push(path);
-            }
-          }
-        }
-        break;
-      }
-
-      case 'Glob':
-        if (typeof toolInput.pattern === 'string') {
-          // For glob, include the pattern as a reference
-          files.push(toolInput.pattern);
-        }
-        break;
-
-      case 'NotebookEdit':
-        if (typeof toolInput.notebook_path === 'string') {
-          files.push(toolInput.notebook_path);
-        }
-        break;
-    }
-
-    return files.slice(0, 10); // Limit to 10 files
-  }
-
   private setupRoutes(): void {
-    const dataStore = DataStore.getInstance();
-    const processManager = getProcessManager();
-    const authService = getAuthService();
-
     // Health check
     this.app.get('/api/health', (_req: Request, res: Response) => {
       res.json({ success: true, status: 'ok' });
     });
 
-    // Login endpoint with IP access control
-    this.app.post('/api/auth/login', this.ipAccessMiddleware, (req: Request, res: Response) => {
-      const { password } = req.body as LoginRequest;
-      const ip = req.ip || req.socket.remoteAddress || 'unknown';
-      const auditLogger = getAuditLogger();
-
-      // Check rate limit (uses configurable settings from security config)
-      if (authService.isRateLimited(ip)) {
-        const lockout = authService.getIpLockout(ip);
-        const remaining = lockout ? Math.ceil((lockout.expiresAt - Date.now()) / 60000) : 0;
-
-        auditLogger.logFailedLogin(ip, 'Rate limited');
-
-        const response: LoginResponse = {
-          success: false,
-          error:
-            remaining > 0
-              ? `Too many attempts. Try again in ${remaining} minutes.`
-              : 'Too many attempts. Try again later.',
-        };
-        res.status(429).json(response);
-        return;
-      }
-
-      // Get remote config from datastore
-      const config = dataStore.getRemoteConfig();
-      if (!config || !config.passwordHash) {
-        const response: LoginResponse = { success: false, error: 'Remote access not configured' };
-        res.status(403).json(response);
-        return;
-      }
-
-      // Verify password
-      if (!authService.verifyPassword(password, config.passwordHash)) {
-        // Record failed attempt for rate limiting
-        const { shouldLockout, attempts } = authService.recordFailedAttempt(ip);
-        const securityConfig = authService.getSecurityConfig();
-
-        auditLogger.logFailedLogin(ip, `Invalid password (attempt ${attempts})`);
-
-        const response: LoginResponse = {
-          success: false,
-          error: shouldLockout
-            ? `Too many failed attempts. IP locked for ${securityConfig.rateLimit.lockoutMinutes} minutes.`
-            : 'Invalid password',
-        };
-        res.status(401).json(response);
-        return;
-      }
-
-      // Check max concurrent sessions before creating new session
-      const sessionCheck = authService.canCreateSession(ip);
-      if (!sessionCheck.allowed) {
-        auditLogger.logFailedLogin(ip, sessionCheck.reason || 'Max sessions reached');
-        const response: LoginResponse = { success: false, error: sessionCheck.reason };
-        res.status(403).json(response);
-        return;
-      }
-
-      // Reset rate limit on successful login
-      authService.resetRateLimit(ip);
-
-      // Create session and generate token
-      const userAgent = req.headers['user-agent'] || 'unknown';
-      const session = authService.createSession(ip, userAgent);
-      const token = authService.generateToken(session.id, ip);
-
-      // Log successful login
-      auditLogger.logLogin(ip, session.id, userAgent);
-
-      const response: LoginResponse = { success: true, token };
-      res.json(response);
-
-      // Emit event for session tracking
-      this.emit('session:created', session);
-    });
-
-    // Logout endpoint
-    this.app.post(
-      '/api/auth/logout',
-      this.authMiddleware,
-      (req: AuthenticatedRequest, res: Response) => {
-        const ip = req.ip || req.socket.remoteAddress || 'unknown';
-
-        if (req.tokenPayload) {
-          authService.deleteSession(req.tokenPayload.sessionId);
-          this.emit('session:deleted', req.tokenPayload.sessionId);
-
-          // Log logout
-          getAuditLogger().logLogout(ip, req.tokenPayload.sessionId);
-        }
-        res.json({ success: true });
-      }
+    // Auth routes
+    this.app.use(
+      '/api/auth',
+      createAuthRoutes({
+        ipAccessMiddleware: this.ipAccessMiddleware,
+        authMiddleware: this.authMiddleware,
+        emitter: this,
+      })
     );
 
-    // Get current user session
-    this.app.get(
-      '/api/auth/me',
-      this.authMiddleware,
-      (req: AuthenticatedRequest, res: Response) => {
-        res.json({ success: true, data: req.session });
-      }
+    // Project routes
+    this.app.use(
+      '/api/projects',
+      createProjectRoutes({
+        authMiddleware: this.authMiddleware,
+        broadcastStateUpdate: () => this.broadcastStateUpdate(),
+      })
     );
 
-    // ==================== Projects API ====================
-
-    this.app.get('/api/projects', this.authMiddleware, (_req: Request, res: Response) => {
-      const projects = dataStore.getAllProjects();
-      const response: ApiResponse = { success: true, data: projects };
-      res.json(response);
-    });
-
-    this.app.get('/api/projects/:id', this.authMiddleware, (req: Request, res: Response) => {
-      const project = dataStore.getProjectById(String(req.params.id));
-      if (!project) {
-        res.status(404).json({ success: false, error: 'Project not found' });
-        return;
-      }
-      res.json({ success: true, data: project });
-    });
-
-    this.app.post('/api/projects', this.authMiddleware, (req: Request, res: Response) => {
-      try {
-        const projectData = validators.projectCreate(req.body);
-        const project = dataStore.createProject(projectData);
-        res.json({ success: true, data: project });
-        this.broadcastStateUpdate();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        const status = error instanceof IpcValidationError ? 400 : 500;
-        res.status(status).json({ success: false, error: message });
-      }
-    });
-
-    this.app.put('/api/projects/:id', this.authMiddleware, (req: Request, res: Response) => {
-      try {
-        const projectData = validators.projectUpdate(req.body);
-        const project = dataStore.updateProject(projectData);
-        if (!project) {
-          res.status(404).json({ success: false, error: 'Project not found' });
-          return;
-        }
-        res.json({ success: true, data: project });
-        this.broadcastStateUpdate();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        const status = error instanceof IpcValidationError ? 400 : 500;
-        res.status(status).json({ success: false, error: message });
-      }
-    });
-
-    this.app.delete('/api/projects/:id', this.authMiddleware, (req: Request, res: Response) => {
-      try {
-        dataStore.deleteProject(String(req.params.id));
-        res.json({ success: true });
-        this.broadcastStateUpdate();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // ==================== Instances API ====================
-
-    this.app.get('/api/instances', this.authMiddleware, (req: Request, res: Response) => {
-      const projectId = req.query.projectId as string | undefined;
-      const includeOutputs = req.query.includeOutputs === 'true';
-
-      // Filter by projectId if provided
-      const instances = projectId
-        ? processManager.getInstancesByProject(projectId)
-        : processManager.getAllInstances();
-
-      if (includeOutputs) {
-        const allOutputs = processManager.getAllInstanceOutputs();
-        const allConversations = processManager.getAllInstanceConversations();
-        // Filter outputs and conversations to only include those for returned instances
-        const outputs: Record<string, unknown> = {};
-        const instanceConversations: Record<string, string> = {};
-        instances.forEach((inst) => {
-          if (allOutputs[inst.id]) {
-            outputs[inst.id] = allOutputs[inst.id];
-          }
-          if (allConversations[inst.id]) {
-            instanceConversations[inst.id] = allConversations[inst.id];
-          }
-        });
-        res.json({ success: true, data: instances, outputs, instanceConversations });
-      } else {
-        res.json({ success: true, data: instances });
-      }
-    });
-
-    this.app.get('/api/instances/:id', this.authMiddleware, (req: Request, res: Response) => {
-      const instance = processManager.getInstance(String(req.params.id));
-      if (!instance) {
-        res.status(404).json({ success: false, error: 'Instance not found' });
-        return;
-      }
-      res.json({ success: true, data: instance });
-    });
-
-    this.app.post('/api/instances', this.authMiddleware, (req: Request, res: Response) => {
-      try {
-        const { prompt, ...instanceConfig } = req.body as {
-          projectId: string;
-          model: ClaudeModel;
-          mode: InstanceMode;
-          planMode?: boolean;
-          prompt?: string;
-        };
-
-        // Validate instance configuration
-        const validatedConfig = validators.instanceCreate(instanceConfig);
-
-        // Check if this is a local project
-        const localProject = dataStore.getProjectById(validatedConfig.projectId);
-
-        if (!localProject) {
-          // Project not found locally - check if it's a cluster project
-          const cluster = getClusterManager();
-          const clusterConfig = cluster.getConfig();
-          if (clusterConfig.enabled) {
-            const globalProjects = cluster.getAllGlobalProjects();
-            const remoteProject = globalProjects.find((p) => p.id === validatedConfig.projectId);
-
-            if (remoteProject && !remoteProject.isLocal) {
-              // Create instance on the remote node
-              const remoteInstance = cluster.createInstance({
-                nodeId: remoteProject.nodeId,
-                projectId: validatedConfig.projectId,
-                model: validatedConfig.model,
-                mode: validatedConfig.mode,
-                planMode: validatedConfig.planMode,
-              });
-
-              res.json({
-                success: true,
-                data: remoteInstance || {
-                  id: 'pending',
-                  status: 'starting',
-                  projectId: validatedConfig.projectId,
-                },
-              });
-              return;
-            }
-          }
-          throw new Error(`Project with id ${validatedConfig.projectId} not found`);
-        }
-
-        // Local project - create instance locally
-        const instance = processManager.createInstance(validatedConfig);
-
-        // Create a conversation automatically for web clients
-        const conversation = dataStore.createConversation({
-          projectId: validatedConfig.projectId,
-          title: prompt
-            ? prompt.substring(0, 50) + (prompt.length > 50 ? '...' : '')
-            : `Session ${new Date().toLocaleString()}`,
-          initialPrompt: prompt || '',
-          model: validatedConfig.model,
-          mode: validatedConfig.mode,
-        });
-
-        // Store the mapping in ProcessManager for later use
-        processManager.setInstanceConversation(instance.id, conversation.id);
-
-        res.json({
-          success: true,
-          data: instance,
-          conversationId: conversation.id,
-        });
-
-        // Broadcast to all connected clients
-        this.broadcastStateUpdate();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    this.app.delete('/api/instances/:id', this.authMiddleware, (req: Request, res: Response) => {
-      const instanceId = String(req.params.id);
-
-      // Check if this is a remote instance
-      const cluster = getClusterManager();
-      const clusterConfig = cluster.getConfig();
-      if (clusterConfig.enabled) {
-        const globalInstances = cluster.getAllGlobalInstances();
-        const remoteInstance = globalInstances.find((i) => i.id === instanceId && !i.isLocal);
-        if (remoteInstance) {
-          cluster.killInstance(instanceId, remoteInstance.nodeId);
-          res.json({ success: true });
-          return;
-        }
-      }
-
-      // Local instance
-      processManager.killInstance(instanceId);
-      res.json({ success: true });
-      this.broadcastStateUpdate();
-    });
-
-    this.app.post(
-      '/api/instances/:id/input',
-      this.authMiddleware,
-      (req: Request, res: Response) => {
-        const instanceId = String(req.params.id);
-        const { input } = req.body as { input: string };
-
-        // Check if this is a remote instance
-        const cluster = getClusterManager();
-        const clusterConfig = cluster.getConfig();
-        if (clusterConfig.enabled) {
-          const globalInstances = cluster.getAllGlobalInstances();
-          const remoteInstance = globalInstances.find((i) => i.id === instanceId && !i.isLocal);
-          if (remoteInstance) {
-            cluster.sendInput(instanceId, remoteInstance.nodeId, input);
-            res.json({ success: true });
-            return;
-          }
-        }
-
-        // Local instance
-        processManager.sendInput(instanceId, input);
-        res.json({ success: true });
-      }
+    // Instance routes
+    this.app.use(
+      '/api/instances',
+      createInstanceRoutes({
+        authMiddleware: this.authMiddleware,
+        broadcastStateUpdate: () => this.broadcastStateUpdate(),
+      })
     );
 
-    this.app.post('/api/instances/resume', this.authMiddleware, (req: Request, res: Response) => {
-      try {
-        const { projectId, sessionId, model, mode } = req.body as {
-          projectId: string;
-          sessionId: string;
-          model: ClaudeModel;
-          mode: InstanceMode;
-        };
-
-        const instance = processManager.resumeInstance({ projectId, sessionId, model, mode });
-        res.json({ success: true, data: instance });
-        this.broadcastStateUpdate();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // ==================== Conversations API ====================
-
-    this.app.get('/api/conversations', this.authMiddleware, (req: Request, res: Response) => {
-      const { projectId } = req.query;
-      if (!projectId || typeof projectId !== 'string') {
-        res.status(400).json({ success: false, error: 'projectId is required' });
-        return;
-      }
-      const conversations = dataStore.getConversationsByProject(projectId);
-      res.json({ success: true, data: conversations });
-    });
-
-    this.app.get('/api/conversations/:id', this.authMiddleware, (req: Request, res: Response) => {
-      const conversation = dataStore.getConversationById(String(req.params.id));
-      if (!conversation) {
-        res.status(404).json({ success: false, error: 'Conversation not found' });
-        return;
-      }
-      res.json({ success: true, data: conversation });
-    });
-
-    this.app.get(
-      '/api/conversations/:id/messages',
-      this.authMiddleware,
-      (req: Request, res: Response) => {
-        const messages = dataStore.getMessagesByConversation(String(req.params.id));
-        res.json({ success: true, data: messages });
-      }
+    // Conversation routes
+    this.app.use(
+      '/api/conversations',
+      createConversationRoutes({
+        authMiddleware: this.authMiddleware,
+      })
     );
 
-    this.app.post('/api/conversations', this.authMiddleware, (req: Request, res: Response) => {
-      try {
-        const conversationData = validators.conversationCreate(req.body);
-        const conversation = dataStore.createConversation(conversationData);
-        res.json({ success: true, data: conversation });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        const status = error instanceof IpcValidationError ? 400 : 500;
-        res.status(status).json({ success: false, error: message });
-      }
-    });
-
-    this.app.put('/api/conversations/:id', this.authMiddleware, (req: Request, res: Response) => {
-      try {
-        const validated = validators.conversationUpdate(String(req.params.id), req.body);
-        const conversation = dataStore.updateConversation(validated.id, validated.updates);
-        if (!conversation) {
-          res.status(404).json({ success: false, error: 'Conversation not found' });
-          return;
-        }
-        res.json({ success: true, data: conversation });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        const status = error instanceof IpcValidationError ? 400 : 500;
-        res.status(status).json({ success: false, error: message });
-      }
-    });
-
-    this.app.delete(
-      '/api/conversations/:id',
-      this.authMiddleware,
-      (req: Request, res: Response) => {
-        try {
-          dataStore.deleteConversation(String(req.params.id));
-          res.json({ success: true });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          res.status(400).json({ success: false, error: message });
-        }
-      }
-    );
-
-    this.app.post(
-      '/api/conversations/:id/messages',
-      this.authMiddleware,
-      (req: Request, res: Response) => {
-        try {
-          const validated = validators.conversationAddMessage({
-            conversationId: String(req.params.id),
-            ...req.body,
-          });
-          const message = dataStore.addMessage(validated);
-          res.json({ success: true, data: message });
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          const status = error instanceof IpcValidationError ? 400 : 500;
-          res.status(status).json({ success: false, error: errorMsg });
-        }
-      }
-    );
-
-    // ==================== Sync endpoint ====================
-
+    // Sync endpoint
     this.app.get('/api/sync', this.authMiddleware, (_req: Request, res: Response) => {
       const state = this.getSyncState();
       res.json({ success: true, data: state });
     });
 
-    // ==================== Hooks API ====================
-    // These endpoints receive events from Claude CLI hooks
-    // They do NOT require auth because they come from local hook scripts
+    // Hook routes (no auth - local hook scripts)
+    this.app.use(
+      '/api/hooks',
+      createHookRoutes({
+        emitter: this,
+        getIO: () => this.io,
+        sendToRenderer: (channel, ...args) => this.sendToRenderer(channel, ...args),
+      })
+    );
 
-    // Notification endpoint - receives notifications from Claude CLI
-    this.app.post('/api/hooks/notify', (req: Request, res: Response) => {
-      try {
-        const { instanceId, eventType, data, timestamp } = req.body as {
-          instanceId: string;
-          eventType: string;
-          data: HookNotificationInput;
-          timestamp: number;
-        };
+    // MCP endpoint (token-based auth for Claude instances)
+    this.setupMcpEndpoint();
 
-        console.log(`[WebServer] Hook notification from ${instanceId}: ${eventType}`);
+    // Static files (web UI)
+    this.setupStaticFiles();
+  }
 
-        // Get project ID from instance
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
+  /**
+   * Initialize the MCP server with dependencies
+   */
+  private initializeMcpServer(): McpServer {
+    if (!this.mcpServer) {
+      const metrics = MetricsService.getInstance();
+      const processManager = getProcessManager();
+      const dataStore = DataStore.getInstance();
+      const gitStatusManager = GitStatusManager.getInstance();
 
-        // Create dashboard notification
-        const notificationManager = getNotificationManager();
-        notificationManager.handleHookNotification(data, instanceId, projectId);
+      this.mcpServer = new McpServer(metrics, processManager, dataStore, gitStatusManager);
+    }
+    return this.mcpServer;
+  }
 
-        // Record metric
-        const metricsService = getMetricsService();
-        metricsService.recordHookEvent({
-          instanceId,
-          projectId: projectId || 'unknown',
-          eventType: 'Notification',
-          timestamp: timestamp || Date.now(),
-        });
+  /**
+   * Setup MCP endpoint for Claude CLI instances
+   */
+  private setupMcpEndpoint(): void {
+    // MCP JSON-RPC endpoint
+    this.app.post('/mcp', async (req: Request, res: Response) => {
+      const token = req.headers['x-instance-token'] as string | undefined;
+      const mcpServer = this.initializeMcpServer();
 
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook notify error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // Post-tool endpoint - receives tool use events after execution
-    this.app.post('/api/hooks/post-tool', (req: Request, res: Response) => {
-      try {
-        const { instanceId, eventType, data, timestamp } = req.body as {
-          instanceId: string;
-          eventType: string;
-          data?: {
-            tool_name?: string;
-            tool_input?: Record<string, unknown>;
-            success?: boolean;
-            duration_ms?: number;
-          } | null;
-          timestamp: number;
-        };
-
-        console.log(
-          `[WebServer] Hook post-tool from ${instanceId}: ${data?.tool_name || 'unknown'}`
-        );
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
-
-        // Record tool use metric (with null safety for data)
-        const metricsService = getMetricsService();
-        const toolName = data?.tool_name || 'unknown';
-        const toolEvent: ToolUseEvent = {
-          instanceId,
-          projectId: projectId || 'unknown',
-          toolName,
-          toolInput: data?.tool_input || {},
-          success: data?.success !== false,
-          durationMs: data?.duration_ms,
-          timestamp: timestamp || Date.now(),
-        };
-        metricsService.recordToolUse(toolEvent);
-
-        // Extract files from tool input for activity tracking
-        const files = this.extractFilesFromToolInput(toolName, data?.tool_input);
-
-        // Track files with FileLockManager and check for conflicts
-        const fileLockManager = getFileLockManager();
-        const notificationManager = getNotificationManager();
-        const conflictFiles: string[] = [];
-
-        // Determine action type based on tool
-        let fileAction: 'read' | 'write' | 'create' | 'delete' = 'read';
-        if (toolName === 'Write') {
-          fileAction = 'create';
-        } else if (toolName === 'Edit' || toolName === 'NotebookEdit') {
-          fileAction = 'write';
-        } else if (toolName === 'Bash') {
-          // Check for write-like commands
-          const command = data?.tool_input?.command;
-          if (
-            typeof command === 'string' &&
-            /\b(rm|mv|cp|mkdir|touch|chmod|chown)\b/.test(command)
-          ) {
-            fileAction = 'write';
-          }
-        }
-
-        // Track each file and check for conflicts
-        for (const file of files) {
-          const conflict = fileLockManager.trackFile(
-            instanceId,
-            projectId || 'unknown',
-            file,
-            fileAction
-          );
-          if (conflict) {
-            conflictFiles.push(file);
-          }
-        }
-
-        // Notify if there are conflicts
-        if (conflictFiles.length > 0 && projectId) {
-          notificationManager.notifyCollaborationAlert(instanceId, projectId, conflictFiles);
-        }
-
-        // Emit event for real-time tracking
-        this.emit('hook:toolUse', toolEvent);
-
-        // Send activity update to renderer via IPC
-        const activityData = {
-          instanceId,
-          toolName,
-          files,
-          timestamp: timestamp || Date.now(),
-        };
-        this.sendToRenderer('hook:activity', activityData);
-
-        // Also broadcast to Socket.IO clients
-        if (this.io) {
-          this.io.emit('hook:activity', activityData);
-        }
-
-        res.json({ success: true, conflicts: conflictFiles });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook post-tool error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // File lock query endpoint - check if a file has conflicts
-    this.app.get('/api/hooks/file-lock', (req: Request, res: Response) => {
-      try {
-        const fileParam = req.query.file;
-        const instanceIdParam = req.query.instanceId;
-
-        // Handle both string and string[] query params
-        const file = Array.isArray(fileParam) ? fileParam[0] : fileParam;
-        const instanceId = Array.isArray(instanceIdParam)
-          ? instanceIdParam[0]
-          : instanceIdParam || '';
-
-        if (!file || typeof file !== 'string') {
-          res.status(400).json({ success: false, error: 'File parameter is required' });
-          return;
-        }
-
-        const fileLockManager = getFileLockManager();
-        const conflicts = fileLockManager.detectConflicts(instanceId as string, file);
-
-        res.json({
-          success: true,
-          data: {
-            file,
-            locked: conflicts !== null,
-            conflicts: conflicts || [],
+      // Authenticate request
+      const context = mcpServer.authenticateRequest(token);
+      if (!context) {
+        res.status(401).json({
+          jsonrpc: '2.0',
+          id: req.body?.id || null,
+          error: {
+            code: -32001,
+            message: 'Unauthorized: Invalid or missing instance token',
           },
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] File lock query error:', message);
-        res.status(400).json({ success: false, error: message });
+        return;
       }
-    });
 
-    // File lock stats endpoint - get overall lock statistics
-    this.app.get('/api/hooks/file-lock/stats', (_req: Request, res: Response) => {
-      try {
-        const fileLockManager = getFileLockManager();
-        const stats = fileLockManager.getStats();
-
-        res.json({
-          success: true,
-          data: stats,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] File lock stats error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // Get active files for an instance
-    this.app.get('/api/hooks/file-lock/instance/:instanceId', (req: Request, res: Response) => {
-      try {
-        const instanceId = req.params.instanceId as string;
-        const fileLockManager = getFileLockManager();
-        const files = fileLockManager.getActiveFilesByInstance(instanceId);
-
-        res.json({
-          success: true,
-          data: {
-            instanceId,
-            files,
+      // Validate request body
+      const request = req.body as McpRequest;
+      if (!request || typeof request !== 'object') {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: -32700,
+            message: 'Parse error: Invalid JSON',
           },
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Instance files query error:', message);
-        res.status(400).json({ success: false, error: message });
+        return;
       }
-    });
 
-    // Pre-tool permission check endpoint
-    this.app.post('/api/hooks/permission/check', (req: Request, res: Response) => {
       try {
-        const { instanceId, toolName, toolInput, timestamp } = req.body as PermissionCheckRequest;
-
-        console.log(`[WebServer] Permission check from ${instanceId}: ${toolName}`);
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId || 'unknown';
-
-        // Check permission with PermissionManager
-        const permissionManager = getPermissionManager();
-        const result = permissionManager.checkPermission({
-          instanceId,
-          projectId,
-          toolName,
-          toolInput,
-          timestamp: timestamp || Date.now(),
-        });
-
-        // Record the permission check
-        const metricsService = getMetricsService();
-        metricsService.recordPermissionCheck({
-          instanceId,
-          projectId,
-          toolName,
-          decision: result.decision,
-          timestamp: timestamp || Date.now(),
-        });
-
-        const response: PermissionCheckResponse = {
-          decision: result.decision,
-          reason: result.reason,
-          ruleId: result.ruleId,
-        };
-
+        const response = await mcpServer.handleRequest(request, context);
         res.json(response);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook permission check error:', message);
-        // On error, return 'ask' to let Claude handle normally
-        res.json({
-          decision: 'ask',
-          reason: 'Dashboard error: ' + message,
-        } as PermissionCheckResponse);
-      }
-    });
-
-    // Stop/stopped endpoint - instance stopped
-    this.app.post('/api/hooks/stopped', (req: Request, res: Response) => {
-      try {
-        const { instanceId, eventType, data, timestamp } = req.body as {
-          instanceId: string;
-          eventType: string;
-          data?: { reason?: string; total_cost_usd?: number; duration_ms?: number } | null;
-          timestamp: number;
-        };
-
-        console.log(`[WebServer] Hook stopped from ${instanceId}`);
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
-
-        // Record stop event (with null safety for data)
-        const metricsService = getMetricsService();
-        const stopEvent: StopEvent = {
-          instanceId,
-          projectId: projectId || 'unknown',
-          reason: data?.reason,
-          totalCostUsd: data?.total_cost_usd,
-          durationMs: data?.duration_ms,
-          timestamp: timestamp || Date.now(),
-        };
-        metricsService.recordSessionEnd(stopEvent);
-
-        // Create notification for task completion
-        const notificationManager = getNotificationManager();
-        if (projectId) {
-          notificationManager.notifyTaskCompleted(
-            instanceId,
-            projectId,
-            undefined,
-            data?.total_cost_usd
-          );
-        }
-
-        this.emit('hook:stopped', stopEvent);
-
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook stopped error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // Session start endpoint
-    this.app.post('/api/hooks/session-start', (req: Request, res: Response) => {
-      try {
-        const { instanceId, data, timestamp } = req.body as {
-          instanceId: string;
-          data?: { session_id?: string } | null;
-          timestamp: number;
-        };
-
-        console.log(`[WebServer] Hook session-start from ${instanceId}`);
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
-
-        // Record session start (with null safety for data)
-        const metricsService = getMetricsService();
-        metricsService.recordSessionStart({
-          instanceId,
-          projectId: projectId || 'unknown',
-          sessionId: data?.session_id,
-          timestamp: timestamp || Date.now(),
-        });
-
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook session-start error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // Session end endpoint
-    this.app.post('/api/hooks/session-end', (req: Request, res: Response) => {
-      try {
-        const { instanceId, data, timestamp } = req.body as {
-          instanceId: string;
-          data?: { session_id?: string; total_cost_usd?: number } | null;
-          timestamp: number;
-        };
-
-        console.log(`[WebServer] Hook session-end from ${instanceId}`);
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
-
-        // Record session end (with null safety for data)
-        const metricsService = getMetricsService();
-        metricsService.recordSessionEnd({
-          instanceId,
-          projectId: projectId || 'unknown',
-          sessionId: data?.session_id,
-          totalCostUsd: data?.total_cost_usd,
-          timestamp: timestamp || Date.now(),
-        });
-
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook session-end error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // User prompt submit endpoint
-    this.app.post('/api/hooks/prompt-submit', (req: Request, res: Response) => {
-      try {
-        const { instanceId, data, timestamp } = req.body as {
-          instanceId: string;
-          data?: { prompt?: string; session_id?: string } | null;
-          timestamp: number;
-        };
-
-        console.log(`[WebServer] Hook prompt-submit from ${instanceId}`);
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
-
-        // Record prompt event
-        const metricsService = getMetricsService();
-        metricsService.recordHookEvent({
-          instanceId,
-          projectId: projectId || 'unknown',
-          eventType: 'UserPromptSubmit',
-          timestamp: timestamp || Date.now(),
-        });
-
-        // Emit event for real-time tracking
-        this.emit('hook:promptSubmit', {
-          instanceId,
-          projectId,
-          prompt: data?.prompt,
-          timestamp: timestamp || Date.now(),
-        });
-
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook prompt-submit error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // Pre-tool endpoint (generic tracking, separate from permission check)
-    this.app.post('/api/hooks/pre-tool', (req: Request, res: Response) => {
-      try {
-        const { instanceId, data, timestamp } = req.body as {
-          instanceId: string;
-          data?: { tool_name?: string; tool_input?: Record<string, unknown> } | null;
-          timestamp: number;
-        };
-
-        console.log(
-          `[WebServer] Hook pre-tool from ${instanceId}: ${data?.tool_name || 'unknown'}`
-        );
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
-
-        // Record pre-tool event
-        const metricsService = getMetricsService();
-        metricsService.recordHookEvent({
-          instanceId,
-          projectId: projectId || 'unknown',
-          eventType: 'PreToolUse',
-          timestamp: timestamp || Date.now(),
-        });
-
-        // Emit event for real-time tracking
-        this.emit('hook:preTool', {
-          instanceId,
-          projectId,
-          toolName: data?.tool_name,
-          toolInput: data?.tool_input,
-          timestamp: timestamp || Date.now(),
-        });
-
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook pre-tool error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // Status update endpoint - for dashboard-status skill
-    this.app.post('/api/hooks/status', (req: Request, res: Response) => {
-      try {
-        const { instanceId, status, message, progress } = req.body as StatusUpdateEvent;
-
-        console.log(`[WebServer] Status update from ${instanceId}: ${status}`);
-
-        const instance = processManager.getInstance(instanceId);
-
-        // Emit status update event for UI
-        this.emit('hook:status', { instanceId, status, message, progress, timestamp: Date.now() });
-
-        // Broadcast to Socket.IO clients
-        if (this.io) {
-          this.io.emit('instance:hookStatus', instanceId, { status, message, progress });
-        }
-
-        res.json({ success: true });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook status error:', errorMessage);
-        res.status(400).json({ success: false, error: errorMessage });
-      }
-    });
-
-    // Context endpoint - fetch context for an instance (for fetch-context skill)
-    this.app.get('/api/hooks/instance/:id/context', (req: Request, res: Response) => {
-      try {
-        const instanceId = String(req.params.id);
-
-        const instance = processManager.getInstance(instanceId);
-        if (!instance) {
-          res.status(404).json({ success: false, error: 'Instance not found' });
-          return;
-        }
-
-        const project = dataStore.getProjectById(instance.projectId);
-
-        // Get recent conversations for the project
-        const recentConversations = dataStore
-          .getConversationsByProject(instance.projectId)
-          .slice(0, 5)
-          .map((c) => ({
-            id: c.id,
-            title: c.title,
-            summary: c.initialPrompt.substring(0, 100),
-            createdAt: c.createdAt,
-          }));
-
-        // Get other active instances for the same project
-        const activeInstances = processManager
-          .getInstancesByProject(instance.projectId)
-          .filter((i) => i.id !== instanceId && i.status === 'running')
-          .map((i) => ({
-            id: i.id,
-            status: i.status,
-            createdAt: i.createdAt,
-          }));
-
-        res.json({
-          success: true,
-          data: {
-            projectId: instance.projectId,
-            projectName: project?.name || 'Unknown',
-            projectPath: project?.path,
-            recentConversations,
-            activeInstances,
-            instanceCount: activeInstances.length + 1,
+        console.error('[WebServer] MCP request error:', error);
+        res.status(500).json({
+          jsonrpc: '2.0',
+          id: request.id || null,
+          error: {
+            code: -32603,
+            message: error instanceof Error ? error.message : 'Internal server error',
           },
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook context error:', message);
-        res.status(400).json({ success: false, error: message });
       }
     });
 
-    // Get active instances for a project (for collaborative-awareness skill)
-    this.app.get('/api/hooks/instances', (req: Request, res: Response) => {
-      try {
-        const projectId = req.query.projectId as string;
+    // MCP tools list endpoint (for debugging/discovery)
+    this.app.get('/mcp/tools', (req: Request, res: Response) => {
+      const token = req.headers['x-instance-token'] as string | undefined;
+      const mcpServer = this.initializeMcpServer();
 
-        if (!projectId) {
-          res.status(400).json({ success: false, error: 'projectId is required' });
-          return;
-        }
-
-        const instances = processManager.getInstancesByProject(projectId).map((i) => ({
-          id: i.id,
-          status: i.status,
-          startedAt: i.createdAt,
-          lastActivity: Date.now(), // TODO: Track actual last activity
-        }));
-
-        res.json({ success: true, data: { instances } });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook instances error:', message);
-        res.status(400).json({ success: false, error: message });
+      const context = mcpServer.authenticateRequest(token);
+      if (!context) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
       }
+
+      const response = mcpServer.handleRequest(
+        { jsonrpc: '2.0', id: 'tools-list', method: 'tools/list' },
+        context
+      );
+      res.json(response);
     });
 
-    // Activity reporting endpoint (for collaborative-awareness skill)
-    this.app.post('/api/hooks/activity', (req: Request, res: Response) => {
-      try {
-        const { instanceId, action, files } = req.body as {
-          instanceId: string;
-          action: string;
-          files: string[];
-        };
-
-        console.log(`[WebServer] Activity from ${instanceId}: ${action} on ${files.length} files`);
-
-        // Store activity (could be extended to track file locks)
-        this.emit('hook:activity', { instanceId, action, files, timestamp: Date.now() });
-
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook activity error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
+    // MCP stats endpoint (for monitoring)
+    this.app.get('/mcp/stats', (_req: Request, res: Response) => {
+      const mcpServer = this.initializeMcpServer();
+      res.json({ success: true, data: mcpServer.getStats() });
     });
 
-    // File lock check endpoint (for collaborative-awareness skill)
-    this.app.get('/api/hooks/file-lock', (req: Request, res: Response) => {
-      try {
-        // This is a placeholder - could be extended to actually track file locks
-        // For now, just return that no files are locked
-        res.json({ success: true, data: { locked: false } });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook file-lock error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
+    console.log('[WebServer] MCP endpoint configured at /mcp');
+  }
 
-    // Generic event endpoint (catch-all for unknown hook events)
-    this.app.post('/api/hooks/event', (req: Request, res: Response) => {
-      try {
-        const { instanceId, eventType, data, timestamp } = req.body as {
-          instanceId: string;
-          eventType?: string;
-          data?: unknown;
-          timestamp?: number;
-        };
+  /**
+   * Setup static file serving for web UI
+   */
+  private setupStaticFiles(): void {
+    const electronApp = getElectronApp();
+    const isDev =
+      process.env.NODE_ENV === 'development' ||
+      isHeadlessMode() ||
+      (electronApp ? !electronApp.isPackaged : true);
 
-        console.log(`[WebServer] Hook generic event from ${instanceId}: ${eventType || 'unknown'}`);
-
-        const instance = processManager.getInstance(instanceId);
-        const projectId = instance?.projectId;
-
-        // Record generic hook event
-        const metricsService = getMetricsService();
-        metricsService.recordHookEvent({
-          instanceId,
-          projectId: projectId || 'unknown',
-          eventType: eventType || 'unknown',
-          timestamp: timestamp || Date.now(),
-        });
-
-        res.json({ success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[WebServer] Hook event error:', message);
-        res.status(400).json({ success: false, error: message });
-      }
-    });
-
-    // ==================== Static files (web UI) ====================
-
-    // Serve static files from web build directory
-    // In dev: __dirname is dist/main, so go up 2 levels to dist, then into web
-    // In production: files are in resources/web
-    const isDev = process.env.NODE_ENV === 'development' || !electronApp.isPackaged;
-    const webBuildPath = isDev ? join(__dirname, '../web') : join(process.resourcesPath, 'web');
+    let webBuildPath: string;
+    if (isHeadlessMode()) {
+      // In headless mode (tsx/ts-node), use dist/web from project root
+      webBuildPath = join(process.cwd(), 'dist/web');
+    } else if (isDev) {
+      webBuildPath = join(__dirname, '../web');
+    } else {
+      webBuildPath = join(process.resourcesPath || __dirname, 'web');
+    }
 
     this.app.use(express.static(webBuildPath));
 
     // SPA fallback - serve index.html for all non-API routes
-    // Express 5 requires named wildcard parameters
     this.app.get('/{*splat}', (_req: Request, res: Response) => {
       res.sendFile(join(webBuildPath, 'index.html'));
     });
@@ -1661,73 +692,10 @@ export class WebServer extends EventEmitter {
   }
 
   /**
-   * Get current sync state
+   * Get current sync state (delegates to StateSyncManager)
    */
   private getSyncState(): SyncState {
-    const dataStore = DataStore.getInstance();
-    const processManager = getProcessManager();
-    const clusterManager = getClusterManager();
-
-    // Get local projects and instances
-    const localProjects = dataStore.getAllProjects();
-    const localInstances = processManager.getAllInstances();
-
-    // Get active conversations (those linked to running instances)
-    const activeConversations = this.getActiveConversations(
-      processManager.getAllInstanceConversations(),
-      dataStore
-    );
-
-    // Check if cluster is enabled and get global projects/instances
-    const clusterConfig = clusterManager.getConfig();
-    if (clusterConfig.enabled) {
-      const globalProjects = clusterManager.getAllGlobalProjects();
-      const globalInstances = clusterManager.getAllGlobalInstances();
-
-      // Use global projects/instances directly - they already include all nodes with proper metadata
-      return {
-        projects: globalProjects,
-        instances: globalInstances,
-        conversations: activeConversations,
-        outputs: processManager.getAllInstanceOutputs(),
-        instanceConversations: processManager.getAllInstanceConversations(),
-      };
-    }
-
-    return {
-      projects: localProjects,
-      instances: localInstances,
-      conversations: activeConversations,
-      outputs: processManager.getAllInstanceOutputs(), // Include output buffers for late-connecting clients
-      instanceConversations: processManager.getAllInstanceConversations(), // Include instance-conversation mappings
-    };
-  }
-
-  /**
-   * Get active conversations linked to running instances
-   */
-  private getActiveConversations(
-    instanceConversations: Record<string, string>,
-    dataStore: DataStore
-  ): import('@shared/types').Conversation[] {
-    const conversations: import('@shared/types').Conversation[] = [];
-    const seen = new Set<string>();
-
-    for (const conversationId of Object.values(instanceConversations)) {
-      if (seen.has(conversationId)) continue;
-      seen.add(conversationId);
-
-      try {
-        const conversation = dataStore.getConversationById(conversationId);
-        if (conversation) {
-          conversations.push(conversation);
-        }
-      } catch (error) {
-        console.error(`[WebServer] Failed to get conversation ${conversationId}:`, error);
-      }
-    }
-
-    return conversations;
+    return getStateSyncManager().getSyncState();
   }
 
   /**
@@ -1934,6 +902,30 @@ export class WebServer extends EventEmitter {
    */
   public get port(): number {
     return this.currentPort;
+  }
+
+  /**
+   * Register an MCP instance token
+   */
+  public registerMcpToken(token: string, context: McpToolContext): void {
+    const mcpServer = this.initializeMcpServer();
+    mcpServer.registerInstanceToken(token, context);
+  }
+
+  /**
+   * Unregister an MCP instance token
+   */
+  public unregisterMcpToken(token: string): void {
+    if (this.mcpServer) {
+      this.mcpServer.unregisterInstanceToken(token);
+    }
+  }
+
+  /**
+   * Get MCP server instance
+   */
+  public getMcpServer(): McpServer {
+    return this.initializeMcpServer();
   }
 }
 

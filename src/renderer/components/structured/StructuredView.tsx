@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { ChatInput } from './ChatInput';
 import { PermissionBar } from './PermissionBar';
+import { getStatusBadgeConfig } from '../../utils/statusConfig';
 import type { StreamMessage, ContentBlock } from '@shared/types';
 
 interface StructuredViewProps {
@@ -206,18 +207,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { bg: string; text: string }> = {
-    starting: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
-    running: { bg: 'bg-green-500/20', text: 'text-green-400' },
-    waiting_input: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
-    needs_permission: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
-    tool_executing: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
-    completed: { bg: 'bg-gray-500/20', text: 'text-gray-400' },
-    error: { bg: 'bg-red-500/20', text: 'text-red-400' },
-    killed: { bg: 'bg-gray-600/20', text: 'text-gray-500' },
-  };
-
-  const { bg, text } = config[status] || { bg: 'bg-gray-500/20', text: 'text-gray-400' };
+  const { bg, text } = getStatusBadgeConfig(status as import('@shared/types').InstanceStatus);
 
   return <span className={`px-2 py-0.5 rounded text-xs font-medium ${bg} ${text}`}>{status}</span>;
 }

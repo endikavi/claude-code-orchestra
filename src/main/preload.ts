@@ -43,6 +43,7 @@ import type {
   MetricsQueryOptions,
   MetricsPeriod,
   GitStatus,
+  SubagentInstance,
 } from '@shared/types';
 import type { RemoteConfig, RemoteServerStatus } from '@shared/types/remote';
 import type {
@@ -692,6 +693,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.GIT_STATUS_CHANGED, listener);
     },
   },
+
+  // Subagent operations (native Claude Task tool tracking)
+  subagent: {
+    getByInstance: (instanceId: string): Promise<SubagentInstance[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_GET_BY_INSTANCE, instanceId),
+
+    getAll: (): Promise<SubagentInstance[]> => ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_GET_ALL),
+
+    // Event listeners
+    onStarted: (callback: (instanceId: string, subagent: SubagentInstance) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        instanceId: string,
+        subagent: SubagentInstance
+      ) => callback(instanceId, subagent);
+      ipcRenderer.on(IPC_CHANNELS.SUBAGENT_STARTED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.SUBAGENT_STARTED, listener);
+    },
+
+    onCompleted: (callback: (instanceId: string, subagent: SubagentInstance) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        instanceId: string,
+        subagent: SubagentInstance
+      ) => callback(instanceId, subagent);
+      ipcRenderer.on(IPC_CHANNELS.SUBAGENT_COMPLETED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.SUBAGENT_COMPLETED, listener);
+    },
+  },
 });
 
 // Type declarations for renderer
@@ -968,6 +998,16 @@ declare global {
         getStatus: (projectId: string) => Promise<GitStatus | null>;
         refresh: (projectId: string) => Promise<GitStatus | null>;
         onStatusChanged: (callback: (projectId: string, status: GitStatus) => void) => () => void;
+      };
+      subagent: {
+        getByInstance: (instanceId: string) => Promise<SubagentInstance[]>;
+        getAll: () => Promise<SubagentInstance[]>;
+        onStarted: (
+          callback: (instanceId: string, subagent: SubagentInstance) => void
+        ) => () => void;
+        onCompleted: (
+          callback: (instanceId: string, subagent: SubagentInstance) => void
+        ) => () => void;
       };
     };
   }

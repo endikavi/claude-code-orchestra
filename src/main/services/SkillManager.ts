@@ -244,6 +244,125 @@ The dashboard automatically sets these environment variables:
 - \`CLAUDE_DASHBOARD_API_URL\` - The dashboard API base URL
 `,
     },
+
+    'director-mode': {
+      id: 'director-mode',
+      name: 'Director Mode',
+      description: 'Coordinate multiple Claude workers to accomplish complex tasks',
+      content: `---
+name: director-mode
+description: Coordinate multiple Claude workers to accomplish complex tasks
+---
+
+# Director Mode
+
+You are a Director instance coordinating multiple worker instances. Use the dashboard API to delegate tasks and coordinate work.
+
+## Proposing Workers
+
+When you identify subtasks that should be delegated, propose workers:
+
+\`\`\`bash
+curl -s -X POST "http://localhost:${port}/api/orchestration/propose" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "directorId": "'$CLAUDE_DASHBOARD_INSTANCE_ID'",
+    "workers": [
+      {
+        "task": "Implement the authentication API endpoints",
+        "model": "sonnet",
+        "rationale": "Backend API work is well-suited for Sonnet"
+      },
+      {
+        "task": "Create login and registration UI components",
+        "model": "sonnet",
+        "rationale": "Frontend components need consistent code style"
+      },
+      {
+        "task": "Write integration tests for auth flow",
+        "model": "haiku",
+        "rationale": "Test writing is straightforward, Haiku is cost-effective"
+      }
+    ]
+  }'
+\`\`\`
+
+The dashboard will show a confirmation modal to the user. Wait for approval before proceeding.
+
+## Checking Worker Status
+
+Monitor your workers' progress:
+
+\`\`\`bash
+# Get status of all workers
+curl -s "http://localhost:${port}/api/orchestration/workers?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+\`\`\`
+
+Response:
+\`\`\`json
+{
+  "success": true,
+  "data": {
+    "workers": [
+      {
+        "id": "worker_123",
+        "task": "Implement auth API",
+        "status": "completed",
+        "outputSummary": "Created 5 endpoints in src/api/auth.ts..."
+      },
+      {
+        "id": "worker_456",
+        "task": "Create UI components",
+        "status": "running"
+      }
+    ]
+  }
+}
+\`\`\`
+
+## Getting Shared Context
+
+Access the results from completed workers:
+
+\`\`\`bash
+curl -s "http://localhost:${port}/api/orchestration/context?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+\`\`\`
+
+Response includes:
+- Summary of completed work
+- Key decisions made by workers
+- Files modified
+- Any errors encountered
+
+## Director Best Practices
+
+1. **Decompose First**: Analyze the task and identify independent subtasks
+2. **Choose Models Wisely**:
+   - Opus for complex architecture/design
+   - Sonnet for implementation
+   - Haiku for simple tasks like tests or docs
+3. **Wait for Workers**: Check status before synthesizing results
+4. **Coordinate**: Use shared context to avoid conflicts
+5. **Synthesize**: After workers complete, review and integrate their work
+
+## Workflow Example
+
+1. Receive complex task from user
+2. Analyze and identify 3-4 subtasks
+3. POST /api/orchestration/propose with worker specifications
+4. Wait for user approval (dashboard notification)
+5. GET /api/orchestration/workers to monitor progress
+6. When all complete, GET /api/orchestration/context for results
+7. Synthesize and present final result to user
+
+## Environment Variables
+
+The dashboard automatically sets these environment variables:
+- \`CLAUDE_DASHBOARD_INSTANCE_ID\` - Your unique instance ID (use as directorId)
+- \`CLAUDE_DASHBOARD_PROJECT_ID\` - The project you're working on
+- \`CLAUDE_DASHBOARD_API_URL\` - The dashboard API base URL
+`,
+    },
   };
 }
 

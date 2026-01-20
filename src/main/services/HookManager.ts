@@ -4,7 +4,6 @@ import * as path from 'path';
 import type {
   HooksConfig,
   HookEventType,
-  HookDefinition,
   DashboardHookSettings,
   HookTemplate,
   HookTemplateType,

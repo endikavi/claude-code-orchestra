@@ -19,7 +19,7 @@ import type {
 
 // Max entries to keep in memory
 const MAX_METRIC_ENTRIES = 10000;
-const MAX_SESSIONS = 500;
+const _MAX_SESSIONS = 500; // Reserved for future session limiting
 
 // Cleanup interval (1 hour)
 const CLEANUP_INTERVAL = 60 * 60 * 1000;

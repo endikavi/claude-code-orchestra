@@ -6,7 +6,7 @@ import { useUIStore } from '../stores/uiStore';
 export function useKeyboardShortcuts() {
   const { selectedProjectId } = useProjectStore();
   const { instances, selectedInstanceId, selectInstance, killInstance } = useInstanceStore();
-  const { setShowProjectModal, setShowInstanceModal, toggleViewMode } = useUIStore();
+  const { setShowProjectModal, setShowInstanceModal } = useUIStore();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -56,13 +56,6 @@ export function useKeyboardShortcuts() {
         selectInstance(projectInstances[nextIndex].id);
         return;
       }
-
-      // Ctrl+\: Toggle view mode
-      if (isMod && e.key === '\\') {
-        e.preventDefault();
-        toggleViewMode();
-        return;
-      }
     };
 
     document.addEventListener('keydown', handleKeyDown);
@@ -75,6 +68,5 @@ export function useKeyboardShortcuts() {
     setShowInstanceModal,
     killInstance,
     selectInstance,
-    toggleViewMode,
   ]);
 }

@@ -11,9 +11,13 @@
     "loading": "Cargando...",
     "saving": "Guardando...",
     "starting": "Iniciando...",
+    "stopping": "Deteniendo...",
+    "processing": "Procesando...",
     "yesterday": "Ayer",
     "messages": "mensajes",
-    "copy": "Copiar"
+    "copy": "Copiar",
+    "expand": "Ver más",
+    "collapse": "Ver menos"
   },
   "titleBar": {
     "title": "Orchestra",
@@ -46,6 +50,7 @@
     "savedAutomatically": "La configuración se guarda automáticamente y persistirá entre sesiones.",
     "tabs": {
       "general": "General",
+      "notifications": "Notificaciones",
       "remoteAccess": "Acceso Remoto",
       "security": "Seguridad",
       "cluster": "Clúster"
@@ -134,6 +139,8 @@
     "cannotRunClaude": "Puede no ejecutar Claude",
     "skipPermissions": "Omitir confirmaciones de permisos",
     "skipPermissionsDescription": "Las instancias se ejecutarán con --dangerously-skip-permissions. Usar con precaución - Claude ejecutará herramientas sin pedir confirmación.",
+    "enableMcp": "Habilitar Servidor MCP",
+    "enableMcpDescription": "Permite a Claude usar herramientas de orquestación, acceder al estado de git e interactuar con Orchestra via protocolo MCP",
     "loadSessionHistory": "Cargar Historial de Sesiones",
     "loadSessionHistoryDescription": "Importar sesiones anteriores de Claude Code CLI de este proyecto",
     "saveChanges": "Guardar Cambios",
@@ -309,5 +316,66 @@
     "hoursAgo": "hace {{count}}h",
     "daysAgo": "hace {{count}}d",
     "noRepo": "No es un repositorio git"
+  },
+  "notifications": {
+    "title": "Notificaciones",
+    "markAllRead": "Marcar todo como leído",
+    "clearAll": "Limpiar todo",
+    "empty": "No hay notificaciones",
+    "instance": "Instancia",
+    "dismiss": "Descartar",
+    "delete": "Eliminar",
+    "types": {
+      "permissionRequest": "Solicitud de Permiso",
+      "taskCompleted": "Tarea Completada",
+      "taskError": "Error de Tarea",
+      "toolBlocked": "Herramienta Bloqueada",
+      "instanceStarted": "Instancia Iniciada",
+      "instanceStopped": "Instancia Detenida",
+      "collaborationAlert": "Alerta de Colaboración",
+      "system": "Sistema"
+    },
+    "settings": {
+      "general": "General",
+      "enableNotifications": "Habilitar Notificaciones",
+      "enableNotificationsDesc": "Recibir notificaciones sobre eventos importantes",
+      "inApp": "Notificaciones en la App",
+      "inAppDesc": "Mostrar notificaciones dentro de la aplicación",
+      "native": "Notificaciones Nativas",
+      "nativeDesc": "Mostrar notificaciones del sistema (solo escritorio)",
+      "sound": "Sonido",
+      "enableSound": "Habilitar Sonido",
+      "enableSoundDesc": "Reproducir un sonido cuando lleguen notificaciones",
+      "volume": "Volumen",
+      "testSound": "Probar",
+      "previewSounds": "Previsualizar Sonidos",
+      "perType": "Configuración por Tipo",
+      "perTypeDesc": "Configura las notificaciones para cada tipo de evento",
+      "show": "Mostrar"
+    },
+    "sounds": {
+      "default": "Por defecto",
+      "error": "Error",
+      "permission": "Permiso",
+      "complete": "Completado"
+    }
+  },
+  "orchestration": {
+    "orchestraView": "Orquesta",
+    "running": "Ejecutando",
+    "completed": "completados",
+    "instancesWithSubagents": "instancias con subagentes",
+    "subagents": "subagentes",
+    "subagentDetails": "Detalles del Subagente",
+    "noSubagents": "Sin Subagentes",
+    "noSubagentsDescription": "Cuando Claude use la herramienta Task para crear subagentes, aparecerán aquí.",
+    "howSubagentsWork": "Cómo funcionan los subagentes",
+    "subagentsExplanation": "Claude puede crear subagentes usando la herramienta Task para manejar operaciones complejas en paralelo. Estos subagentes se ejecutan dentro de la misma sesión y su progreso se rastrea aquí automáticamente.",
+    "more": "más",
+    "status": {
+      "running": "Ejecutando",
+      "completed": "Completado",
+      "error": "Error"
+    }
   }
 }

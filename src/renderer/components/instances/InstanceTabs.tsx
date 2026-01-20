@@ -4,6 +4,7 @@ import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
+import { getStatusTabConfig } from '../../utils/statusConfig';
 import type { InstanceStatus, ShellInstanceStatus, ClaudeInstance } from '@shared/types';
 
 export function InstanceTabs() {
@@ -53,6 +54,7 @@ export function InstanceTabs() {
 
     return local;
     // Note: allInstances is included to trigger recalculation when instances change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances, allInstances]);
 
   const shells = selectedProjectId ? getShellsByProject(selectedProjectId) : [];
@@ -193,18 +195,7 @@ function InstanceTab({
 }
 
 function StatusBadge({ status }: { status: InstanceStatus }) {
-  const config: Record<InstanceStatus, { color: string; pulse: boolean; label: string }> = {
-    starting: { color: 'bg-yellow-500', pulse: true, label: 'Starting' },
-    running: { color: 'bg-green-500', pulse: true, label: 'Running' },
-    waiting_input: { color: 'bg-cyan-500', pulse: false, label: 'Waiting for Input' },
-    needs_permission: { color: 'bg-orange-500', pulse: true, label: 'Needs Permission' },
-    tool_executing: { color: 'bg-blue-500', pulse: true, label: 'Executing Tool' },
-    completed: { color: 'bg-gray-500', pulse: false, label: 'Completed' },
-    error: { color: 'bg-red-500', pulse: false, label: 'Error' },
-    killed: { color: 'bg-gray-600', pulse: false, label: 'Killed' },
-  };
-
-  const { color, pulse, label } = config[status];
+  const { color, pulse, label } = getStatusTabConfig(status);
 
   return (
     <div className={`w-2 h-2 rounded-full ${color} ${pulse ? 'status-pulse' : ''}`} title={label} />

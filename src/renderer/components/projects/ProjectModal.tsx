@@ -39,6 +39,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const [description, setDescription] = useState(existingProject?.description || '');
   const [color, setColor] = useState(existingProject?.color || PROJECT_COLORS[0]);
   const [skipPermissions, setSkipPermissions] = useState(existingProject?.skipPermissions || false);
+  const [enableMcp, setEnableMcp] = useState(existingProject?.enableMcp || false);
   const [preferredShell, setPreferredShell] = useState(existingProject?.preferredShell || '');
   const [availableShells, setAvailableShells] = useState<AvailableShell[]>([]);
   const [isLoadingShells, setIsLoadingShells] = useState(true);
@@ -75,6 +76,8 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
       }
     };
     void loadShells();
+    // Only run once on mount - preferredShell is read but we don't want to re-run when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load hook templates
@@ -145,6 +148,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           description: description.trim() || undefined,
           color,
           skipPermissions,
+          enableMcp,
           preferredShell: preferredShell || undefined,
         });
 
@@ -173,6 +177,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           description: description.trim() || undefined,
           color,
           skipPermissions,
+          enableMcp,
           preferredShell: preferredShell || undefined,
         });
 
@@ -338,6 +343,29 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
               </span>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                 {t('project.skipPermissionsDescription')}
+              </p>
+            </div>
+          </label>
+        </div>
+
+        {/* MCP Server Integration */}
+        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enableMcp}
+              onChange={(e) => setEnableMcp(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-claude-beige dark:focus:ring-offset-gray-800"
+            />
+            <div>
+              <span className="text-sm font-medium text-purple-500 dark:text-purple-400">
+                {t('project.enableMcp', 'Enable MCP Server')}
+              </span>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                {t(
+                  'project.enableMcpDescription',
+                  'Allows Claude to use orchestration tools, access git status, and interact with Orchestra via MCP protocol'
+                )}
               </p>
             </div>
           </label>

@@ -8,6 +8,7 @@ import { useInstanceStore } from './stores/instanceStore';
 import { useUIStore } from './stores/uiStore';
 import { useClusterStore } from './stores/clusterStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { setupOrchestrationEventListeners } from './stores/orchestrationStore';
 
 function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -45,10 +46,14 @@ function App() {
     });
     const cleanupCluster = setupClusterListeners();
 
+    // Setup orchestration (subagent tracking) event listeners globally
+    const cleanupOrchestration = setupOrchestrationEventListeners();
+
     return () => {
       cleanupProjects();
       cleanupInstances();
       cleanupCluster();
+      cleanupOrchestration();
     };
   }, [
     loadProjects,

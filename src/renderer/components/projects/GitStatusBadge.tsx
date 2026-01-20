@@ -16,7 +16,7 @@ export function GitStatusBadge({ projectId, compact = false }: GitStatusBadgePro
   // Setup listeners and fetch initial status
   useEffect(() => {
     const unsubscribe = setupListeners();
-    fetchStatus(projectId);
+    void fetchStatus(projectId);
     return unsubscribe;
   }, [projectId, fetchStatus, setupListeners]);
 

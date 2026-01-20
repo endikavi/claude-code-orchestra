@@ -21,10 +21,10 @@ export function MetricsDashboard() {
   const [period, setPeriod] = useState<MetricsPeriod>('week');
 
   useEffect(() => {
-    loadDashboardSummary();
-    loadToolUsage({ period });
-    loadCostBreakdown({ period });
-    loadUsageTrends(period);
+    void loadDashboardSummary();
+    void loadToolUsage({ period });
+    void loadCostBreakdown({ period });
+    void loadUsageTrends(period);
   }, [period, loadDashboardSummary, loadToolUsage, loadCostBreakdown, loadUsageTrends]);
 
   return (

@@ -11,9 +11,13 @@
     "loading": "Loading...",
     "saving": "Saving...",
     "starting": "Starting...",
+    "stopping": "Stopping...",
+    "processing": "Processing...",
     "yesterday": "Yesterday",
     "messages": "messages",
-    "copy": "Copy"
+    "copy": "Copy",
+    "expand": "Show more",
+    "collapse": "Show less"
   },
   "titleBar": {
     "title": "Orchestra",
@@ -46,6 +50,7 @@
     "savedAutomatically": "Settings are saved automatically and will persist across sessions.",
     "tabs": {
       "general": "General",
+      "notifications": "Notifications",
       "remoteAccess": "Remote Access",
       "security": "Security",
       "cluster": "Cluster"
@@ -134,6 +139,8 @@
     "cannotRunClaude": "May not run Claude",
     "skipPermissions": "Skip permission confirmations",
     "skipPermissionsDescription": "Instances will run with --dangerously-skip-permissions. Use with caution - Claude will execute tools without asking for confirmation.",
+    "enableMcp": "Enable MCP Server",
+    "enableMcpDescription": "Allows Claude to use orchestration tools, access git status, and interact with Orchestra via MCP protocol",
     "loadSessionHistory": "Load Session History",
     "loadSessionHistoryDescription": "Import previous Claude Code CLI sessions from this project",
     "saveChanges": "Save Changes",
@@ -309,5 +316,66 @@
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago",
     "noRepo": "Not a git repository"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "clearAll": "Clear all",
+    "empty": "No notifications",
+    "instance": "Instance",
+    "dismiss": "Dismiss",
+    "delete": "Delete",
+    "types": {
+      "permissionRequest": "Permission Request",
+      "taskCompleted": "Task Completed",
+      "taskError": "Task Error",
+      "toolBlocked": "Tool Blocked",
+      "instanceStarted": "Instance Started",
+      "instanceStopped": "Instance Stopped",
+      "collaborationAlert": "Collaboration Alert",
+      "system": "System"
+    },
+    "settings": {
+      "general": "General",
+      "enableNotifications": "Enable Notifications",
+      "enableNotificationsDesc": "Receive notifications about important events",
+      "inApp": "In-App Notifications",
+      "inAppDesc": "Show notifications inside the application",
+      "native": "Native Notifications",
+      "nativeDesc": "Show system notifications (desktop only)",
+      "sound": "Sound",
+      "enableSound": "Enable Sound",
+      "enableSoundDesc": "Play a sound when notifications arrive",
+      "volume": "Volume",
+      "testSound": "Test",
+      "previewSounds": "Preview Sounds",
+      "perType": "Per-Type Settings",
+      "perTypeDesc": "Configure notifications for each event type",
+      "show": "Show"
+    },
+    "sounds": {
+      "default": "Default",
+      "error": "Error",
+      "permission": "Permission",
+      "complete": "Complete"
+    }
+  },
+  "orchestration": {
+    "orchestraView": "Orchestra",
+    "running": "Running",
+    "completed": "completed",
+    "instancesWithSubagents": "instances with subagents",
+    "subagents": "subagents",
+    "subagentDetails": "Subagent Details",
+    "noSubagents": "No Subagents",
+    "noSubagentsDescription": "When Claude uses the Task tool to spawn subagents, they will appear here.",
+    "howSubagentsWork": "How subagents work",
+    "subagentsExplanation": "Claude can spawn subagents using the Task tool to handle complex operations in parallel. These subagents run within the same session and their progress is tracked here automatically.",
+    "more": "more",
+    "status": {
+      "running": "Running",
+      "completed": "Completed",
+      "error": "Error"
+    }
   }
 }

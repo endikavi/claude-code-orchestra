@@ -184,6 +184,14 @@ export const IPC_CHANNELS = {
   GIT_GET_STATUS: 'git:getStatus',
   GIT_REFRESH: 'git:refresh',
   GIT_STATUS_CHANGED: 'git:statusChanged', // Event: main -> renderer
+
+  // Subagent operations (native Claude Task tool tracking)
+  SUBAGENT_GET_BY_INSTANCE: 'subagent:getByInstance',
+  SUBAGENT_GET_ALL: 'subagent:getAll',
+
+  // Subagent events (main -> renderer)
+  SUBAGENT_STARTED: 'subagent:started',
+  SUBAGENT_COMPLETED: 'subagent:completed',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

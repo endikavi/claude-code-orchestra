@@ -1,9 +1,8 @@
 import { EventEmitter } from 'events';
-import { BrowserWindow } from 'electron';
 import { ClaudeInstance, ClaudeInstanceConfig } from './ClaudeInstance';
 import { ShellInstance } from './ShellInstance';
 import { DataStore } from './DataStore';
-import { IPC_CHANNELS } from '../ipc/channels';
+import { getInstanceBroadcaster, type InstanceEventType } from './InstanceBroadcaster';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ShellInstance as ShellInstanceType,
@@ -13,25 +12,14 @@ import type {
   ClaudeModel,
   InstanceMode,
 } from '@shared/types';
+import type { SubagentInstance } from '@shared/types/orchestration';
 import type { InstanceOutputBuffer } from '@shared/types/remote';
+import { IPC_CHANNELS } from '../ipc/channels';
+
+// BrowserWindow type for optional Electron dependency
+type BrowserWindowType = import('electron').BrowserWindow;
 
 // Lazy import to avoid circular dependencies
-let webServerModule: typeof import('./WebServer') | null = null;
-async function getWebServerModule() {
-  if (!webServerModule) {
-    webServerModule = await import('./WebServer');
-  }
-  return webServerModule;
-}
-
-let clusterManagerModule: typeof import('./ClusterManager') | null = null;
-async function getClusterManagerModule() {
-  if (!clusterManagerModule) {
-    clusterManagerModule = await import('./ClusterManager');
-  }
-  return clusterManagerModule;
-}
-
 let fileLockManagerModule: typeof import('./FileLockManager') | null = null;
 async function getFileLockManagerModule() {
   if (!fileLockManagerModule) {
@@ -47,7 +35,7 @@ export class ProcessManager extends EventEmitter {
   private instanceConversations: Map<string, string> = new Map(); // instanceId -> conversationId
   private instanceOutputs: Map<string, InstanceOutputBuffer> = new Map(); // instanceId -> output buffer
   private dataStore: DataStore;
-  private mainWindow: BrowserWindow | null = null;
+  private mainWindow: BrowserWindowType | null = null;
 
   // Max raw output buffer size (to prevent memory issues)
   private static readonly MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
@@ -74,8 +62,10 @@ export class ProcessManager extends EventEmitter {
   /**
    * Set the main window for IPC communication
    */
-  setMainWindow(window: BrowserWindow): void {
+  setMainWindow(window: BrowserWindowType): void {
     this.mainWindow = window;
+    // Also set on broadcaster
+    getInstanceBroadcaster().setMainWindow(window);
   }
 
   /**
@@ -90,10 +80,20 @@ export class ProcessManager extends EventEmitter {
       throw new Error(`Project with id ${config.projectId} not found`);
     }
 
+    console.log(
+      `[ProcessManager] Creating instance for project ${project.name}, enableMcp=${project.enableMcp}`
+    );
+
     const instance = new ClaudeInstance({
-      ...config,
+      projectId: config.projectId,
       projectPath: project.path,
+      model: config.model,
+      mode: config.mode,
+      prompt: config.prompt,
       skipPermissions: project.skipPermissions,
+      enableMcp: project.enableMcp,
+      resumeSessionId: config.resumeSessionId,
+      planMode: config.planMode,
     });
 
     this.setupInstanceListeners(instance);
@@ -130,6 +130,7 @@ export class ProcessManager extends EventEmitter {
       model: config.model,
       mode: config.mode,
       skipPermissions: project.skipPermissions,
+      enableMcp: project.enableMcp,
       resumeSessionId: config.sessionId,
     });
 
@@ -302,106 +303,43 @@ export class ProcessManager extends EventEmitter {
         this.dataStore.updateConversation(conversationId, { sessionId });
       }
     });
+
+    // Subagent events (native Claude Task tool)
+    instance.on('subagent:started', (data: { instanceId: string; subagent: SubagentInstance }) => {
+      console.log(
+        `[ProcessManager] Received subagent:started for instance ${data.instanceId}, subagent ${data.subagent.id}`
+      );
+      this.sendToRenderer(IPC_CHANNELS.SUBAGENT_STARTED, data.instanceId, data.subagent);
+    });
+
+    instance.on(
+      'subagent:completed',
+      (data: { instanceId: string; subagent: SubagentInstance }) => {
+        console.log(
+          `[ProcessManager] Received subagent:completed for instance ${data.instanceId}, subagent ${data.subagent.id}`
+        );
+        this.sendToRenderer(IPC_CHANNELS.SUBAGENT_COMPLETED, data.instanceId, data.subagent);
+      }
+    );
   }
 
   /**
    * Broadcast an instance event to all destinations (renderer, webserver, cluster)
-   * Centralizes the triple-broadcast pattern used throughout instance event handling
+   * Delegates to InstanceBroadcaster for centralized broadcasting
    */
   private broadcastInstanceEvent(
-    event: 'output' | 'status' | 'error' | 'exit' | 'rawOutput' | 'sessionId' | 'terminalTitle',
+    event: InstanceEventType,
     instanceId: string,
     data: unknown
   ): void {
-    // Map event types to IPC channels
-    const channelMap: Record<string, string> = {
-      output: IPC_CHANNELS.INSTANCE_OUTPUT,
-      status: IPC_CHANNELS.INSTANCE_STATUS,
-      error: IPC_CHANNELS.INSTANCE_ERROR,
-      exit: IPC_CHANNELS.INSTANCE_EXIT,
-      rawOutput: IPC_CHANNELS.INSTANCE_RAW_OUTPUT,
-      sessionId: IPC_CHANNELS.INSTANCE_SESSION_ID,
-      terminalTitle: IPC_CHANNELS.INSTANCE_TERMINAL_TITLE,
-    };
-
-    const channel = channelMap[event];
-    if (channel) {
-      this.sendToRenderer(channel, instanceId, data);
-    }
-    this.sendToWebServer(event, instanceId, data);
-    this.sendToCluster(event, instanceId, data);
+    getInstanceBroadcaster().broadcastInstanceEvent(event, instanceId, data);
   }
 
   /**
-   * Send message to renderer process
+   * Send message to renderer process (for local-only events)
    */
   private sendToRenderer(channel: string, ...args: unknown[]): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(channel, ...args);
-    }
-  }
-
-  /**
-   * Send message to web server for broadcasting to web clients
-   */
-  private sendToWebServer(event: string, instanceId: string, data: unknown): void {
-    // Use dynamic import to avoid circular dependency
-    getWebServerModule()
-      .then(({ getWebServer }) => {
-        const webServer = getWebServer();
-        if (!webServer.running) return;
-
-        switch (event) {
-          case 'output':
-            webServer.broadcastInstanceOutput(instanceId, data as StreamMessage);
-            break;
-          case 'status':
-            webServer.broadcastInstanceStatus(instanceId, data as InstanceStatus);
-            break;
-          case 'error':
-            webServer.broadcastInstanceError(instanceId, data as string);
-            break;
-          case 'exit':
-            webServer.broadcastInstanceExit(instanceId, data as number);
-            break;
-          case 'rawOutput':
-            webServer.broadcastInstanceRawOutput(instanceId, data as string);
-            break;
-          case 'sessionId':
-            webServer.broadcastInstanceSessionId(instanceId, data as string);
-            break;
-          case 'terminalTitle':
-            webServer.broadcastInstanceTerminalTitle(instanceId, data as string);
-            break;
-        }
-      })
-      .catch(() => {
-        // WebServer not available, ignore
-      });
-  }
-
-  /**
-   * Send instance events to cluster for distribution to other nodes
-   * Only sends when running as secondary node connected to primary
-   */
-  private sendToCluster(event: string, instanceId: string, data: unknown): void {
-    getClusterManagerModule()
-      .then(({ getClusterManager }) => {
-        const clusterManager = getClusterManager();
-        const config = clusterManager.getConfig();
-
-        // Only forward events if we're a secondary node connected to primary
-        if (config.role !== 'secondary' || !clusterManager.isConnected()) {
-          return;
-        }
-
-        // Forward the event to primary via the cluster socket
-        // The primary will then broadcast to all nodes including itself
-        clusterManager.forwardInstanceEvent(event, instanceId, data);
-      })
-      .catch(() => {
-        // ClusterManager not available, ignore
-      });
+    getInstanceBroadcaster().sendToRenderer(channel, ...args);
   }
 
   /**
@@ -410,18 +348,8 @@ export class ProcessManager extends EventEmitter {
   private broadcastStateUpdate(): void {
     // Send to renderer process
     this.syncToRenderer();
-
     // Send to web clients
-    getWebServerModule()
-      .then(({ getWebServer }) => {
-        const webServer = getWebServer();
-        if (webServer.running) {
-          webServer.broadcastStateUpdate();
-        }
-      })
-      .catch(() => {
-        // WebServer not available, ignore
-      });
+    getInstanceBroadcaster().broadcastStateUpdate();
   }
 
   /**
@@ -429,7 +357,7 @@ export class ProcessManager extends EventEmitter {
    */
   private syncToRenderer(): void {
     const instances = this.getAllInstances();
-    this.sendToRenderer(IPC_CHANNELS.INSTANCE_SYNC, instances);
+    getInstanceBroadcaster().syncInstancesToRenderer(instances);
   }
 
   /**
@@ -544,6 +472,8 @@ export class ProcessManager extends EventEmitter {
    * Setup event listeners for a shell instance
    */
   private setupShellListeners(shell: ShellInstance): void {
+    const broadcaster = getInstanceBroadcaster();
+
     shell.on('data', (data: string) => {
       // Store in buffer
       let buffer = this.shellOutputs.get(shell.id) || '';
@@ -554,15 +484,15 @@ export class ProcessManager extends EventEmitter {
       }
       this.shellOutputs.set(shell.id, buffer);
 
-      this.sendToRenderer(IPC_CHANNELS.SHELL_RAW_OUTPUT, shell.id, data);
+      broadcaster.sendShellEvent('data', shell.id, data);
     });
 
     shell.on('status', (status: ShellInstanceStatus) => {
-      this.sendToRenderer(IPC_CHANNELS.SHELL_STATUS, shell.id, status);
+      broadcaster.sendShellEvent('status', shell.id, status);
     });
 
     shell.on('exit', (code: number) => {
-      this.sendToRenderer(IPC_CHANNELS.SHELL_EXIT, shell.id, code);
+      broadcaster.sendShellEvent('exit', shell.id, code);
 
       // Clean up shell listeners and buffers immediately
       shell.removeAllListeners();

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Example MCP configuration for Claude Code Orchestra. This is auto-generated when you enable MCP for a project.",
+  "mcpServers": {
+    "orchestra": {
+      "command": "node",
+      "args": ["PATH_TO_MCP_BRIDGE_JS"],
+      "env": {
+        "ORCHESTRA_MCP_TOKEN": "YOUR_INSTANCE_TOKEN",
+        "ORCHESTRA_MCP_URL": "http://localhost:3847/mcp"
+      }
+    }
+  }
+}
