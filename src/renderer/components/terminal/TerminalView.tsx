@@ -282,6 +282,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
         cursorStyle: 'bar',
         scrollback: 5000, // Reduced from 10000 for better memory usage
         allowProposedApi: true,
+        scrollOnUserInput: false, // Prevent auto-scroll on input to reduce flicker
       });
 
       const fitAddon = new FitAddon();

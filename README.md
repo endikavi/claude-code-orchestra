@@ -54,8 +54,8 @@ Orchestra includes a standalone web client that connects via WebSocket, enabling
 
 ## Prerequisites
 
-- Node.js 18+
-- npm or yarn
+- Node.js 20+
+- npm 9+
 - Claude CLI installed and configured
 
 ### Linux-Specific Requirements
@@ -140,13 +140,19 @@ claude-code-orchestra/
 │   ├── main/           # Electron main process
 │   │   ├── services/   # ProcessManager, DataStore, etc.
 │   │   ├── ipc/        # IPC handlers and channels
+│   │   ├── cli/        # Headless CLI entry point
 │   │   └── utils/      # Utility functions
 │   ├── renderer/       # React frontend
 │   │   ├── components/ # UI components
 │   │   ├── stores/     # Zustand stores
 │   │   ├── hooks/      # React hooks
+│   │   ├── contexts/   # React contexts
+│   │   ├── i18n/       # Internationalization
+│   │   ├── types/      # Renderer-specific types
+│   │   ├── utils/      # Utility functions
 │   │   └── styles/     # CSS files
-│   └── shared/         # Shared types
+│   ├── shared/         # Shared types and utilities
+│   └── web/            # Standalone web client
 ├── docs/               # Documentation
 └── resources/          # Icons and assets
 ```
@@ -155,12 +161,11 @@ claude-code-orchestra/
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+N` | New project |
-| `Ctrl+T` | New instance |
-| `Ctrl+W` | Close instance |
-| `Ctrl+Tab` | Next tab |
-| `Ctrl+Shift+Tab` | Previous tab |
-| `Ctrl+\` | Toggle view mode |
+| `Ctrl/Cmd+N` | New project |
+| `Ctrl/Cmd+T` | New instance |
+| `Ctrl/Cmd+W` | Close instance |
+| `Ctrl/Cmd+Tab` | Next tab |
+| `Ctrl/Cmd+Shift+Tab` | Previous tab |
 
 ## Configuration
 

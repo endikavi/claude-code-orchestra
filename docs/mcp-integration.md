@@ -6,7 +6,6 @@ Claude Code Orchestra includes a built-in MCP (Model Context Protocol) server th
 
 When MCP is enabled for a project, Claude instances can use specialized tools to:
 
-- **Orchestration**: Propose and monitor worker instances (Director Mode)
 - **Git Integration**: Query current git status before making changes
 - **Project Info**: Access project configuration and metadata
 - **Instance Monitoring**: List and monitor other Claude instances in the project
@@ -40,73 +39,6 @@ Projects with `enableMcp: true` will automatically configure MCP for new instanc
    - Rate limit counters are cleared
 
 ## Available Tools
-
-### Orchestration Tools
-
-#### `orchestra_propose_workers`
-Propose worker instances for parallel task execution.
-
-**Input:**
-```json
-{
-  "workers": [
-    {
-      "task": "Implement user authentication",
-      "model": "sonnet",
-      "rationale": "Complex feature requiring careful implementation"
-    }
-  ]
-}
-```
-
-**Output:**
-```json
-{
-  "proposalId": "uuid",
-  "status": "pending_approval",
-  "workerCount": 1,
-  "message": "Worker proposal submitted. Waiting for user approval."
-}
-```
-
-#### `orchestra_get_workers`
-Get status and output of all workers created by this director.
-
-**Input:** `{}`
-
-**Output:**
-```json
-{
-  "workers": [
-    {
-      "workerId": "uuid",
-      "task": "Implement user authentication",
-      "model": "sonnet",
-      "status": "running",
-      "createdAt": 1700000000000,
-      "output": null
-    }
-  ],
-  "totalWorkers": 1,
-  "completed": 0,
-  "running": 1,
-  "error": 0
-}
-```
-
-#### `orchestra_get_shared_context`
-Get shared context broadcasted from all workers.
-
-**Input:** `{}`
-
-**Output:**
-```json
-{
-  "summaries": ["Worker completed authentication module"],
-  "filesModified": ["src/auth/index.ts", "src/auth/middleware.ts"],
-  "errors": []
-}
-```
 
 ### Project Tools
 
@@ -148,7 +80,7 @@ Get information about the current project.
 ```
 
 #### `project_list_instances`
-List all Claude instances running in this project.
+List all Claude instances running in this project (excluding the calling instance).
 
 **Input:** `{}`
 
@@ -161,13 +93,10 @@ List all Claude instances running in this project.
       "status": "running",
       "model": "sonnet",
       "mode": "stream-json",
-      "isDirector": true,
-      "isWorker": false
+      "createdAt": 1700000000000
     }
   ],
-  "totalInstances": 1,
-  "directors": 1,
-  "workers": 0
+  "totalInstances": 1
 }
 ```
 

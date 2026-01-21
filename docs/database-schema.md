@@ -28,6 +28,9 @@ Stores project configurations.
 | `description` | TEXT | - | Optional project description |
 | `color` | TEXT | - | Hex color for UI display (e.g., `#FF6B6B`) |
 | `skipPermissions` | INTEGER | DEFAULT 0 | Boolean (0/1) for `--dangerously-skip-permissions` |
+| `hostname` | TEXT | - | Hostname where project was created |
+| `preferredShell` | TEXT | - | Preferred shell for this project |
+| `enableMcp` | INTEGER | DEFAULT 0 | Boolean (0/1) for MCP integration |
 | `createdAt` | INTEGER | NOT NULL | Unix timestamp (milliseconds) |
 | `updatedAt` | INTEGER | NOT NULL | Unix timestamp (milliseconds) |
 
@@ -95,6 +98,27 @@ Stores individual messages within conversations.
 
 ---
 
+---
+
+## Additional Tables
+
+The database also includes tables for remote access, security, and cluster features:
+
+| Table | Description |
+|-------|-------------|
+| `remote_config` | Remote access server configuration |
+| `cluster_config` | Multi-node cluster settings |
+| `instance_cluster_permissions` | Per-instance sharing permissions |
+| `app_settings` | Application settings (JWT secret, etc.) |
+| `security_config` | Security configuration (JSON) |
+| `ip_access_rules` | IP allowlist/denylist rules |
+| `audit_log` | Security audit trail |
+| `ip_lockouts` | Rate limiting lockouts |
+
+These tables support the remote access and cluster features documented in [Remote Access](./remote-access.md) and [Headless Deployment](./headless-deployment.md).
+
+---
+
 ## Entity Relationship Diagram
 
 ```
@@ -154,6 +178,9 @@ interface Project {
   description?: string;
   color?: string;
   skipPermissions?: boolean;
+  hostname?: string;
+  preferredShell?: string;
+  enableMcp?: boolean;
   createdAt: number;
   updatedAt: number;
 }

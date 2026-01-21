@@ -10,12 +10,24 @@ IPC channels follow the naming convention: `domain:operation`
 |--------|-------------|
 | `project` | Project management |
 | `instance` | Claude instance lifecycle |
-| `shell` | Shell instance management |
+| `shell` | Integrated shell management |
 | `conversation` | Conversation history |
 | `config` | Configuration settings |
 | `remote` | Remote access features |
 | `cluster` | Multi-node cluster |
-| `security` | Security settings |
+| `security` | Security settings and audit |
+| `session` | Claude session import |
+| `uiSettings` | UI settings persistence |
+| `localSettings` | Local settings file |
+| `notification` | Notification system |
+| `hook` | Claude CLI hook integration |
+| `skill` | Skill management |
+| `permission` | Permission rules |
+| `metrics` | Usage metrics and analytics |
+| `git` | Git status operations |
+| `subagent` | Subagent tracking |
+| `window` | Window controls |
+| `dialog` | Native dialogs |
 
 ## Channel Categories
 
@@ -433,6 +445,184 @@ Gets cluster connection status.
 **Payload:** `(state: ClusterState)`
 
 Emitted when cluster state changes.
+
+## Session Channels
+
+### `session:getAvailable`
+**Type:** Invoke
+**Args:** `(projectPath: string)`
+**Returns:** `SessionInfo[]`
+
+Gets available Claude sessions for import.
+
+### `session:import`
+**Type:** Invoke
+**Args:** `(projectId: string, sessionInfo: SessionInfo)`
+**Returns:** `Conversation`
+
+Imports a Claude session as a conversation.
+
+### `session:importBatch`
+**Type:** Invoke
+**Args:** `(projectId: string, sessions: SessionInfo[])`
+**Returns:** `Conversation[]`
+
+Imports multiple sessions at once.
+
+## UI Settings Channels
+
+### `uiSettings:get`
+**Type:** Invoke
+**Returns:** `UISettings`
+
+Gets persisted UI settings.
+
+### `uiSettings:update`
+**Type:** Invoke
+**Args:** `(settings: Partial<UISettings>)`
+**Returns:** `void`
+
+Updates UI settings.
+
+## Notification Channels
+
+### `notification:getAll`
+**Type:** Invoke
+**Returns:** `Notification[]`
+
+Gets all notifications.
+
+### `notification:markRead`
+**Type:** Invoke
+**Args:** `(id: string)`
+**Returns:** `void`
+
+Marks notification as read.
+
+### `notification:new` (Event)
+**Type:** Event
+**Payload:** `(notification: Notification)`
+
+Emitted when new notification arrives.
+
+## Hook Channels
+
+### `hook:setupProject`
+**Type:** Invoke
+**Args:** `(projectId: string, template: string)`
+**Returns:** `void`
+
+Sets up hooks for a project.
+
+### `hook:getTemplates`
+**Type:** Invoke
+**Returns:** `HookTemplate[]`
+
+Gets available hook templates.
+
+### `hook:activity` (Event)
+**Type:** Event
+**Payload:** `(activity: HookActivity)`
+
+Real-time hook activity events.
+
+## Skill Channels
+
+### `skill:getAvailable`
+**Type:** Invoke
+**Returns:** `Skill[]`
+
+Gets available skills.
+
+### `skill:install`
+**Type:** Invoke
+**Args:** `(skillId: string)`
+**Returns:** `void`
+
+Installs a skill.
+
+### `skill:getInstalled`
+**Type:** Invoke
+**Returns:** `Skill[]`
+
+Gets installed skills.
+
+## Permission Channels
+
+### `permission:getConfig`
+**Type:** Invoke
+**Returns:** `PermissionConfig`
+
+Gets permission configuration.
+
+### `permission:addRule`
+**Type:** Invoke
+**Args:** `(rule: PermissionRule)`
+**Returns:** `PermissionRule`
+
+Adds a permission rule.
+
+### `permission:getLog`
+**Type:** Invoke
+**Returns:** `PermissionLogEntry[]`
+
+Gets permission decision log.
+
+## Metrics Channels
+
+### `metrics:getToolUsage`
+**Type:** Invoke
+**Returns:** `ToolUsageMetrics`
+
+Gets tool usage statistics.
+
+### `metrics:getDashboardSummary`
+**Type:** Invoke
+**Returns:** `DashboardSummary`
+
+Gets dashboard summary data.
+
+### `metrics:getCostBreakdown`
+**Type:** Invoke
+**Returns:** `CostBreakdown`
+
+Gets cost breakdown by model/project.
+
+## Git Channels
+
+### `git:getStatus`
+**Type:** Invoke
+**Args:** `(projectPath: string)`
+**Returns:** `GitStatus`
+
+Gets git repository status.
+
+### `git:statusChanged` (Event)
+**Type:** Event
+**Payload:** `(projectPath: string, status: GitStatus)`
+
+Emitted when git status changes.
+
+## Subagent Channels
+
+### `subagent:getByInstance`
+**Type:** Invoke
+**Args:** `(instanceId: string)`
+**Returns:** `Subagent[]`
+
+Gets subagents spawned by an instance.
+
+### `subagent:started` (Event)
+**Type:** Event
+**Payload:** `(subagent: Subagent)`
+
+Emitted when subagent starts.
+
+### `subagent:completed` (Event)
+**Type:** Event
+**Payload:** `(subagentId: string, result: SubagentResult)`
+
+Emitted when subagent completes.
 
 ## Utility Channels
 

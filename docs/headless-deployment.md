@@ -455,7 +455,7 @@ Response:
 ```json
 {
   "status": "healthy",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.4",
   "uptime": 3600,
   "cluster": {
     "role": "primary",

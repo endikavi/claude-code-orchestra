@@ -41,16 +41,23 @@ Thank you for your interest in contributing to Claude Code Orchestra! This docum
 
 | Script | Description |
 |--------|-------------|
+| `npm run dev` | Start Vite dev server (web preview) |
 | `npm run electron:dev` | Start development mode with hot reload |
+| `npm run build` | Full production build (TypeScript + Vite + Web + Electron) |
+| `npm run build:vite` | Build renderer with Vite only |
+| `npm run build:web` | Build standalone web client |
+| `npm run build:cli` | Build headless CLI |
+| `npm run electron:build` | Package Electron app for current platform |
+| `npm run rebuild` | Rebuild native modules (node-pty, better-sqlite3) |
 | `npm run lint` | Run ESLint |
 | `npm run lint:fix` | Fix auto-fixable ESLint issues |
+| `npm run lint:strict` | Run ESLint with zero warnings mode |
 | `npm run format` | Format code with Prettier |
 | `npm run format:check` | Check code formatting |
 | `npm run typecheck` | Run TypeScript type checking |
 | `npm run test` | Run tests in watch mode |
 | `npm run test:run` | Run tests once |
 | `npm run test:coverage` | Run tests with coverage report |
-| `npm run electron:build` | Build the application |
 
 ## Project Structure
 

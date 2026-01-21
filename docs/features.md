@@ -63,11 +63,11 @@
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+N` | New project |
-| `Ctrl+T` | New instance (when project selected) |
-| `Ctrl+W` | Close current instance |
-| `Ctrl+Tab` | Next instance tab |
-| `Ctrl+Shift+Tab` | Previous instance tab |
+| `Ctrl/Cmd+N` | New project |
+| `Ctrl/Cmd+T` | New instance (when project selected) |
+| `Ctrl/Cmd+W` | Close current instance |
+| `Ctrl/Cmd+Tab` | Next instance tab |
+| `Ctrl/Cmd+Shift+Tab` | Previous instance tab |
 
 ## Coming Soon
 

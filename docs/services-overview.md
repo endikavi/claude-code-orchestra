@@ -250,6 +250,104 @@ Reads Claude CLI configuration files.
 - `<project>/.claude/settings.json` - Project settings
 - Environment variables
 
+## Session and Import Services
+
+### ClaudeSessionImporter
+**Location:** `src/main/services/ClaudeSessionImporter.ts`
+
+Imports existing Claude CLI sessions into Orchestra.
+
+**Key Responsibilities:**
+- Scans for existing Claude sessions in project directories
+- Parses session metadata (JSONL files)
+- Creates conversation records from imported sessions
+- Supports batch import operations
+
+### ShellDetector
+**Location:** `src/main/services/ShellDetector.ts`
+
+Detects available shells on the system.
+
+**Key Responsibilities:**
+- Detects installed shells (bash, zsh, PowerShell, cmd)
+- Returns shell paths and capabilities
+- Handles platform-specific shell detection
+- Provides default shell selection
+
+## Instance Tracking Services
+
+### SubagentTracker
+**Location:** `src/main/services/SubagentTracker.ts`
+
+Tracks subagents spawned by Claude's native Task tool.
+
+**Key Responsibilities:**
+- Monitors instance output for subagent creation events
+- Tracks subagent lifecycle (started, completed, failed)
+- Maintains parent-child relationships between instances
+- Provides subagent status queries
+
+### GitStatusManager
+**Location:** `src/main/services/GitStatusManager.ts`
+
+Manages git repository status for projects.
+
+**Key Responsibilities:**
+- Monitors git status for project directories
+- Tracks staged/unstaged changes, branch info
+- Emits status change events
+- Provides status queries for MCP tools
+
+## Skill and Hook Services
+
+### SkillManager
+**Location:** `src/main/services/SkillManager.ts`
+
+Manages Claude CLI skills installation and configuration.
+
+**Key Responsibilities:**
+- Lists available skills from registry
+- Installs/removes skills for projects
+- Manages skill configuration files
+- Validates skill compatibility
+
+### HookManager
+**Location:** `src/main/services/HookManager.ts`
+
+Manages Claude CLI hooks for projects.
+
+**Key Responsibilities:**
+- Sets up hook configurations for projects
+- Provides hook templates
+- Tracks hook activity events
+- Manages hook-dashboard integration
+
+## Cluster Security Services
+
+### ClusterPermissionValidator
+**Location:** `src/main/services/ClusterPermissionValidator.ts`
+
+Validates permissions for cluster operations.
+
+**Key Responsibilities:**
+- Validates node permissions for instance operations
+- Enforces privacy settings for shared instances
+- Checks cluster role-based access
+- Logs permission decisions
+
+## Settings Services
+
+### UISettingsStore
+**Location:** `src/main/services/UISettingsStore.ts`
+
+Persists UI settings to disk.
+
+**Key Responsibilities:**
+- Stores UI preferences (theme, language, view mode)
+- Provides synchronous access to settings
+- Handles settings migration
+- Supports default values
+
 ## Service Initialization
 
 Services are initialized on demand using singleton patterns:

@@ -12,10 +12,18 @@ Claude Code Orchestra uses Zustand for client-side state management. This docume
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │ │
 │  │  │ projectStore │  │instanceStore │  │ clusterStore │   │ │
 │  │  └──────────────┘  └──────────────┘  └──────────────┘   │ │
-│  │  ┌──────────────┐  ┌──────────────┐                     │ │
-│  │  │ conversation │  │   uiStore    │                     │ │
-│  │  │    Store     │  │              │                     │ │
-│  │  └──────────────┘  └──────────────┘                     │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │ │
+│  │  │ conversation │  │   uiStore    │  │  gitStore    │   │ │
+│  │  │    Store     │  │              │  │              │   │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘   │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │ │
+│  │  │metricsStore  │  │notification  │  │ permission   │   │ │
+│  │  │              │  │   Store      │  │   Store      │   │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘   │ │
+│  │  ┌──────────────┐                                       │ │
+│  │  │orchestration │                                       │ │
+│  │  │   Store      │                                       │ │
+│  │  └──────────────┘                                       │ │
 │  └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
            ▲                    ▲
@@ -174,6 +182,117 @@ interface UIState {
 - `setViewMode(mode)` - Switch view
 - `toggleSidebar()` - Toggle sidebar
 - `setShowInstanceModal(show)` - Control modal visibility
+
+### gitStore
+**Location:** `src/renderer/stores/gitStore.ts`
+
+Manages git repository status for projects.
+
+**State:**
+```typescript
+interface GitState {
+  statuses: Record<string, GitStatus>;  // Keyed by project path
+  isLoading: Record<string, boolean>;
+}
+```
+
+**Actions:**
+- `loadStatus(projectPath)` - Fetch git status
+- `refreshStatus(projectPath)` - Force refresh
+- `getStatus(projectPath)` - Get cached status
+
+**IPC Event Listeners:**
+- `git:statusChanged` - Git status updates
+
+### metricsStore
+**Location:** `src/renderer/stores/metricsStore.ts`
+
+Manages usage metrics and analytics data.
+
+**State:**
+```typescript
+interface MetricsState {
+  toolUsage: ToolUsageMetrics | null;
+  dashboardSummary: DashboardSummary | null;
+  costBreakdown: CostBreakdown | null;
+  isLoading: boolean;
+}
+```
+
+**Actions:**
+- `loadToolUsage()` - Fetch tool usage stats
+- `loadDashboardSummary()` - Fetch dashboard summary
+- `loadCostBreakdown()` - Fetch cost breakdown
+- `clearMetrics()` - Clear all metrics
+
+### notificationStore
+**Location:** `src/renderer/stores/notificationStore.ts`
+
+Manages notification state and preferences.
+
+**State:**
+```typescript
+interface NotificationState {
+  notifications: Notification[];
+  unreadCount: number;
+  preferences: NotificationPreferences;
+}
+```
+
+**Actions:**
+- `loadNotifications()` - Fetch all notifications
+- `markRead(id)` - Mark notification as read
+- `markAllRead()` - Mark all as read
+- `dismiss(id)` - Dismiss notification
+- `clearAll()` - Clear all notifications
+
+**IPC Event Listeners:**
+- `notification:new` - New notification arrived
+- `notification:updated` - Notification updated
+
+### permissionStore
+**Location:** `src/renderer/stores/permissionStore.ts`
+
+Manages permission rules and configuration.
+
+**State:**
+```typescript
+interface PermissionState {
+  config: PermissionConfig | null;
+  rules: PermissionRule[];
+  log: PermissionLogEntry[];
+  stats: PermissionStats | null;
+}
+```
+
+**Actions:**
+- `loadConfig()` - Fetch permission config
+- `addRule(rule)` - Add permission rule
+- `updateRule(id, updates)` - Update rule
+- `removeRule(id)` - Remove rule
+- `loadLog()` - Fetch permission log
+- `loadStats()` - Fetch permission stats
+
+### orchestrationStore
+**Location:** `src/renderer/stores/orchestrationStore.ts`
+
+Manages multi-instance orchestration state.
+
+**State:**
+```typescript
+interface OrchestrationState {
+  subagents: Record<string, Subagent[]>;  // Keyed by parent instance ID
+  activeDirectors: string[];
+}
+```
+
+**Actions:**
+- `loadSubagents(instanceId)` - Fetch subagents for instance
+- `getSubagentsByInstance(instanceId)` - Get cached subagents
+
+**IPC Event Listeners:**
+- `subagent:started` - Subagent spawned
+- `subagent:completed` - Subagent finished
 
 ## Patterns
 

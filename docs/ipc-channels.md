@@ -16,6 +16,20 @@ Channels follow the format: `domain:action`
 - `config:*` - Configuration reading operations
 - `window:*` - Window control operations
 - `dialog:*` - Native dialog operations
+- `shell:*` - Integrated shell operations
+- `session:*` - Claude session import operations
+- `remote:*` - Remote access server operations
+- `cluster:*` - Multi-node cluster operations
+- `uiSettings:*` - UI settings persistence
+- `security:*` - Security configuration and audit
+- `localSettings:*` - Local settings file operations
+- `notification:*` - Notification system operations
+- `hook:*` - Claude CLI hook integration
+- `skill:*` - Skill management operations
+- `permission:*` - Permission rule management
+- `metrics:*` - Usage metrics and analytics
+- `git:*` - Git status operations
+- `subagent:*` - Subagent tracking operations
 
 ## Project Channels
 
@@ -382,6 +396,946 @@ Opens a native directory selection dialog.
 **Direction:** Renderer → Main
 
 **Returns:** `string | null` - Selected path or null if cancelled
+
+---
+
+## Shell Channels
+
+### `shell:create`
+Creates an integrated shell instance.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+```typescript
+{
+  projectId: string;  // Project ID for working directory
+  shell?: string;     // Optional shell type (auto-detected if not provided)
+}
+```
+
+**Returns:** `ShellInstance` object
+
+---
+
+### `shell:kill`
+Terminates a shell instance.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `id: string` - Shell ID
+
+**Returns:** `void`
+
+---
+
+### `shell:sendInput`
+Sends input to a shell instance.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+- `id: string` - Shell ID
+- `input: string` - Input text
+
+**Returns:** `void`
+
+---
+
+### `shell:resize`
+Resizes shell terminal.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+- `id: string` - Shell ID
+- `cols: number` - Column count
+- `rows: number` - Row count
+
+**Returns:** `void`
+
+---
+
+### `shell:rawOutput` (Event)
+Emitted when shell produces output.
+
+**Direction:** Main → Renderer
+
+**Payload:**
+- `shellId: string`
+- `data: string`
+
+---
+
+### `shell:status` (Event)
+Emitted when shell status changes.
+
+**Direction:** Main → Renderer
+
+**Payload:**
+- `shellId: string`
+- `status: ShellInstanceStatus`
+
+---
+
+### `shell:exit` (Event)
+Emitted when shell process exits.
+
+**Direction:** Main → Renderer
+
+**Payload:**
+- `shellId: string`
+- `code: number`
+
+---
+
+### `shell:getAvailable`
+Gets available shells on the system.
+
+**Direction:** Renderer → Main
+
+**Returns:** `AvailableShell[]` - List of detected shells
+
+---
+
+### `shell:openTerminal`
+Opens external terminal at project path (legacy).
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectPath: string`
+
+**Returns:** `void`
+
+---
+
+## Session Channels
+
+### `session:getAvailable`
+Gets available Claude sessions for import.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectPath: string`
+
+**Returns:** `SessionInfo[]`
+
+---
+
+### `session:getCount`
+Gets count of available sessions.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectPath: string`
+
+**Returns:** `number`
+
+---
+
+### `session:import`
+Imports a single Claude session.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+- `projectId: string`
+- `sessionInfo: SessionInfo`
+
+**Returns:** `Conversation`
+
+---
+
+### `session:importBatch`
+Imports multiple sessions at once.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+- `projectId: string`
+- `sessions: SessionInfo[]`
+
+**Returns:** `Conversation[]`
+
+---
+
+### `session:checkInstalled`
+Checks if Claude CLI is installed.
+
+**Direction:** Renderer → Main
+
+**Returns:** `boolean`
+
+---
+
+## Remote Access Channels
+
+### `remote:getConfig`
+Gets remote access configuration.
+
+**Direction:** Renderer → Main
+
+**Returns:** `RemoteConfig`
+
+---
+
+### `remote:updateConfig`
+Updates remote access configuration.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `config: Partial<RemoteConfig>`
+
+**Returns:** `void`
+
+---
+
+### `remote:setPassword`
+Sets the remote access password.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `password: string`
+
+**Returns:** `void`
+
+---
+
+### `remote:startServer`
+Starts the remote access server.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+### `remote:stopServer`
+Stops the remote access server.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+### `remote:getStatus`
+Gets remote server status.
+
+**Direction:** Renderer → Main
+
+**Returns:** `RemoteServerStatus`
+
+---
+
+### `remote:kickSession`
+Kicks a connected remote session.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+- `sessionId: string`
+- `reason?: string`
+
+**Returns:** `void`
+
+---
+
+### `remote:getQrCode`
+Generates QR code for remote access URL.
+
+**Direction:** Renderer → Main
+
+**Returns:** `string` - Base64 encoded QR code image
+
+---
+
+## Cluster Channels
+
+### `cluster:getConfig`
+Gets cluster configuration.
+
+**Direction:** Renderer → Main
+
+**Returns:** `ClusterConfig`
+
+---
+
+### `cluster:updateConfig`
+Updates cluster configuration.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `config: Partial<ClusterConfig>`
+
+**Returns:** `void`
+
+---
+
+### `cluster:getStatus`
+Gets current cluster status.
+
+**Direction:** Renderer → Main
+
+**Returns:** `ClusterStatus`
+
+---
+
+### `cluster:start`
+Starts cluster mode.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+### `cluster:stop`
+Stops cluster mode.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+### `cluster:generateSecret`
+Generates a new cluster shared secret.
+
+**Direction:** Renderer → Main
+
+**Returns:** `string`
+
+---
+
+### `cluster:getGlobalProjects`
+Gets projects from all cluster nodes.
+
+**Direction:** Renderer → Main
+
+**Returns:** `Project[]`
+
+---
+
+### `cluster:getGlobalInstances`
+Gets instances from all cluster nodes.
+
+**Direction:** Renderer → Main
+
+**Returns:** `ClaudeInstance[]`
+
+---
+
+### `cluster:createRemoteInstance`
+Creates an instance on a remote node.
+
+**Direction:** Renderer → Main
+
+**Parameters:** Instance creation config with target node
+
+**Returns:** `ClaudeInstance`
+
+---
+
+### `cluster:stateChanged` (Event)
+Emitted when cluster state changes.
+
+**Direction:** Main → Renderer
+
+**Payload:** `ClusterState`
+
+---
+
+### `cluster:nodeJoined` (Event)
+Emitted when a node joins the cluster.
+
+**Direction:** Main → Renderer
+
+**Payload:** `NodeInfo`
+
+---
+
+### `cluster:nodeLeft` (Event)
+Emitted when a node leaves the cluster.
+
+**Direction:** Main → Renderer
+
+**Payload:** `nodeId: string`
+
+---
+
+## UI Settings Channels
+
+### `uiSettings:get`
+Gets UI settings.
+
+**Direction:** Renderer → Main
+
+**Returns:** `UISettings`
+
+---
+
+### `uiSettings:update`
+Updates UI settings.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `settings: Partial<UISettings>`
+
+**Returns:** `void`
+
+---
+
+## Security Channels
+
+### `security:getConfig`
+Gets security configuration.
+
+**Direction:** Renderer → Main
+
+**Returns:** `SecurityConfig`
+
+---
+
+### `security:updateConfig`
+Updates security configuration.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `config: Partial<SecurityConfig>`
+
+**Returns:** `void`
+
+---
+
+### `security:getIpRules`
+Gets IP access rules.
+
+**Direction:** Renderer → Main
+
+**Returns:** `IpAccessRule[]`
+
+---
+
+### `security:addIpRule`
+Adds an IP access rule.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `rule: IpAccessRule`
+
+**Returns:** `IpAccessRule`
+
+---
+
+### `security:deleteIpRule`
+Deletes an IP access rule.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `id: string`
+
+**Returns:** `void`
+
+---
+
+### `security:testIp`
+Tests an IP against current rules.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `ip: string`
+
+**Returns:** `{ allowed: boolean; matchedRule?: IpAccessRule }`
+
+---
+
+### `security:getAuditLog`
+Gets audit log entries.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `options: { limit?: number; offset?: number; type?: string }`
+
+**Returns:** `AuditLogEntry[]`
+
+---
+
+### `security:clearAuditLog`
+Clears the audit log.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+### `security:getLockouts`
+Gets currently locked out IPs.
+
+**Direction:** Renderer → Main
+
+**Returns:** `Lockout[]`
+
+---
+
+### `security:unlockIp`
+Removes IP from lockout.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `ip: string`
+
+**Returns:** `void`
+
+---
+
+## Local Settings Channels
+
+### `localSettings:read`
+Reads local settings file.
+
+**Direction:** Renderer → Main
+
+**Returns:** `LocalSettings | null`
+
+---
+
+### `localSettings:write`
+Writes local settings file.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `settings: LocalSettings`
+
+**Returns:** `void`
+
+---
+
+## Notification Channels
+
+### `notification:getAll`
+Gets all notifications.
+
+**Direction:** Renderer → Main
+
+**Returns:** `Notification[]`
+
+---
+
+### `notification:getStats`
+Gets notification statistics.
+
+**Direction:** Renderer → Main
+
+**Returns:** `{ total: number; unread: number }`
+
+---
+
+### `notification:markRead`
+Marks a notification as read.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `id: string`
+
+**Returns:** `void`
+
+---
+
+### `notification:markAllRead`
+Marks all notifications as read.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+### `notification:dismiss`
+Dismisses a notification.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `id: string`
+
+**Returns:** `void`
+
+---
+
+### `notification:clearAll`
+Clears all notifications.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+### `notification:getPreferences`
+Gets notification preferences.
+
+**Direction:** Renderer → Main
+
+**Returns:** `NotificationPreferences`
+
+---
+
+### `notification:setPreferences`
+Sets notification preferences.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `prefs: NotificationPreferences`
+
+**Returns:** `void`
+
+---
+
+### `notification:new` (Event)
+Emitted when a new notification arrives.
+
+**Direction:** Main → Renderer
+
+**Payload:** `Notification`
+
+---
+
+## Hook Channels
+
+### `hook:setupProject`
+Sets up hooks for a project.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+- `projectId: string`
+- `template: string`
+
+**Returns:** `void`
+
+---
+
+### `hook:removeProject`
+Removes hooks from a project.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectId: string`
+
+**Returns:** `void`
+
+---
+
+### `hook:getTemplates`
+Gets available hook templates.
+
+**Direction:** Renderer → Main
+
+**Returns:** `HookTemplate[]`
+
+---
+
+### `hook:getProjectSettings`
+Gets hook settings for a project.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectPath: string`
+
+**Returns:** `HookSettings | null`
+
+---
+
+### `hook:hasConfigured`
+Checks if a project has hooks configured.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectPath: string`
+
+**Returns:** `boolean`
+
+---
+
+### `hook:activity` (Event)
+Emitted for real-time hook activity.
+
+**Direction:** Main → Renderer
+
+**Payload:** `HookActivity`
+
+---
+
+## Skill Channels
+
+### `skill:getAvailable`
+Gets available skills from registry.
+
+**Direction:** Renderer → Main
+
+**Returns:** `Skill[]`
+
+---
+
+### `skill:install`
+Installs a skill.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `skillId: string`
+
+**Returns:** `void`
+
+---
+
+### `skill:remove`
+Removes an installed skill.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `skillId: string`
+
+**Returns:** `void`
+
+---
+
+### `skill:getInstalled`
+Gets installed skills.
+
+**Direction:** Renderer → Main
+
+**Returns:** `Skill[]`
+
+---
+
+## Permission Channels
+
+### `permission:getConfig`
+Gets permission configuration.
+
+**Direction:** Renderer → Main
+
+**Returns:** `PermissionConfig`
+
+---
+
+### `permission:setConfig`
+Sets permission configuration.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `config: PermissionConfig`
+
+**Returns:** `void`
+
+---
+
+### `permission:addRule`
+Adds a permission rule.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `rule: PermissionRule`
+
+**Returns:** `PermissionRule`
+
+---
+
+### `permission:updateRule`
+Updates a permission rule.
+
+**Direction:** Renderer → Main
+
+**Parameters:**
+- `id: string`
+- `updates: Partial<PermissionRule>`
+
+**Returns:** `PermissionRule`
+
+---
+
+### `permission:removeRule`
+Removes a permission rule.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `id: string`
+
+**Returns:** `void`
+
+---
+
+### `permission:getLog`
+Gets permission decision log.
+
+**Direction:** Renderer → Main
+
+**Returns:** `PermissionLogEntry[]`
+
+---
+
+### `permission:getStats`
+Gets permission statistics.
+
+**Direction:** Renderer → Main
+
+**Returns:** `PermissionStats`
+
+---
+
+### `permission:clearLog`
+Clears the permission log.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+## Metrics Channels
+
+### `metrics:getToolUsage`
+Gets tool usage metrics.
+
+**Direction:** Renderer → Main
+
+**Returns:** `ToolUsageMetrics`
+
+---
+
+### `metrics:getSessions`
+Gets session metrics.
+
+**Direction:** Renderer → Main
+
+**Returns:** `SessionMetrics`
+
+---
+
+### `metrics:getProjectSummary`
+Gets project summary metrics.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectId: string`
+
+**Returns:** `ProjectMetricsSummary`
+
+---
+
+### `metrics:getTimeSeries`
+Gets time series data.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `options: TimeSeriesOptions`
+
+**Returns:** `TimeSeriesData`
+
+---
+
+### `metrics:getDashboardSummary`
+Gets dashboard summary.
+
+**Direction:** Renderer → Main
+
+**Returns:** `DashboardSummary`
+
+---
+
+### `metrics:getCostBreakdown`
+Gets cost breakdown.
+
+**Direction:** Renderer → Main
+
+**Returns:** `CostBreakdown`
+
+---
+
+### `metrics:clear`
+Clears all metrics.
+
+**Direction:** Renderer → Main
+
+**Returns:** `void`
+
+---
+
+## Git Channels
+
+### `git:getStatus`
+Gets git status for a project.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectPath: string`
+
+**Returns:** `GitStatus`
+
+---
+
+### `git:refresh`
+Refreshes git status for a project.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `projectPath: string`
+
+**Returns:** `GitStatus`
+
+---
+
+### `git:statusChanged` (Event)
+Emitted when git status changes.
+
+**Direction:** Main → Renderer
+
+**Payload:**
+- `projectPath: string`
+- `status: GitStatus`
+
+---
+
+## Subagent Channels
+
+### `subagent:getByInstance`
+Gets subagents for an instance.
+
+**Direction:** Renderer → Main
+
+**Parameters:** `instanceId: string`
+
+**Returns:** `Subagent[]`
+
+---
+
+### `subagent:getAll`
+Gets all tracked subagents.
+
+**Direction:** Renderer → Main
+
+**Returns:** `Subagent[]`
+
+---
+
+### `subagent:started` (Event)
+Emitted when a subagent starts.
+
+**Direction:** Main → Renderer
+
+**Payload:** `Subagent`
+
+---
+
+### `subagent:completed` (Event)
+Emitted when a subagent completes.
+
+**Direction:** Main → Renderer
+
+**Payload:**
+- `subagentId: string`
+- `result: SubagentResult`
 
 ---
 
