@@ -466,6 +466,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openTerminal: (path: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_TERMINAL, path),
 
+    // Open external URL in default browser
+    openExternal: (url: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.OPEN_EXTERNAL, url),
+
     // Integrated shell
     create: (projectId: string): Promise<ShellInstance> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_CREATE, projectId),
@@ -932,6 +936,7 @@ declare global {
       };
       shell: {
         openTerminal: (path: string) => Promise<{ success: boolean; error?: string }>;
+        openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
         create: (projectId: string) => Promise<ShellInstance>;
         kill: (id: string) => Promise<void>;
         sendInput: (id: string, input: string) => Promise<void>;

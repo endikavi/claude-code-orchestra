@@ -45,6 +45,9 @@ export const IPC_CHANNELS = {
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
 
+  // External link operations
+  OPEN_EXTERNAL: 'shell:openExternal',
+
   // Dialog operations
   DIALOG_SELECT_DIRECTORY: 'dialog:selectDirectory',
 

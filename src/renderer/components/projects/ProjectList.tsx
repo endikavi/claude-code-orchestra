@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -67,7 +67,7 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
   );
 
   // Separate local and cluster projects
-  const { sortedLocalProjects, clusterProjectsByNode } = useMemo(() => {
+  const { sortedLocalProjects, clusterProjectsByNode, newProjectIds } = useMemo(() => {
     // Get local projects (either from globalProjects if cluster connected, or localProjects)
     const allLocalProjects: Project[] = clusterConnected
       ? (globalProjects.filter((p) => p.isLocal) as Project[])
@@ -92,10 +92,8 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
     // New projects go at the beginning
     const sortedLocalProjects = [...notInOrder, ...inOrder];
 
-    // Add new projects to order
-    for (const project of notInOrder) {
-      addProjectToOrder(project.id);
-    }
+    // Collect new project IDs (to be added to order in useEffect)
+    const newProjectIds = notInOrder.map((p) => p.id);
 
     // Get cluster projects grouped by node
     const clusterProjectsByNode: Record<string, { nodeName: string; projects: GlobalProject[] }> =
@@ -117,15 +115,20 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
       }
     }
 
-    return { sortedLocalProjects, clusterProjectsByNode };
-  }, [
-    localProjects,
-    clusterConnected,
-    globalProjects,
-    projectOrder,
-    connectedNodes,
-    addProjectToOrder,
-  ]);
+    return { sortedLocalProjects, clusterProjectsByNode, newProjectIds };
+  }, [localProjects, clusterConnected, globalProjects, projectOrder, connectedNodes]);
+
+  // Add new projects to order (moved from useMemo to avoid setState during render)
+  // Using queueMicrotask to ensure the update happens outside the render cycle
+  useEffect(() => {
+    if (newProjectIds.length === 0) return;
+
+    queueMicrotask(() => {
+      for (const projectId of newProjectIds) {
+        addProjectToOrder(projectId);
+      }
+    });
+  }, [newProjectIds, addProjectToOrder]);
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;

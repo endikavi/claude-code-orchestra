@@ -88,6 +88,8 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
       if (selection) {
         navigator.clipboard.writeText(selection);
       }
+      // Restore focus to terminal after copy
+      xtermRef.current.focus();
     }
     setContextMenu(null);
   }, []);
@@ -102,6 +104,8 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
       console.error('Failed to paste:', err);
     }
     setContextMenu(null);
+    // Restore focus to terminal after paste
+    xtermRef.current?.focus();
   }, [sendShellInput, shellId]);
 
   // Safe fit function that won't throw
@@ -163,7 +167,11 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
       });
 
       const fitAddon = new FitAddon();
-      const webLinksAddon = new WebLinksAddon();
+      // Configure WebLinksAddon with custom handler to properly open links in Electron
+      const webLinksAddon = new WebLinksAddon((_event, uri) => {
+        // Use IPC to open external URLs safely through the main process
+        void window.electronAPI.shell.openExternal(uri);
+      });
 
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(webLinksAddon);

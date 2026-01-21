@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import { spawn, execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -894,6 +894,23 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_CHANNELS.SUBAGENT_GET_ALL, () => {
     return subagentTracker.getAllSubagents();
+  });
+
+  // Open external URL handler (for terminal links)
+  ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
+    try {
+      // Validate URL format
+      const parsedUrl = new URL(url);
+      // Only allow http and https protocols
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return { success: false, error: 'Only http and https URLs are allowed' };
+      }
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid URL';
+      return { success: false, error: message };
+    }
   });
 
   // External terminal handler (legacy)
