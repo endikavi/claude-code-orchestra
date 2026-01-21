@@ -10,6 +10,7 @@ import {
   DragEndEvent,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable';
+import { useShallow } from 'zustand/react/shallow';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -30,14 +31,29 @@ interface ProjectListProps {
 
 export function ProjectList({ onProjectSelect }: ProjectListProps) {
   const { t } = useTranslation();
+  // Use useShallow to prevent unnecessary re-renders
   const {
     projects: localProjects,
     selectedProjectId,
     selectProject,
     deleteProject,
-  } = useProjectStore();
+  } = useProjectStore(
+    useShallow((state) => ({
+      projects: state.projects,
+      selectedProjectId: state.selectedProjectId,
+      selectProject: state.selectProject,
+      deleteProject: state.deleteProject,
+    }))
+  );
   const { getInstancesByProject, createShellInstance, selectShell, selectInstance } =
-    useInstanceStore();
+    useInstanceStore(
+      useShallow((state) => ({
+        getInstancesByProject: state.getInstancesByProject,
+        createShellInstance: state.createShellInstance,
+        selectShell: state.selectShell,
+        selectInstance: state.selectInstance,
+      }))
+    );
   const {
     setShowProjectModal,
     setShowInstanceModal,
@@ -45,14 +61,29 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
     projectOrder,
     setProjectOrder,
     addProjectToOrder,
-  } = useUIStore();
+  } = useUIStore(
+    useShallow((state) => ({
+      setShowProjectModal: state.setShowProjectModal,
+      setShowInstanceModal: state.setShowInstanceModal,
+      setShowLocalSettingsModal: state.setShowLocalSettingsModal,
+      projectOrder: state.projectOrder,
+      setProjectOrder: state.setProjectOrder,
+      addProjectToOrder: state.addProjectToOrder,
+    }))
+  );
 
   // Cluster state
   const {
     isConnected: clusterConnected,
     globalProjects,
     nodes: connectedNodes,
-  } = useClusterStore();
+  } = useClusterStore(
+    useShallow((state) => ({
+      isConnected: state.isConnected,
+      globalProjects: state.globalProjects,
+      nodes: state.nodes,
+    }))
+  );
 
   // Sensors for drag and drop
   const sensors = useSensors(
@@ -404,26 +435,28 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
   );
 }
 
-function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    starting: 'bg-yellow-500',
-    running: 'bg-green-500',
-    needs_permission: 'bg-orange-500',
-    tool_executing: 'bg-blue-500',
-    completed: 'bg-gray-500',
-    error: 'bg-red-500',
-    killed: 'bg-gray-600',
-  };
+// Move colors outside component to prevent recreation on each render
+const STATUS_COLORS: Record<string, string> = {
+  starting: 'bg-yellow-500',
+  running: 'bg-green-500',
+  needs_permission: 'bg-orange-500',
+  tool_executing: 'bg-blue-500',
+  completed: 'bg-gray-500',
+  error: 'bg-red-500',
+  killed: 'bg-gray-600',
+};
 
+// Memoize to prevent unnecessary re-renders when parent re-renders
+const StatusDot = React.memo(function StatusDot({ status }: { status: string }) {
   return (
     <div
-      className={`w-2 h-2 rounded-full ${colors[status] || 'bg-gray-500'} ${
+      className={`w-2 h-2 rounded-full ${STATUS_COLORS[status] || 'bg-gray-500'} ${
         status === 'running' || status === 'starting' ? 'status-pulse' : ''
       }`}
       title={status}
     />
   );
-}
+});
 
 function PlayIcon() {
   return (

@@ -3,10 +3,12 @@ import { Terminal, ITheme } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ContextMenu } from '../common/ContextMenu';
+import { sharedResizeObserver } from '../../utils/sharedResizeObserver';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -65,21 +67,102 @@ interface TerminalViewProps {
 // Threshold in pixels to consider "near bottom" for smart scroll
 const SCROLL_THRESHOLD = 50;
 
+/**
+ * Output buffer for batching terminal writes with flicker prevention
+ *
+ * Key insight: To prevent flickering, we must hide the viewport BEFORE any
+ * ANSI cursor-home sequences are processed by xterm. Using requestAnimationFrame
+ * is too late because it runs just before paint.
+ *
+ * Strategy:
+ * 1. On first data chunk: hide viewport immediately
+ * 2. Batch subsequent data with setTimeout(0) - faster than rAF but still allows batching
+ * 3. On flush: write data with scroll fix, then restore visibility
+ */
+class OutputBuffer {
+  private buffer = '';
+  private pending = false;
+  private timeoutId: ReturnType<typeof setTimeout> | null = null;
+  private onFlush: ((data: string) => void) | null = null;
+  private onHide: (() => void) | null = null;
+
+  setCallbacks(onFlush: (data: string) => void, onHide: () => void): void {
+    this.onFlush = onFlush;
+    this.onHide = onHide;
+  }
+
+  write(data: string): void {
+    const isFirstChunk = this.buffer === '';
+    this.buffer += data;
+
+    if (!this.onFlush) return;
+
+    // Hide viewport immediately on first chunk (before any batching delay)
+    if (isFirstChunk && this.onHide) {
+      this.onHide();
+    }
+
+    if (this.pending) return;
+
+    this.pending = true;
+    // Use setTimeout(0) instead of rAF - runs sooner, before paint
+    this.timeoutId = setTimeout(() => {
+      const chunk = this.buffer;
+      this.buffer = '';
+      this.pending = false;
+      this.timeoutId = null;
+
+      if (chunk && this.onFlush) {
+        this.onFlush(chunk);
+      }
+    }, 0);
+  }
+
+  clear(): void {
+    if (this.timeoutId !== null) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
+    this.buffer = '';
+    this.pending = false;
+    this.onFlush = null;
+    this.onHide = null;
+  }
+}
+
 export function TerminalView({ instanceId }: TerminalViewProps) {
   const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const viewportRef = useRef<HTMLElement | null>(null); // Track viewport for scroll suppression
   const isNearBottomRef = useRef(true); // Track if user is near bottom for smart scroll
   const hasAutoFocusedRef = useRef(false); // Track if we've auto-focused after ready
+  const pendingScrollRef = useRef(false); // Track if we need to restore scroll after CSI H
+  const outputBufferRef = useRef<OutputBuffer>(new OutputBuffer()); // Buffer for batching writes
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const { sendInput, getInstanceOutput, updateTerminalTitle, instances } = useInstanceStore();
+  // Use useShallow to prevent re-renders when unrelated store properties change
+  const { sendInput, getInstanceOutput, updateTerminalTitle, instances } = useInstanceStore(
+    useShallow((state) => ({
+      sendInput: state.sendInput,
+      getInstanceOutput: state.getInstanceOutput,
+      updateTerminalTitle: state.updateTerminalTitle,
+      instances: state.instances,
+    }))
+  );
   const {
     globalInstances,
     sendRemoteInput,
     resizeRemoteInstance,
     isConnected: clusterConnected,
-  } = useClusterStore();
+  } = useClusterStore(
+    useShallow((state) => ({
+      globalInstances: state.globalInstances,
+      sendRemoteInput: state.sendRemoteInput,
+      resizeRemoteInstance: state.resizeRemoteInstance,
+      isConnected: state.isConnected,
+    }))
+  );
   const theme = useUIStore((state) => state.theme);
 
   const output = getInstanceOutput(instanceId);
@@ -197,7 +280,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
         lineHeight: 1.2,
         cursorBlink: true,
         cursorStyle: 'bar',
-        scrollback: 10000,
+        scrollback: 5000, // Reduced from 10000 for better memory usage
         allowProposedApi: true,
       });
 
@@ -217,14 +300,45 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
       terminal.open(container);
 
       // Setup smart scroll tracking - detect when user scrolls away from bottom
+      // NOTE: We update synchronously (no rAF throttling) because the flicker
+      // prevention logic needs accurate isNearBottom values immediately when
+      // data arrives. The performance cost is minimal since scroll events
+      // only fire during user interaction, not during programmatic scrolls.
       const viewport = container.querySelector('.xterm-viewport') as HTMLElement;
       if (viewport) {
-        viewport.addEventListener('scroll', () => {
-          const { scrollTop, scrollHeight, clientHeight } = viewport;
-          const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-          isNearBottomRef.current = distanceFromBottom < SCROLL_THRESHOLD;
-        });
+        viewportRef.current = viewport;
+        viewport.addEventListener(
+          'scroll',
+          () => {
+            const { scrollTop, scrollHeight, clientHeight } = viewport;
+            const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+            isNearBottomRef.current = distanceFromBottom < SCROLL_THRESHOLD;
+          },
+          { passive: true }
+        );
       }
+
+      // Register CSI handler to intercept cursor-home sequences (CSI H, CSI ;H, CSI 1;1H)
+      // This provides additional protection against scroll jumps by scheduling
+      // immediate scroll restoration when cursor moves to top
+      const csiDisposable = terminal.parser.registerCsiHandler({ final: 'H' }, (params) => {
+        const row = params[0] || 1;
+        // If cursor moving to row 1 and we should auto-scroll, mark for restoration
+        if (row === 1 && isNearBottomRef.current && pendingScrollRef.current) {
+          // Schedule immediate scroll restoration
+          queueMicrotask(() => {
+            xtermRef.current?.scrollToBottom();
+          });
+        }
+        return false; // Let default handler process the sequence
+      });
+
+      // Store disposable for cleanup
+      const originalDispose = terminal.dispose.bind(terminal);
+      terminal.dispose = () => {
+        csiDisposable.dispose();
+        originalDispose();
+      };
 
       // Delay fit to ensure terminal renderer is fully initialized
       // xterm.js needs time to setup the renderer before we can fit
@@ -296,7 +410,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle resize
+  // Handle resize using shared ResizeObserver singleton
   useEffect(() => {
     const handleResize = () => {
       // Use requestAnimationFrame to batch resize operations
@@ -307,39 +421,98 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
 
     window.addEventListener('resize', handleResize);
 
-    // Also observe the container
-    const resizeObserver = new ResizeObserver(() => {
-      // Debounce resize observer calls
-      requestAnimationFrame(() => {
+    // Use shared ResizeObserver for better performance with multiple terminals
+    let unobserve: (() => void) | undefined;
+    if (terminalRef.current) {
+      unobserve = sharedResizeObserver.observe(terminalRef.current, () => {
         safeFit();
       });
-    });
-
-    if (terminalRef.current) {
-      resizeObserver.observe(terminalRef.current);
     }
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      resizeObserver.disconnect();
+      unobserve?.();
     };
   }, []);
 
-  // Subscribe to raw output with smart scroll
+  // Subscribe to raw output with smart scroll and flicker suppression
+  // Claude CLI sends ANSI escape sequences that move cursor to top (CSI H, CSI 1;1H)
+  // This causes visible flickering when scrollToBottom() is called after write()
+  // Solution: Multi-layered approach:
+  // 1. Hide viewport IMMEDIATELY when first data chunk arrives (before batching delay)
+  // 2. Batch data with setTimeout(0) - faster than rAF, runs before paint
+  // 3. Save scroll position before write
+  // 4. Write batched data
+  // 5. Restore scroll synchronously in write callback
+  // 6. Restore visibility after scroll is set
   useEffect(() => {
-    const unsubscribe = window.electronAPI.instance.onRawOutput((id, data) => {
-      if (id === instanceId && xtermRef.current) {
-        xtermRef.current.write(data, () => {
-          // Only auto-scroll if user is near the bottom
-          // This prevents jumping while user is reading previous content
-          if (isNearBottomRef.current) {
-            xtermRef.current?.scrollToBottom();
+    const outputBuffer = outputBufferRef.current;
+
+    // Callback to hide viewport immediately when data starts arriving
+    const handleHide = () => {
+      const viewport = viewportRef.current;
+      if (viewport && isNearBottomRef.current) {
+        viewport.style.visibility = 'hidden';
+        pendingScrollRef.current = true;
+      }
+    };
+
+    // Callback to flush batched data to terminal
+    const handleFlush = (batchedData: string) => {
+      if (!xtermRef.current) return;
+
+      const viewport = viewportRef.current;
+      const shouldAutoScroll = isNearBottomRef.current;
+
+      if (shouldAutoScroll && viewport) {
+        // Save current scroll position (viewport may already be hidden)
+        const savedScrollTop = viewport.scrollTop;
+        const savedScrollHeight = viewport.scrollHeight;
+
+        xtermRef.current.write(batchedData, () => {
+          // Restore scroll synchronously in callback (before any paint)
+          if (xtermRef.current && viewport) {
+            // Calculate new scroll position to stay at bottom
+            const newScrollHeight = viewport.scrollHeight;
+            const scrollDelta = newScrollHeight - savedScrollHeight;
+
+            // If content was added, adjust scroll to stay at same relative position
+            if (scrollDelta > 0) {
+              viewport.scrollTop = savedScrollTop + scrollDelta;
+            }
+
+            // Ensure we're at bottom
+            xtermRef.current.scrollToBottom();
+
+            // Clear pending flag and restore visibility
+            pendingScrollRef.current = false;
+            viewport.style.visibility = '';
           }
         });
+      } else {
+        // Not auto-scrolling, just write normally
+        xtermRef.current.write(batchedData);
+        // Restore visibility in case it was hidden
+        if (viewport) {
+          pendingScrollRef.current = false;
+          viewport.style.visibility = '';
+        }
+      }
+    };
+
+    outputBuffer.setCallbacks(handleFlush, handleHide);
+
+    // Subscribe to raw output and buffer the data
+    const unsubscribe = window.electronAPI.instance.onRawOutput((id, data) => {
+      if (id === instanceId) {
+        outputBuffer.write(data);
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      outputBuffer.clear();
+    };
   }, [instanceId]);
 
   // Update terminal theme when global theme changes

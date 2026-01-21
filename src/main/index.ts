@@ -6,11 +6,14 @@ import { DataStore } from './services/DataStore';
 import { getWebServer } from './services/WebServer';
 import { getClusterManager } from './services/ClusterManager';
 
-// Suppress Chromium GPU cache errors on Windows
-// These errors occur when multiple Electron instances share the same cache directory
-// or when there are permission issues with the cache folder
-app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
-app.commandLine.appendSwitch('disable-gpu-program-cache');
+// GPU cache configuration for xterm.js WebGL performance
+// By default, we enable GPU caches for better terminal rendering performance
+// Set CLAUDE_DASHBOARD_DISABLE_GPU_CACHE=1 to disable if you experience issues
+// (e.g., multiple Electron instances sharing cache, permission issues)
+if (process.env.CLAUDE_DASHBOARD_DISABLE_GPU_CACHE === '1') {
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+  app.commandLine.appendSwitch('disable-gpu-program-cache');
+}
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only check for squirrel startup in production (module may not exist in all builds)

@@ -15,6 +15,13 @@ import type {
 } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
 import type { InstanceOutputBuffer } from '@shared/types/remote';
+
+// Internal buffer type using array for better performance (avoids repeated string concatenation)
+interface InternalOutputBuffer {
+  messages: StreamMessage[];
+  rawOutputChunks: string[];
+  rawOutputLength: number;
+}
 import type { InstanceClusterPermissions } from '@shared/types/cluster';
 
 // BrowserWindow type for optional Electron dependency
@@ -34,13 +41,16 @@ export class ProcessManager extends EventEmitter {
   private shellInstances: Map<string, ShellInstance> = new Map();
   private shellOutputs: Map<string, string> = new Map(); // shellId -> raw output buffer
   private instanceConversations: Map<string, string> = new Map(); // instanceId -> conversationId
-  private instanceOutputs: Map<string, InstanceOutputBuffer> = new Map(); // instanceId -> output buffer
+  private instanceOutputs: Map<string, InternalOutputBuffer> = new Map(); // instanceId -> output buffer
   private pendingSessionIds: Map<string, string> = new Map(); // instanceId -> sessionId (for race condition fix)
+  private cleanupTimers: Map<string, NodeJS.Timeout> = new Map(); // instanceId -> cleanup timer
   private dataStore: DataStore;
   private mainWindow: BrowserWindowType | null = null;
 
   // Max raw output buffer size (to prevent memory issues)
   private static readonly MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
+  // Delay before auto-cleaning up exited instances (allows UI to show completion status)
+  private static readonly CLEANUP_DELAY_MS = 60000; // 1 minute
 
   constructor() {
     super();
@@ -183,7 +193,8 @@ export class ProcessManager extends EventEmitter {
     if (!this.instanceOutputs.has(instanceId)) {
       this.instanceOutputs.set(instanceId, {
         messages: [],
-        rawOutput: '',
+        rawOutputChunks: [],
+        rawOutputLength: 0,
       });
     }
   }
@@ -199,26 +210,36 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Add raw output to buffer
+   * Add raw output to buffer using array-based buffering
+   * Reduces GC pressure by avoiding repeated string concatenation
    */
   private addToRawOutputBuffer(instanceId: string, data: string): void {
     const buffer = this.instanceOutputs.get(instanceId);
     if (buffer) {
-      buffer.rawOutput += data;
-      // Trim if too large (keep last part)
-      if (buffer.rawOutput.length > ProcessManager.MAX_RAW_OUTPUT_SIZE) {
-        buffer.rawOutput = buffer.rawOutput.slice(-ProcessManager.MAX_RAW_OUTPUT_SIZE);
+      buffer.rawOutputChunks.push(data);
+      buffer.rawOutputLength += data.length;
+
+      // Compact only when exceeds threshold (1.5x max size)
+      // This amortizes the cost of joining strings
+      if (buffer.rawOutputLength > ProcessManager.MAX_RAW_OUTPUT_SIZE * 1.5) {
+        const combined = buffer.rawOutputChunks.join('');
+        buffer.rawOutputChunks = [combined.slice(-ProcessManager.MAX_RAW_OUTPUT_SIZE)];
+        buffer.rawOutputLength = buffer.rawOutputChunks[0].length;
       }
     }
   }
 
   /**
    * Get all instance outputs (for sync state)
+   * Converts internal array-based buffer to string format for external API
    */
   getAllInstanceOutputs(): Record<string, InstanceOutputBuffer> {
     const result: Record<string, InstanceOutputBuffer> = {};
     this.instanceOutputs.forEach((buffer, instanceId) => {
-      result[instanceId] = buffer;
+      result[instanceId] = {
+        messages: buffer.messages,
+        rawOutput: buffer.rawOutputChunks.join(''),
+      };
     });
     return result;
   }
@@ -308,10 +329,10 @@ export class ProcessManager extends EventEmitter {
           console.error('[ProcessManager] Failed to cleanup file locks:', error);
         });
 
-      // Clean up instance listeners and buffers immediately
-      // The exit event is fired after all output has been processed
+      // Remove event listeners but schedule delayed cleanup
+      // This allows the UI to show completion status before removing the instance
       instance.removeAllListeners();
-      this.cleanupInstance(instance.id);
+      this.scheduleCleanup(instance.id);
     });
 
     instance.on('rawOutput', (data: string) => {
@@ -597,6 +618,13 @@ export class ProcessManager extends EventEmitter {
    * Kill all instances
    */
   killAll(): void {
+    // Cancel all pending cleanup timers
+    for (const timer of this.cleanupTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.cleanupTimers.clear();
+
+    // Kill all instances
     for (const instance of this.instances.values()) {
       instance.kill();
     }
@@ -629,6 +657,13 @@ export class ProcessManager extends EventEmitter {
    * Clean up a specific instance and its associated data
    */
   private cleanupInstance(id: string): void {
+    // Cancel any pending cleanup timer
+    const timer = this.cleanupTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this.cleanupTimers.delete(id);
+    }
+
     this.instances.delete(id);
     this.instanceOutputs.delete(id);
     this.instanceConversations.delete(id);
@@ -636,6 +671,31 @@ export class ProcessManager extends EventEmitter {
     // Clean up cluster permissions for this instance
     this.dataStore.deleteInstanceClusterPermissions(id);
     this.emit('instanceRemoved', id);
+  }
+
+  /**
+   * Schedule delayed cleanup for an instance
+   * This allows the UI to show completion status before removing the instance
+   */
+  private scheduleCleanup(instanceId: string): void {
+    // Cancel any existing timer for this instance
+    const existingTimer = this.cleanupTimers.get(instanceId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      this.cleanupTimers.delete(instanceId);
+      // Only cleanup if instance is no longer running
+      const instance = this.instances.get(instanceId);
+      if (instance && !instance.isRunning) {
+        console.log(`[ProcessManager] Auto-cleaning up instance ${instanceId} after delay`);
+        this.cleanupInstance(instanceId);
+        this.broadcastStateUpdate();
+      }
+    }, ProcessManager.CLEANUP_DELAY_MS);
+
+    this.cleanupTimers.set(instanceId, timer);
   }
 
   /**

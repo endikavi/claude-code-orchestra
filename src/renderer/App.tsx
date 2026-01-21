@@ -3,6 +3,7 @@ import { TitleBar } from './components/layout/TitleBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { MainContent } from './components/layout/MainContent';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { TimerProvider } from './contexts/TimerContext';
 import { useProjectStore } from './stores/projectStore';
 import { useInstanceStore } from './stores/instanceStore';
 import { useUIStore } from './stores/uiStore';
@@ -69,17 +70,19 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-col h-screen bg-claude-cream dark:bg-gray-900 text-gray-800 dark:text-white overflow-hidden">
-        <TitleBar />
-        <div className="flex flex-1 overflow-hidden">
-          <ErrorBoundary>
-            <Sidebar />
-          </ErrorBoundary>
-          <ErrorBoundary>
-            <MainContent />
-          </ErrorBoundary>
+      <TimerProvider>
+        <div className="flex flex-col h-screen bg-claude-cream dark:bg-gray-900 text-gray-800 dark:text-white overflow-hidden">
+          <TitleBar />
+          <div className="flex flex-1 overflow-hidden">
+            <ErrorBoundary>
+              <Sidebar />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <MainContent />
+            </ErrorBoundary>
+          </div>
         </div>
-      </div>
+      </TimerProvider>
     </ErrorBoundary>
   );
 }

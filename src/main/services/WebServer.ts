@@ -727,6 +727,32 @@ export class WebServer extends EventEmitter {
   }
 
   /**
+   * Broadcast instance hook status update to web clients
+   */
+  public broadcastInstanceHookStatus(
+    instanceId: string,
+    data: { status: string; message?: string; progress?: number }
+  ): void {
+    if (this.io) {
+      this.io.emit('instance:hookStatus', instanceId, data);
+    }
+  }
+
+  /**
+   * Broadcast hook activity event to web clients
+   */
+  public broadcastHookActivity(data: {
+    instanceId: string;
+    toolName?: string;
+    files?: string[];
+    timestamp: number;
+  }): void {
+    if (this.io) {
+      this.io.emit('hook:activity', data);
+    }
+  }
+
+  /**
    * Broadcast full state update to all clients
    */
   public broadcastStateUpdate(): void {

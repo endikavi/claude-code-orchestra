@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SubagentInstance } from '@shared/types';
+import { useElapsedTime } from '../../contexts/TimerContext';
 
 interface SubagentCardProps {
   subagent: SubagentInstance;
@@ -10,37 +11,13 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState<string>('');
 
-  // Update elapsed time for running subagents
-  useEffect(() => {
-    if (subagent.status !== 'running') {
-      setElapsedTime(formatDuration(subagent.startedAt, subagent.completedAt));
-      return;
-    }
-
-    // Update every second for running subagents
-    const updateElapsed = () => {
-      setElapsedTime(formatDuration(subagent.startedAt));
-    };
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [subagent.status, subagent.startedAt, subagent.completedAt]);
-
-  const formatDuration = (startedAt: number, completedAt?: number) => {
-    const end = completedAt || Date.now();
-    const duration = end - startedAt;
-    const seconds = Math.floor(duration / 1000);
-
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return `${hours}h ${remainingMinutes}m`;
-  };
+  // Use shared timer for elapsed time - avoids creating interval per card
+  // Only updates when running (completed subagents use fixed completedAt)
+  const elapsedTime = useElapsedTime(
+    subagent.startedAt,
+    subagent.status !== 'running' ? subagent.completedAt : undefined
+  );
 
   const getTypeConfig = (type: string) => {
     const configs: Record<

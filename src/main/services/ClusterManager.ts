@@ -26,6 +26,9 @@ import type {
   ClusterPermissionChangeEvent,
 } from '@shared/types/cluster';
 import type { Project, ClaudeInstance, StreamMessage, InstanceStatus } from '@shared/types';
+import type { HookStatusUpdate } from '@shared/types/remote';
+import type { SubagentInstance } from '@shared/types/orchestration';
+import { IPC_CHANNELS } from '../ipc/channels';
 
 // Heartbeat interval in milliseconds
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
@@ -688,6 +691,42 @@ export class ClusterManager extends EventEmitter {
         }
       });
 
+      // Handle hook status events from secondary nodes
+      socket.on('instance:hookStatus', (instanceId: string, data: HookStatusUpdate) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.handleRemoteInstanceEvent('hookStatus', connectedNodeId, instanceId, data);
+          socket.broadcast.emit('instance:hookStatus', instanceId, connectedNodeId, data);
+        }
+      });
+
+      // Handle hook activity events from secondary nodes
+      socket.on('hook:activity', (data) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.sendToRenderer(IPC_CHANNELS.HOOK_ACTIVITY, data);
+          socket.broadcast.emit('hook:activity', connectedNodeId, data);
+        }
+      });
+
+      // Handle subagent started events from secondary nodes
+      socket.on('subagent:started', (data) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.sendToRenderer(IPC_CHANNELS.SUBAGENT_STARTED, data.instanceId, data.subagent);
+          socket.broadcast.emit('subagent:started', connectedNodeId, data);
+        }
+      });
+
+      // Handle subagent completed events from secondary nodes
+      socket.on('subagent:completed', (data) => {
+        const connectedNodeId = this.clusterSockets.get(socket.id);
+        if (connectedNodeId) {
+          this.sendToRenderer(IPC_CHANNELS.SUBAGENT_COMPLETED, data.instanceId, data.subagent);
+          socket.broadcast.emit('subagent:completed', connectedNodeId, data);
+        }
+      });
+
       // Handle disconnect
       socket.on('disconnect', () => {
         const disconnectedNodeId = this.clusterSockets.get(socket.id);
@@ -949,6 +988,9 @@ export class ClusterManager extends EventEmitter {
       case 'sessionId':
         this.sendToRenderer('instance:sessionId', instanceId, data);
         break;
+      case 'hookStatus':
+        this.sendToRenderer(IPC_CHANNELS.INSTANCE_HOOK_STATUS, instanceId, data);
+        break;
     }
 
     // Emit for other listeners
@@ -1170,6 +1212,34 @@ export class ClusterManager extends EventEmitter {
     this.clientSocket.on('permissions:denied', (action: string, reason: string) => {
       console.log(`[ClusterManager] Permission denied: ${action} - ${reason}`);
       this.sendToRenderer('cluster:permissionDenied', { action, reason });
+    });
+
+    // Handle forwarded hook status events from other nodes
+    this.clientSocket.on('instance:hookStatus', (instanceId, nodeId, data) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer(IPC_CHANNELS.INSTANCE_HOOK_STATUS, instanceId, data);
+      }
+    });
+
+    // Handle forwarded hook activity events from other nodes
+    this.clientSocket.on('hook:activity', (nodeId, data) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer(IPC_CHANNELS.HOOK_ACTIVITY, data);
+      }
+    });
+
+    // Handle forwarded subagent started events from other nodes
+    this.clientSocket.on('subagent:started', (nodeId, data) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer(IPC_CHANNELS.SUBAGENT_STARTED, data.instanceId, data.subagent);
+      }
+    });
+
+    // Handle forwarded subagent completed events from other nodes
+    this.clientSocket.on('subagent:completed', (nodeId, data) => {
+      if (nodeId !== this.localNodeId) {
+        this.sendToRenderer(IPC_CHANNELS.SUBAGENT_COMPLETED, data.instanceId, data.subagent);
+      }
     });
   }
 
@@ -1615,6 +1685,27 @@ export class ClusterManager extends EventEmitter {
         break;
       case 'terminalTitle':
         this.clientSocket.emit('instance:terminalTitle', instanceId, data as string);
+        break;
+      case 'hookStatus':
+        this.clientSocket.emit('instance:hookStatus', instanceId, data as HookStatusUpdate);
+        break;
+      case 'hookActivity':
+        this.clientSocket.emit(
+          'hook:activity',
+          data as { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
+        );
+        break;
+      case 'subagentStarted':
+        this.clientSocket.emit('subagent:started', {
+          instanceId,
+          subagent: data as SubagentInstance,
+        });
+        break;
+      case 'subagentCompleted':
+        this.clientSocket.emit('subagent:completed', {
+          instanceId,
+          subagent: data as SubagentInstance,
+        });
         break;
     }
   }

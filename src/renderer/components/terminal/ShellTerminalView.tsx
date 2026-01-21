@@ -69,7 +69,9 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const viewportRef = useRef<HTMLElement | null>(null); // Track viewport for scroll suppression
   const isNearBottomRef = useRef(true); // Track if user is near bottom for smart scroll
+  const pendingScrollRef = useRef(false); // Track if we need to restore scroll after CSI H
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const { sendShellInput, getShellOutput } = useInstanceStore();
   const theme = useUIStore((state) => state.theme);
@@ -162,7 +164,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
         lineHeight: 1.2,
         cursorBlink: true,
         cursorStyle: 'bar',
-        scrollback: 10000,
+        scrollback: 5000, // Reduced from 10000 for better memory usage
         allowProposedApi: true,
       });
 
@@ -182,14 +184,45 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
       terminal.open(container);
 
       // Setup smart scroll tracking - detect when user scrolls away from bottom
+      // NOTE: We update synchronously (no rAF throttling) because the flicker
+      // prevention logic needs accurate isNearBottom values immediately when
+      // data arrives. The performance cost is minimal since scroll events
+      // only fire during user interaction, not during programmatic scrolls.
       const viewport = container.querySelector('.xterm-viewport') as HTMLElement;
       if (viewport) {
-        viewport.addEventListener('scroll', () => {
-          const { scrollTop, scrollHeight, clientHeight } = viewport;
-          const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-          isNearBottomRef.current = distanceFromBottom < SCROLL_THRESHOLD;
-        });
+        viewportRef.current = viewport;
+        viewport.addEventListener(
+          'scroll',
+          () => {
+            const { scrollTop, scrollHeight, clientHeight } = viewport;
+            const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+            isNearBottomRef.current = distanceFromBottom < SCROLL_THRESHOLD;
+          },
+          { passive: true }
+        );
       }
+
+      // Register CSI handler to intercept cursor-home sequences (CSI H, CSI ;H, CSI 1;1H)
+      // This provides additional protection against scroll jumps by scheduling
+      // immediate scroll restoration when cursor moves to top
+      const csiDisposable = terminal.parser.registerCsiHandler({ final: 'H' }, (params) => {
+        const row = params[0] || 1;
+        // If cursor moving to row 1 and we should auto-scroll, mark for restoration
+        if (row === 1 && isNearBottomRef.current && pendingScrollRef.current) {
+          // Schedule immediate scroll restoration
+          queueMicrotask(() => {
+            xtermRef.current?.scrollToBottom();
+          });
+        }
+        return false; // Let default handler process the sequence
+      });
+
+      // Store disposable for cleanup
+      const originalDispose = terminal.dispose.bind(terminal);
+      terminal.dispose = () => {
+        csiDisposable.dispose();
+        originalDispose();
+      };
 
       // Delay fit to ensure terminal renderer is fully initialized
       initTimer = setTimeout(() => {
@@ -260,17 +293,53 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
     };
   }, []);
 
-  // Subscribe to raw output from shell with smart scroll
+  // Subscribe to raw output from shell with smart scroll and flicker suppression
+  // This uses the same technique as TerminalView to prevent visible scroll jumps
+  // Solution: Multi-layered approach:
+  // 1. Hide viewport IMMEDIATELY when data arrives
+  // 2. Save exact scroll position before write
+  // 3. Mark pending scroll for CSI handler
+  // 4. Restore scroll synchronously in write callback
+  // 5. Restore visibility synchronously after scroll is set
   useEffect(() => {
     const unsubscribe = window.electronAPI.shell.onRawOutput((id, data) => {
       if (id === shellId && xtermRef.current) {
-        xtermRef.current.write(data, () => {
-          // Only auto-scroll if user is near the bottom
-          // This prevents jumping while user is reading previous content
-          if (isNearBottomRef.current) {
-            xtermRef.current?.scrollToBottom();
-          }
-        });
+        const viewport = viewportRef.current;
+        const shouldAutoScroll = isNearBottomRef.current;
+
+        if (shouldAutoScroll && viewport) {
+          // Hide viewport IMMEDIATELY to prevent any visible jump
+          viewport.style.visibility = 'hidden';
+          pendingScrollRef.current = true;
+
+          // Save current scroll position
+          const savedScrollTop = viewport.scrollTop;
+          const savedScrollHeight = viewport.scrollHeight;
+
+          xtermRef.current.write(data, () => {
+            // Restore scroll synchronously in callback (before any paint)
+            if (xtermRef.current && viewport) {
+              // Calculate new scroll position to stay at bottom
+              const newScrollHeight = viewport.scrollHeight;
+              const scrollDelta = newScrollHeight - savedScrollHeight;
+
+              // If content was added, adjust scroll to stay at same relative position
+              if (scrollDelta > 0) {
+                viewport.scrollTop = savedScrollTop + scrollDelta;
+              }
+
+              // Ensure we're at bottom
+              xtermRef.current.scrollToBottom();
+
+              // Clear pending flag and restore visibility synchronously
+              pendingScrollRef.current = false;
+              viewport.style.visibility = '';
+            }
+          });
+        } else {
+          // Not auto-scrolling, just write normally
+          xtermRef.current.write(data);
+        }
       }
     });
 

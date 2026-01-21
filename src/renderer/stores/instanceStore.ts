@@ -486,18 +486,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     set({ outputs });
 
-    // Persist message to conversation if linked
-    const conversationId = existing.conversationId || state.instanceConversations.get(id);
-    if (conversationId) {
-      window.electronAPI.conversation
-        .addMessage({
-          conversationId,
-          type: message.type,
-          content: JSON.stringify(message),
-          costUsd: message.cost_usd,
-        })
-        .catch(console.error);
-    }
+    // NOTE: Message persistence is handled by ProcessManager in the main process
+    // to avoid double-writes. See ProcessManager.ts setupInstanceListeners()
   },
 
   addRawOutput: (id, data) => {

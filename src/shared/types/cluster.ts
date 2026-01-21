@@ -9,6 +9,8 @@ import type {
   InstanceStatus,
 } from './index';
 import type { ClusterNodePrivacy, ClusterPermissionChangeEvent } from './clusterPermissions';
+import type { HookStatusUpdate } from './remote';
+import type { SubagentInstance } from './orchestration';
 import { DEFAULT_NODE_PRIVACY } from './clusterPermissions';
 export * from './clusterPermissions';
 
@@ -164,6 +166,17 @@ export interface ClusterClientToServerEvents {
 
   // Permission events (secondary -> primary)
   'permissions:updated': (event: ClusterPermissionChangeEvent) => void;
+
+  // Hook and subagent events (from remote node back to primary)
+  'instance:hookStatus': (instanceId: string, data: HookStatusUpdate) => void;
+  'hook:activity': (data: {
+    instanceId: string;
+    toolName?: string;
+    files?: string[];
+    timestamp: number;
+  }) => void;
+  'subagent:started': (data: { instanceId: string; subagent: SubagentInstance }) => void;
+  'subagent:completed': (data: { instanceId: string; subagent: SubagentInstance }) => void;
 }
 
 /** Events sent from primary to nodes */
@@ -199,6 +212,21 @@ export interface ClusterServerToClientEvents {
   // Permission events
   'permissions:changed': (event: ClusterPermissionChangeEvent) => void;
   'permissions:denied': (action: string, reason: string) => void;
+
+  // Forwarded hook and subagent events (from other nodes)
+  'instance:hookStatus': (instanceId: string, nodeId: string, data: HookStatusUpdate) => void;
+  'hook:activity': (
+    nodeId: string,
+    data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
+  ) => void;
+  'subagent:started': (
+    nodeId: string,
+    data: { instanceId: string; subagent: SubagentInstance }
+  ) => void;
+  'subagent:completed': (
+    nodeId: string,
+    data: { instanceId: string; subagent: SubagentInstance }
+  ) => void;
 }
 
 // ==================== Authentication Types ====================

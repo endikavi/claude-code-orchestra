@@ -1,6 +1,7 @@
 import { IPC_CHANNELS } from '../ipc/channels';
 import type { StreamMessage, InstanceStatus, ShellInstanceStatus } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
+import type { HookStatusUpdate } from '@shared/types/remote';
 
 // BrowserWindow type for optional Electron dependency
 type BrowserWindowType = import('electron').BrowserWindow;
@@ -47,7 +48,9 @@ export type InstanceEventType =
   | 'sessionId'
   | 'terminalTitle'
   | 'subagentStarted'
-  | 'subagentCompleted';
+  | 'subagentCompleted'
+  | 'hookStatus'
+  | 'hookActivity';
 
 /**
  * Handles broadcasting instance events to all destinations:
@@ -59,6 +62,10 @@ export class InstanceBroadcaster {
   private mainWindow: BrowserWindowType | null = null;
 
   private static instance: InstanceBroadcaster | null = null;
+
+  // Batching buffers for high-frequency raw output events
+  private rawOutputBuffers: Map<string, string[]> = new Map();
+  private flushScheduled = false;
 
   private constructor() {}
 
@@ -90,20 +97,70 @@ export class InstanceBroadcaster {
       terminalTitle: IPC_CHANNELS.INSTANCE_TERMINAL_TITLE,
       subagentStarted: IPC_CHANNELS.SUBAGENT_STARTED,
       subagentCompleted: IPC_CHANNELS.SUBAGENT_COMPLETED,
+      hookStatus: IPC_CHANNELS.INSTANCE_HOOK_STATUS,
+      hookActivity: IPC_CHANNELS.HOOK_ACTIVITY,
     };
     return channelMap[event] || null;
   }
 
   /**
    * Broadcast an instance event to all destinations (renderer, webserver, cluster)
+   * For high-frequency events like rawOutput, uses batching to reduce IPC overhead
    */
   broadcastInstanceEvent(event: InstanceEventType, instanceId: string, data: unknown): void {
+    // Use batching for high-frequency raw output events
+    if (event === 'rawOutput') {
+      this.bufferRawOutput(instanceId, data as string);
+      return;
+    }
+
     const channel = this.getChannel(event);
     if (channel) {
       this.sendToRenderer(channel, instanceId, data);
     }
     this.sendToWebServer(event, instanceId, data);
     this.sendToCluster(event, instanceId, data);
+  }
+
+  /**
+   * Buffer raw output data for batched sending
+   * Uses setImmediate to flush buffers after current I/O cycle
+   */
+  private bufferRawOutput(instanceId: string, data: string): void {
+    let buffer = this.rawOutputBuffers.get(instanceId);
+    if (!buffer) {
+      buffer = [];
+      this.rawOutputBuffers.set(instanceId, buffer);
+    }
+    buffer.push(data);
+
+    if (!this.flushScheduled) {
+      this.flushScheduled = true;
+      setImmediate(() => this.flushRawOutputBuffers());
+    }
+  }
+
+  /**
+   * Flush all buffered raw output to destinations
+   */
+  private flushRawOutputBuffers(): void {
+    this.flushScheduled = false;
+
+    for (const [instanceId, chunks] of this.rawOutputBuffers.entries()) {
+      if (chunks.length === 0) continue;
+
+      // Join all buffered chunks into one
+      const batchedData = chunks.join('');
+      this.rawOutputBuffers.set(instanceId, []);
+
+      // Send the batched data
+      const channel = this.getChannel('rawOutput');
+      if (channel) {
+        this.sendToRenderer(channel, instanceId, batchedData);
+      }
+      this.sendToWebServer('rawOutput', instanceId, batchedData);
+      this.sendToCluster('rawOutput', instanceId, batchedData);
+    }
   }
 
   /**
@@ -151,6 +208,19 @@ export class InstanceBroadcaster {
             break;
           case 'subagentCompleted':
             webServer.broadcastSubagentCompleted(instanceId, data as SubagentInstance);
+            break;
+          case 'hookStatus':
+            webServer.broadcastInstanceHookStatus(instanceId, data as HookStatusUpdate);
+            break;
+          case 'hookActivity':
+            webServer.broadcastHookActivity(
+              data as {
+                instanceId: string;
+                toolName?: string;
+                files?: string[];
+                timestamp: number;
+              }
+            );
             break;
         }
       })
