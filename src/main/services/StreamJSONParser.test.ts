@@ -125,7 +125,10 @@ describe('StreamJSONParser', () => {
       expect(parser.getStatus()).toBe('tool_executing');
     });
 
-    it('should set status to "completed" for result messages', () => {
+    it('should set status to "waiting_input" for result messages (interactive mode)', () => {
+      // In interactive stream-json mode, a result message means Claude finished
+      // one turn and is waiting for more input. The actual 'completed' status
+      // is set when the process exits.
       const message: StreamMessage = {
         type: 'result',
         result: 'Success',
@@ -133,7 +136,7 @@ describe('StreamJSONParser', () => {
 
       parser.process(JSON.stringify(message) + '\n');
 
-      expect(parser.getStatus()).toBe('completed');
+      expect(parser.getStatus()).toBe('waiting_input');
     });
 
     it('should set status to "error" for error result messages', () => {

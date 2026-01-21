@@ -1,19 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock electron app
-vi.mock('electron', () => ({
-  app: {
-    getPath: vi.fn((name: string) => {
-      switch (name) {
-        case 'userData':
-          return '/mock/userData';
-        case 'home':
-          return '/mock/home';
-        default:
-          return `/mock/${name}`;
-      }
-    }),
-  },
+// Mock pathProvider module - this is what paths.ts actually uses
+vi.mock('./pathProvider', () => ({
+  getUserDataPath: vi.fn(() => '/mock/userData'),
+  isElectronAvailable: vi.fn(() => true),
+  isHeadlessMode: vi.fn(() => false),
+  setUserDataPath: vi.fn(),
 }));
 
 // Mock os module with importOriginal pattern
@@ -44,7 +36,7 @@ describe('paths utilities', () => {
   });
 
   describe('getUserDataPath', () => {
-    it('should return the userData path from electron app', () => {
+    it('should return the userData path from pathProvider', () => {
       const result = getUserDataPath();
       expect(result).toBe('/mock/userData');
     });
