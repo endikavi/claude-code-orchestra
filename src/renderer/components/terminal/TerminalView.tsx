@@ -140,6 +140,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
   const hasAutoFocusedRef = useRef(false); // Track if we've auto-focused after ready
   const pendingScrollRef = useRef(false); // Track if we need to restore scroll after CSI H
   const outputBufferRef = useRef<OutputBuffer>(new OutputBuffer()); // Buffer for batching writes
+  const scrollLockRef = useRef(false); // Lock scroll position during writes to prevent flicker
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   // Use useShallow to prevent re-renders when unrelated store properties change
   const { sendInput, getInstanceOutput, updateTerminalTitle, instances } = useInstanceStore(
@@ -317,6 +318,27 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
           },
           { passive: true }
         );
+
+        // Monkey-patch scrollTop to prevent xterm.js from changing scroll position during writes
+        // This blocks the viewport sync that happens when CSI H (cursor home) is processed
+        const scrollTopDesc =
+          Object.getOwnPropertyDescriptor(viewport, 'scrollTop') ||
+          Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+
+        if (scrollTopDesc) {
+          Object.defineProperty(viewport, 'scrollTop', {
+            get() {
+              return scrollTopDesc.get!.call(this);
+            },
+            set(value: number) {
+              // Only allow scroll changes when not locked
+              if (!scrollLockRef.current) {
+                scrollTopDesc.set!.call(this, value);
+              }
+            },
+            configurable: true,
+          });
+        }
       }
 
       // Register CSI handler to intercept cursor-home sequences (CSI H, CSI ;H, CSI 1;1H)
@@ -466,6 +488,9 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
       const shouldAutoScroll = isNearBottomRef.current;
 
       if (shouldAutoScroll && viewport) {
+        // Lock scroll position to prevent xterm.js from changing it during write
+        scrollLockRef.current = true;
+
         // Save current scroll position (viewport may already be hidden)
         const savedScrollTop = viewport.scrollTop;
         const savedScrollHeight = viewport.scrollHeight;
@@ -473,6 +498,9 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
         xtermRef.current.write(batchedData, () => {
           // Restore scroll synchronously in callback (before any paint)
           if (xtermRef.current && viewport) {
+            // Unlock scroll so we can set the position
+            scrollLockRef.current = false;
+
             // Calculate new scroll position to stay at bottom
             const newScrollHeight = viewport.scrollHeight;
             const scrollDelta = newScrollHeight - savedScrollHeight;

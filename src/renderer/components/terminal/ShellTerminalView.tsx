@@ -72,6 +72,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   const viewportRef = useRef<HTMLElement | null>(null); // Track viewport for scroll suppression
   const isNearBottomRef = useRef(true); // Track if user is near bottom for smart scroll
   const pendingScrollRef = useRef(false); // Track if we need to restore scroll after CSI H
+  const scrollLockRef = useRef(false); // Lock scroll position during writes to prevent flicker
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const { sendShellInput, getShellOutput } = useInstanceStore();
   const theme = useUIStore((state) => state.theme);
@@ -201,6 +202,27 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
           },
           { passive: true }
         );
+
+        // Monkey-patch scrollTop to prevent xterm.js from changing scroll position during writes
+        // This blocks the viewport sync that happens when CSI H (cursor home) is processed
+        const scrollTopDesc =
+          Object.getOwnPropertyDescriptor(viewport, 'scrollTop') ||
+          Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+
+        if (scrollTopDesc) {
+          Object.defineProperty(viewport, 'scrollTop', {
+            get() {
+              return scrollTopDesc.get!.call(this);
+            },
+            set(value: number) {
+              // Only allow scroll changes when not locked
+              if (!scrollLockRef.current) {
+                scrollTopDesc.set!.call(this, value);
+              }
+            },
+            configurable: true,
+          });
+        }
       }
 
       // Register CSI handler to intercept cursor-home sequences (CSI H, CSI ;H, CSI 1;1H)
@@ -297,11 +319,12 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   // Subscribe to raw output from shell with smart scroll and flicker suppression
   // This uses the same technique as TerminalView to prevent visible scroll jumps
   // Solution: Multi-layered approach:
-  // 1. Hide viewport IMMEDIATELY when data arrives
-  // 2. Save exact scroll position before write
-  // 3. Mark pending scroll for CSI handler
-  // 4. Restore scroll synchronously in write callback
-  // 5. Restore visibility synchronously after scroll is set
+  // 1. Lock scroll position with monkey-patch
+  // 2. Hide viewport IMMEDIATELY when data arrives
+  // 3. Save exact scroll position before write
+  // 4. Mark pending scroll for CSI handler
+  // 5. Unlock scroll and restore position in write callback
+  // 6. Restore visibility synchronously after scroll is set
   useEffect(() => {
     const unsubscribe = window.electronAPI.shell.onRawOutput((id, data) => {
       if (id === shellId && xtermRef.current) {
@@ -309,6 +332,9 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
         const shouldAutoScroll = isNearBottomRef.current;
 
         if (shouldAutoScroll && viewport) {
+          // Lock scroll position to prevent xterm.js from changing it during write
+          scrollLockRef.current = true;
+
           // Hide viewport IMMEDIATELY to prevent any visible jump
           viewport.style.visibility = 'hidden';
           pendingScrollRef.current = true;
@@ -320,6 +346,9 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
           xtermRef.current.write(data, () => {
             // Restore scroll synchronously in callback (before any paint)
             if (xtermRef.current && viewport) {
+              // Unlock scroll so we can set the position
+              scrollLockRef.current = false;
+
               // Calculate new scroll position to stay at bottom
               const newScrollHeight = viewport.scrollHeight;
               const scrollDelta = newScrollHeight - savedScrollHeight;

@@ -12,6 +12,15 @@ export type InstanceStatus =
 // Shell instance status types
 export type ShellInstanceStatus = 'running' | 'completed' | 'error' | 'killed';
 
+// Split tab configuration for side-by-side terminal views
+export interface SplitTab {
+  id: string;
+  leftInstanceId: string;
+  rightInstanceId: string;
+  leftType: 'instance' | 'shell';
+  rightType: 'instance' | 'shell';
+}
+
 // Shell instance interface (for integrated terminal)
 export interface ShellInstance {
   id: string;

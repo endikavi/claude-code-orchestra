@@ -1,13 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { getStatusTabConfig } from '../../utils/statusConfig';
-import type { InstanceStatus, ShellInstanceStatus, ClaudeInstance } from '@shared/types';
+import { ContextMenu } from '../common/ContextMenu';
+import type { InstanceStatus, ShellInstanceStatus, ClaudeInstance, SplitTab } from '@shared/types';
 
 export function InstanceTabs() {
+  const { t } = useTranslation();
   const { selectedProjectId, getSelectedProject } = useProjectStore();
   const {
     instances: allInstances,
@@ -19,6 +22,11 @@ export function InstanceTabs() {
     selectShell,
     getShellsByProject,
     killShellInstance,
+    splitTabs,
+    activeSplitId,
+    createSplit,
+    removeSplit,
+    selectSplit,
   } = useInstanceStore();
   const { globalProjects, globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { setShowInstanceModal } = useUIStore();
@@ -57,14 +65,119 @@ export function InstanceTabs() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances, allInstances]);
 
-  const shells = selectedProjectId ? getShellsByProject(selectedProjectId) : [];
+  const shells = useMemo(
+    () => (selectedProjectId ? getShellsByProject(selectedProjectId) : []),
+    [selectedProjectId, getShellsByProject]
+  );
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    tabId: string;
+    tabType: 'instance' | 'shell';
+    tabIndex: number;
+  } | null>(null);
+
+  // Get IDs of instances/shells that are in splits
+  const idsInSplits = useMemo(() => {
+    const ids = new Set<string>();
+    for (const split of splitTabs.values()) {
+      ids.add(split.leftInstanceId);
+      ids.add(split.rightInstanceId);
+    }
+    return ids;
+  }, [splitTabs]);
+
+  // Filter instances and shells that are NOT in splits
+  const visibleInstances = useMemo(
+    () => instances.filter((i) => !idsInSplits.has(i.id)),
+    [instances, idsInSplits]
+  );
+
+  const visibleShells = useMemo(
+    () => shells.filter((s) => !idsInSplits.has(s.id)),
+    [shells, idsInSplits]
+  );
+
+  // Combined list of all tabs for determining split targets
+  const allTabs = useMemo(() => {
+    const tabs: Array<{ id: string; type: 'instance' | 'shell'; index: number }> = [];
+    visibleInstances.forEach((i, idx) => tabs.push({ id: i.id, type: 'instance', index: idx }));
+    visibleShells.forEach((s, idx) =>
+      tabs.push({ id: s.id, type: 'shell', index: visibleInstances.length + idx })
+    );
+    return tabs;
+  }, [visibleInstances, visibleShells]);
+
+  // Handle context menu for tabs
+  const handleTabContextMenu = (
+    e: React.MouseEvent,
+    tabId: string,
+    tabType: 'instance' | 'shell',
+    tabIndex: number
+  ) => {
+    e.preventDefault();
+    // Disable splits on mobile
+    if (isMobile) return;
+    setContextMenu({ x: e.clientX, y: e.clientY, tabId, tabType, tabIndex });
+  };
+
+  // Handle split action
+  const handleSplit = () => {
+    if (!contextMenu) return;
+
+    const currentTabIndex = allTabs.findIndex(
+      (t) => t.id === contextMenu.tabId && t.type === contextMenu.tabType
+    );
+    const nextTab = allTabs[currentTabIndex + 1];
+
+    if (nextTab) {
+      createSplit(contextMenu.tabId, nextTab.id, contextMenu.tabType, nextTab.type);
+    }
+    setContextMenu(null);
+  };
+
+  // Check if split is available (there's a tab to the right)
+  const canSplit = useMemo(() => {
+    if (!contextMenu) return false;
+    const currentTabIndex = allTabs.findIndex(
+      (t) => t.id === contextMenu.tabId && t.type === contextMenu.tabType
+    );
+    return currentTabIndex < allTabs.length - 1;
+  }, [contextMenu, allTabs]);
+
+  // Get title for an instance or shell
+  const getTabTitle = (id: string, type: 'instance' | 'shell'): string => {
+    if (type === 'instance') {
+      const instance = instances.find((i) => i.id === id);
+      return instance?.terminalTitle || instance?.prompt || 'New session';
+    }
+    return 'Shell';
+  };
+
+  // Get status for an instance or shell
+  const getTabStatus = (
+    id: string,
+    type: 'instance' | 'shell'
+  ): InstanceStatus | ShellInstanceStatus => {
+    if (type === 'instance') {
+      const instance = instances.find((i) => i.id === id);
+      return instance?.status || 'starting';
+    }
+    const shell = shells.find((s) => s.id === id);
+    return shell?.status || 'running';
+  };
 
   return (
-    <div className="flex items-center gap-1 sm:gap-2 p-1.5 sm:p-2 bg-claude-beige dark:bg-gray-800 border-b border-claude-tan/30 dark:border-gray-700 overflow-x-auto scrollbar-hide">
+    <div className="flex items-center gap-1 sm:gap-2 pt-1.5 px-1.5 sm:pt-2 sm:px-2 bg-claude-beige dark:bg-gray-800 border-b border-claude-tan/30 dark:border-gray-700 overflow-x-auto scrollbar-hide">
       {/* Project name/icon - clickable to go to history */}
       {project && (
         <button
-          onClick={() => selectInstance(null)}
+          onClick={() => {
+            selectInstance(null);
+            selectSplit(null);
+          }}
           className={`flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 flex-shrink-0 hover:bg-claude-tan/20 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer ${
             isMobile
               ? 'p-2 min-w-[44px] min-h-[44px] justify-center'
@@ -84,40 +197,62 @@ export function InstanceTabs() {
         </button>
       )}
 
+      {/* Split tabs */}
+      {Array.from(splitTabs.values()).map((split) => (
+        <SplitTabComponent
+          key={split.id}
+          split={split}
+          isSelected={activeSplitId === split.id}
+          leftTitle={getTabTitle(split.leftInstanceId, split.leftType)}
+          rightTitle={getTabTitle(split.rightInstanceId, split.rightType)}
+          leftStatus={getTabStatus(split.leftInstanceId, split.leftType)}
+          rightStatus={getTabStatus(split.rightInstanceId, split.rightType)}
+          onSelect={() => selectSplit(split.id)}
+          onClose={() => removeSplit(split.id)}
+          isMobile={isMobile}
+        />
+      ))}
+
       {/* Instance tabs */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {instances.map((instance) => (
+        {visibleInstances.map((instance, index) => (
           <InstanceTab
             key={instance.id}
             id={instance.id}
             status={instance.status}
             prompt={instance.prompt}
             terminalTitle={instance.terminalTitle}
-            isSelected={instance.id === selectedInstanceId && !selectedShellId}
+            isSelected={instance.id === selectedInstanceId && !selectedShellId && !activeSplitId}
             onSelect={() => {
               selectShell(null);
+              selectSplit(null);
               selectInstance(instance.id);
             }}
             onClose={() => killInstance(instance.id)}
+            onContextMenu={(e) => handleTabContextMenu(e, instance.id, 'instance', index)}
             isMobile={isMobile}
           />
         ))}
       </div>
 
       {/* Shell tabs */}
-      {shells.length > 0 && (
+      {visibleShells.length > 0 && (
         <div className="flex items-center gap-1 flex-shrink-0">
-          {shells.map((shell) => (
+          {visibleShells.map((shell, index) => (
             <ShellTab
               key={shell.id}
               id={shell.id}
               status={shell.status}
-              isSelected={shell.id === selectedShellId}
+              isSelected={shell.id === selectedShellId && !activeSplitId}
               onSelect={() => {
                 selectInstance(null);
+                selectSplit(null);
                 selectShell(shell.id);
               }}
               onClose={() => killShellInstance(shell.id)}
+              onContextMenu={(e) =>
+                handleTabContextMenu(e, shell.id, 'shell', visibleInstances.length + index)
+              }
               isMobile={isMobile}
             />
           ))}
@@ -132,6 +267,40 @@ export function InstanceTabs() {
       >
         <PlusIcon className="w-4 h-4" />
       </button>
+
+      {/* Context menu for split actions */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            ...(canSplit
+              ? [
+                  {
+                    label: t('tabs.splitTerminal', 'Split terminal'),
+                    onClick: handleSplit,
+                    icon: <SplitIcon />,
+                  },
+                  { type: 'separator' as const },
+                ]
+              : []),
+            {
+              label: t('tabs.close', 'Close'),
+              onClick: () => {
+                if (contextMenu.tabType === 'instance') {
+                  void killInstance(contextMenu.tabId);
+                } else {
+                  void killShellInstance(contextMenu.tabId);
+                }
+                setContextMenu(null);
+              },
+              icon: <CloseIcon className="w-4 h-4" />,
+              danger: true,
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -144,6 +313,7 @@ interface InstanceTabProps {
   isSelected: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   isMobile?: boolean;
 }
 
@@ -155,6 +325,7 @@ function InstanceTab({
   isSelected,
   onSelect,
   onClose,
+  onContextMenu,
   isMobile = false,
 }: InstanceTabProps) {
   // Use terminal title if available, otherwise fallback to prompt or default text
@@ -171,12 +342,13 @@ function InstanceTab({
 
   return (
     <div
-      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 rounded-md cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750'
+          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white rounded-t-md'
+          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750 rounded-md'
       }`}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       title={displayText}
     >
       <StatusBadge status={status} />
@@ -237,6 +409,7 @@ interface ShellTabProps {
   isSelected: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   isMobile?: boolean;
 }
 
@@ -246,6 +419,7 @@ function ShellTab({
   isSelected,
   onSelect,
   onClose,
+  onContextMenu,
   isMobile = false,
 }: ShellTabProps) {
   const handleClose = (e: React.MouseEvent) => {
@@ -255,12 +429,13 @@ function ShellTab({
 
   return (
     <div
-      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 rounded-md cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750'
+          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white rounded-t-md'
+          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750 rounded-md'
       }`}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       title="Shell"
     >
       <ShellStatusBadge status={status} />
@@ -291,5 +466,114 @@ function ShellStatusBadge({ status }: { status: ShellInstanceStatus }) {
 
   return (
     <div className={`w-2 h-2 rounded-full ${color} ${pulse ? 'status-pulse' : ''}`} title={label} />
+  );
+}
+
+// Split tab component
+interface SplitTabComponentProps {
+  split: SplitTab;
+  isSelected: boolean;
+  leftTitle: string;
+  rightTitle: string;
+  leftStatus: InstanceStatus | ShellInstanceStatus;
+  rightStatus: InstanceStatus | ShellInstanceStatus;
+  onSelect: () => void;
+  onClose: () => void;
+  isMobile?: boolean;
+}
+
+function SplitTabComponent({
+  split: _split,
+  isSelected,
+  leftTitle,
+  rightTitle,
+  leftStatus,
+  rightStatus,
+  onSelect,
+  onClose,
+  isMobile = false,
+}: SplitTabComponentProps) {
+  // Truncate titles more aggressively for split tabs
+  const maxLength = isMobile ? 8 : 15;
+  const truncate = (text: string) =>
+    text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
+
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClose();
+  };
+
+  // Get combined status color (show most urgent status)
+  const getStatusConfig = (status: InstanceStatus | ShellInstanceStatus) => {
+    if (status === 'running' || status === 'tool_executing') {
+      return { color: 'bg-green-500', pulse: true };
+    }
+    if (status === 'needs_permission' || status === 'waiting_input') {
+      return { color: 'bg-yellow-500', pulse: true };
+    }
+    if (status === 'error') {
+      return { color: 'bg-red-500', pulse: false };
+    }
+    if (status === 'starting') {
+      return { color: 'bg-blue-500', pulse: true };
+    }
+    return { color: 'bg-gray-500', pulse: false };
+  };
+
+  const leftConfig = getStatusConfig(leftStatus);
+  const rightConfig = getStatusConfig(rightStatus);
+
+  return (
+    <div
+      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+        isSelected
+          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white rounded-t-md'
+          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750 rounded-md'
+      }`}
+      onClick={onSelect}
+      title={`${leftTitle} | ${rightTitle}`}
+    >
+      {/* Left status badge */}
+      <div
+        className={`w-2 h-2 rounded-full ${leftConfig.color} ${leftConfig.pulse ? 'status-pulse' : ''}`}
+      />
+
+      {/* Split icon */}
+      <SplitIcon className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+
+      {/* Right status badge */}
+      <div
+        className={`w-2 h-2 rounded-full ${rightConfig.color} ${rightConfig.pulse ? 'status-pulse' : ''}`}
+      />
+
+      {/* Combined title */}
+      <span className="text-sm truncate max-w-[150px] sm:max-w-[200px]">
+        {truncate(leftTitle)} | {truncate(rightTitle)}
+      </span>
+
+      {/* Close button */}
+      <button
+        onClick={handleClose}
+        className={`p-1 sm:p-0.5 hover:bg-claude-tan/40 dark:hover:bg-gray-600 rounded transition-opacity ${
+          isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        title="Close split"
+      >
+        <CloseIcon className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+      </button>
+    </div>
+  );
+}
+
+function SplitIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"
+      />
+    </svg>
   );
 }

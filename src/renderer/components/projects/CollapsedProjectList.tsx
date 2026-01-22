@@ -90,7 +90,7 @@ export function CollapsedProjectList() {
       <div key={project.id} className="relative group">
         <button
           onClick={() => selectProject(project.id)}
-          className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium transition-all ${
+          className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-all ${
             isSelected
               ? 'ring-2 ring-claude-orange ring-offset-2 ring-offset-claude-beige dark:ring-offset-gray-800'
               : 'hover:scale-105'
@@ -138,7 +138,7 @@ export function CollapsedProjectList() {
     return (
       <button
         onClick={() => toggleSectionCollapsed(sectionId)}
-        className="w-10 h-6 flex items-center justify-center group"
+        className="w-8 h-5 flex items-center justify-center group"
         title={`${label} - ${collapsed ? t('sidebar.expandSection') : t('sidebar.collapseSection')}`}
       >
         <div className="flex items-center gap-1">

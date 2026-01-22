@@ -9,6 +9,7 @@ import type {
   StreamMessage,
   Conversation,
   ConversationMessage,
+  SplitTab,
 } from '@shared/types';
 import { useConversationStore } from './conversationStore';
 
@@ -84,6 +85,10 @@ interface InstanceState {
   shellOutputs: Map<string, ShellOutput>;
   selectedShellId: string | null;
 
+  // Split tab state
+  splitTabs: Map<string, SplitTab>;
+  activeSplitId: string | null;
+
   // Actions
   createInstance: (config: {
     projectId: string;
@@ -144,6 +149,18 @@ interface InstanceState {
   getShellsByProject: (projectId: string) => ShellInstance[];
   getSelectedShell: () => ShellInstance | undefined;
   getShellOutput: (id: string) => ShellOutput | undefined;
+
+  // Split tab actions
+  createSplit: (
+    leftId: string,
+    rightId: string,
+    leftType: 'instance' | 'shell',
+    rightType: 'instance' | 'shell'
+  ) => void;
+  removeSplit: (splitId: string) => void;
+  selectSplit: (splitId: string | null) => void;
+  getSplitForInstance: (instanceId: string) => SplitTab | undefined;
+  getActiveSplit: () => SplitTab | undefined;
 }
 
 export const useInstanceStore = create<InstanceState>((set, get) => ({
@@ -160,6 +177,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   shellInstances: [],
   shellOutputs: new Map(),
   selectedShellId: null,
+
+  // Split tab initial state
+  splitTabs: new Map(),
+  activeSplitId: null,
 
   createInstance: async (config) => {
     set({ isLoading: true, error: null });
@@ -305,9 +326,36 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const activities = new Map(state.activities);
       activities.delete(id);
 
-      // If the removed instance was selected, select another one or null
+      // Check if this instance is part of a split
+      const splitTabs = new Map(state.splitTabs);
+      let newActiveSplitId = state.activeSplitId;
       let newSelectedId = state.selectedInstanceId;
-      if (state.selectedInstanceId === id) {
+      let newSelectedShellId = state.selectedShellId;
+
+      for (const [splitId, split] of splitTabs) {
+        if (split.leftInstanceId === id || split.rightInstanceId === id) {
+          // Remove the split
+          splitTabs.delete(splitId);
+          if (state.activeSplitId === splitId) {
+            newActiveSplitId = null;
+            // Select the other instance/shell from the split
+            const otherId =
+              split.leftInstanceId === id ? split.rightInstanceId : split.leftInstanceId;
+            const otherType = split.leftInstanceId === id ? split.rightType : split.leftType;
+            if (otherType === 'instance') {
+              newSelectedId = otherId;
+              newSelectedShellId = null;
+            } else {
+              newSelectedShellId = otherId;
+              newSelectedId = null;
+            }
+          }
+          break;
+        }
+      }
+
+      // If the removed instance was selected (and not part of a split), select another one or null
+      if (state.selectedInstanceId === id && newSelectedId === state.selectedInstanceId) {
         const remainingInstances = state.instances.filter((inst) => inst.id !== id);
         newSelectedId = remainingInstances.length > 0 ? remainingInstances[0].id : null;
       }
@@ -317,7 +365,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         outputs,
         instanceConversations,
         activities,
+        splitTabs,
+        activeSplitId: newActiveSplitId,
         selectedInstanceId: newSelectedId,
+        selectedShellId: newSelectedShellId,
       };
     });
   },
@@ -800,9 +851,36 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const shellOutputs = new Map(state.shellOutputs);
       shellOutputs.delete(id);
 
-      // If the removed shell was selected, select another one or null
+      // Check if this shell is part of a split
+      const splitTabs = new Map(state.splitTabs);
+      let newActiveSplitId = state.activeSplitId;
+      let newSelectedId = state.selectedInstanceId;
       let newSelectedShellId = state.selectedShellId;
-      if (state.selectedShellId === id) {
+
+      for (const [splitId, split] of splitTabs) {
+        if (split.leftInstanceId === id || split.rightInstanceId === id) {
+          // Remove the split
+          splitTabs.delete(splitId);
+          if (state.activeSplitId === splitId) {
+            newActiveSplitId = null;
+            // Select the other instance/shell from the split
+            const otherId =
+              split.leftInstanceId === id ? split.rightInstanceId : split.leftInstanceId;
+            const otherType = split.leftInstanceId === id ? split.rightType : split.leftType;
+            if (otherType === 'instance') {
+              newSelectedId = otherId;
+              newSelectedShellId = null;
+            } else {
+              newSelectedShellId = otherId;
+              newSelectedId = null;
+            }
+          }
+          break;
+        }
+      }
+
+      // If the removed shell was selected (and not part of a split), select another one or null
+      if (state.selectedShellId === id && newSelectedShellId === state.selectedShellId) {
         const remainingShells = state.shellInstances.filter((s) => s.id !== id);
         newSelectedShellId = remainingShells.length > 0 ? remainingShells[0].id : null;
       }
@@ -810,6 +888,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return {
         shellInstances: state.shellInstances.filter((s) => s.id !== id),
         shellOutputs,
+        splitTabs,
+        activeSplitId: newActiveSplitId,
+        selectedInstanceId: newSelectedId,
         selectedShellId: newSelectedShellId,
       };
     });
@@ -886,5 +967,79 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   getShellOutput: (id) => {
     return get().shellOutputs.get(id);
+  },
+
+  // ==================== Split Tab Actions ====================
+
+  createSplit: (leftId, rightId, leftType, rightType) => {
+    const splitId = `split-${Date.now()}`;
+    const newSplit: SplitTab = {
+      id: splitId,
+      leftInstanceId: leftId,
+      rightInstanceId: rightId,
+      leftType,
+      rightType,
+    };
+
+    set((state) => {
+      const splitTabs = new Map(state.splitTabs);
+      splitTabs.set(splitId, newSplit);
+      return {
+        splitTabs,
+        activeSplitId: splitId,
+        selectedInstanceId: null,
+        selectedShellId: null,
+      };
+    });
+  },
+
+  removeSplit: (splitId) => {
+    set((state) => {
+      const splitTabs = new Map(state.splitTabs);
+      const removedSplit = splitTabs.get(splitId);
+      splitTabs.delete(splitId);
+
+      // Select the left instance/shell when closing split
+      let newSelectedInstanceId: string | null = null;
+      let newSelectedShellId: string | null = null;
+
+      if (removedSplit) {
+        if (removedSplit.leftType === 'instance') {
+          newSelectedInstanceId = removedSplit.leftInstanceId;
+        } else {
+          newSelectedShellId = removedSplit.leftInstanceId;
+        }
+      }
+
+      return {
+        splitTabs,
+        activeSplitId: state.activeSplitId === splitId ? null : state.activeSplitId,
+        selectedInstanceId: newSelectedInstanceId,
+        selectedShellId: newSelectedShellId,
+      };
+    });
+  },
+
+  selectSplit: (splitId) => {
+    set({
+      activeSplitId: splitId,
+      selectedInstanceId: splitId ? null : get().selectedInstanceId,
+      selectedShellId: splitId ? null : get().selectedShellId,
+    });
+  },
+
+  getSplitForInstance: (instanceId) => {
+    const state = get();
+    for (const split of state.splitTabs.values()) {
+      if (split.leftInstanceId === instanceId || split.rightInstanceId === instanceId) {
+        return split;
+      }
+    }
+    return undefined;
+  },
+
+  getActiveSplit: () => {
+    const state = get();
+    return state.activeSplitId ? state.splitTabs.get(state.activeSplitId) : undefined;
   },
 }));

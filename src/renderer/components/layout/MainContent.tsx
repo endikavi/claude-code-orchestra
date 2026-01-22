@@ -12,6 +12,7 @@ import { SettingsModal } from '../settings/SettingsModal';
 import { InstanceTabs } from '../instances/InstanceTabs';
 import { TerminalView } from '../terminal/TerminalView';
 import { ShellTerminalView } from '../terminal/ShellTerminalView';
+import { SplitTerminalView } from '../terminal/SplitTerminalView';
 import { StructuredView } from '../structured/StructuredView';
 import { ConversationHistory } from '../conversations/ConversationHistory';
 import { ConversationViewer } from '../conversations/ConversationViewer';
@@ -25,6 +26,8 @@ export function MainContent() {
     selectedInstanceId,
     getInstancesByProject,
     selectedShellId,
+    activeSplitId,
+    getActiveSplit,
   } = useInstanceStore();
   const { globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { viewingConversation } = useConversationStore();
@@ -68,6 +71,9 @@ export function MainContent() {
 
   const isViewingHistory = viewingConversation !== null;
 
+  // Get active split if any
+  const activeSplit = getActiveSplit();
+
   return (
     <main className="flex-1 flex flex-col bg-claude-cream dark:bg-gray-900 overflow-hidden">
       {selectedProjectId ? (
@@ -79,6 +85,9 @@ export function MainContent() {
           <div className="flex-1 overflow-hidden">
             {isViewingHistory ? (
               <ConversationViewer />
+            ) : activeSplitId && activeSplit ? (
+              // Split view is active - show two terminals side by side
+              <SplitTerminalView key={activeSplitId} split={activeSplit} />
             ) : selectedShellId ? (
               // Shell is selected - always show terminal view for shell
               <ShellTerminalView key={selectedShellId} shellId={selectedShellId} />

@@ -47,15 +47,15 @@ export function Sidebar() {
   // Collapsed sidebar (icons only)
   if (isCollapsed) {
     return (
-      <aside className="w-16 bg-claude-beige dark:bg-gray-800 border-r border-claude-tan/30 dark:border-gray-700 flex flex-col transition-all duration-300">
+      <aside className="w-12 bg-claude-beige dark:bg-gray-800 border-r border-claude-tan/30 dark:border-gray-700 flex flex-col transition-all duration-300 overflow-x-hidden">
         {/* Collapsed Header */}
         <div className="p-2 border-b border-claude-tan/30 dark:border-gray-700 flex flex-col items-center gap-2">
           <button
             onClick={() => setShowProjectModal(true)}
-            className="p-2 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
+            className="p-1.5 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
             title={t('sidebar.addProject')}
           >
-            <PlusIcon className="w-4 h-4 text-white" />
+            <PlusIcon className="w-3.5 h-3.5 text-white" />
           </button>
           {runningCount > 0 && (
             <div
@@ -69,7 +69,7 @@ export function Sidebar() {
         </div>
 
         {/* Collapsed Project list */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <CollapsedProjectList />
         </div>
       </aside>
