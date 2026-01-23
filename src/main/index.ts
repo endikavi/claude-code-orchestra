@@ -131,7 +131,7 @@ app
 
 app.on('window-all-closed', () => {
   // Kill all running instances
-  getProcessManager().killAll();
+  void getProcessManager().killAll();
 
   // Stop cluster
   const clusterManager = getClusterManager();
@@ -164,7 +164,12 @@ app.on('activate', () => {
 
 // Handle app quit
 app.on('before-quit', () => {
-  getProcessManager().killAll();
-  // Shutdown terminal pool
-  void getTerminalPool().shutdown();
+  // Graceful kill with 5 second timeout
+  void Promise.race([
+    getProcessManager().killAll(false), // Graceful kill
+    new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+  ]).then(() => {
+    // Shutdown terminal pool
+    getTerminalPool().shutdown();
+  });
 });

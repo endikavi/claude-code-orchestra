@@ -438,12 +438,18 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Kill an instance
+   * Kill an instance (graceful by default, force if specified)
+   * @param id Instance ID
+   * @param force If true, force kill immediately; if false, use graceful kill
    */
-  killInstance(id: string): void {
+  async killInstance(id: string, force: boolean = false): Promise<void> {
     const instance = this.instances.get(id);
     if (instance) {
-      instance.kill();
+      if (force) {
+        instance.kill();
+      } else {
+        await instance.gracefulKill();
+      }
       // Notify web clients of state change
       this.broadcastStateUpdate();
     }
@@ -501,15 +507,29 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Kill all instances for a project
+   * Kill all instances for a project (graceful by default, force if specified)
+   * @param projectId Project ID
+   * @param force If true, force kill immediately; if false, use graceful kill
    */
-  killProjectInstances(projectId: string): void {
+  async killProjectInstances(projectId: string, force: boolean = false): Promise<void> {
+    const killPromises: Promise<void>[] = [];
+
     for (const instance of this.instances.values()) {
       if (instance.projectId === projectId) {
-        instance.kill();
+        if (force) {
+          instance.kill();
+        } else {
+          killPromises.push(instance.gracefulKill());
+        }
       }
     }
-    // Also kill shell instances for the project
+
+    // Wait for graceful kills to complete
+    if (killPromises.length > 0) {
+      await Promise.all(killPromises);
+    }
+
+    // Also kill shell instances for the project (shells don't need graceful kill)
     for (const shell of this.shellInstances.values()) {
       if (shell.projectId === projectId) {
         shell.kill();
@@ -636,19 +656,30 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Kill all instances
+   * Kill all instances (graceful by default, force if specified)
+   * @param force If true, force kill immediately; if false, use graceful kill
    */
-  killAll(): void {
+  async killAll(force: boolean = false): Promise<void> {
     // Cancel all pending cleanup timers
     for (const timer of this.cleanupTimers.values()) {
       clearTimeout(timer);
     }
     this.cleanupTimers.clear();
 
-    // Kill all instances
-    for (const instance of this.instances.values()) {
-      instance.kill();
+    // Kill all Claude instances
+    if (force) {
+      for (const instance of this.instances.values()) {
+        instance.kill();
+      }
+    } else {
+      const killPromises: Promise<void>[] = [];
+      for (const instance of this.instances.values()) {
+        killPromises.push(instance.gracefulKill());
+      }
+      await Promise.all(killPromises);
     }
+
+    // Kill all shell instances (shells don't need graceful kill)
     for (const shell of this.shellInstances.values()) {
       shell.kill();
     }

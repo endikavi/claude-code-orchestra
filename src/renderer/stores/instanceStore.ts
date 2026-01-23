@@ -100,7 +100,7 @@ interface InstanceState {
     planMode?: boolean;
   }) => Promise<ClaudeInstance>;
   resumeConversation: (conversation: Conversation) => Promise<ClaudeInstance>;
-  killInstance: (id: string) => Promise<void>;
+  killInstance: (id: string) => void;
   removeInstance: (id: string) => void;
   sendInput: (id: string, input: string) => Promise<void>;
   selectInstance: (id: string | null) => void;
@@ -306,7 +306,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
-  killInstance: async (id) => {
+  killInstance: (id) => {
     // Mark instance as being removed PERMANENTLY to prevent re-adding via sync
     // We don't clear this - the ID stays in the set forever for this session
     // This prevents ghost tabs from appearing when delayed syncs arrive
@@ -314,17 +314,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       removingInstanceIds: new Set(state.removingInstanceIds).add(id),
     }));
 
-    try {
-      await window.electronAPI.instance.kill(id);
-    } catch (error) {
-      // Log error but don't block removal - instance may already be dead
+    // Remove instance from UI immediately for responsive UX
+    // The graceful kill runs in background - we don't wait for it
+    get().removeInstance(id);
+
+    // Fire and forget - graceful kill runs in background
+    // This allows Claude to clean up background processes without blocking UI
+    window.electronAPI.instance.kill(id).catch((error) => {
+      // Log error but don't throw - instance may already be dead
       // or may be a remote/cluster instance that doesn't exist locally
       console.warn(`[instanceStore] Failed to kill instance ${id}:`, error);
-    }
-
-    // Always remove instance from store, regardless of kill success
-    // This ensures tabs are always cleaned up
-    get().removeInstance(id);
+    });
   },
 
   removeInstance: (id) => {

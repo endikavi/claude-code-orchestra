@@ -80,7 +80,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, (_event, id: string) => {
     const validatedId = validators.id(id, 'project:delete');
     // Kill all instances for this project first
-    processManager.killProjectInstances(validatedId);
+    void processManager.killProjectInstances(validatedId);
     dataStore.deleteProject(validatedId);
     clusterManager.notifyProjectChange();
     // Untrack project from git status
@@ -171,9 +171,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   );
 
-  ipcMain.handle(IPC_CHANNELS.INSTANCE_KILL, (_event, id: string) => {
+  ipcMain.handle(IPC_CHANNELS.INSTANCE_KILL, async (_event, id: string, force?: boolean) => {
     const validatedId = validators.id(id, 'instance:kill');
-    processManager.killInstance(validatedId);
+    await processManager.killInstance(validatedId, force ?? false);
   });
 
   ipcMain.handle(IPC_CHANNELS.INSTANCE_SEND_INPUT, (_event, id: string, input: string) => {

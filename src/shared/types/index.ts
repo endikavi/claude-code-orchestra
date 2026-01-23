@@ -5,6 +5,7 @@ export type InstanceStatus =
   | 'waiting_input'
   | 'needs_permission'
   | 'tool_executing'
+  | 'terminating'
   | 'completed'
   | 'error'
   | 'killed';

@@ -14,7 +14,7 @@ export interface UseInstancesResult {
   isLoading: boolean;
   error: string | null;
   selectInstance: (id: string | null) => void;
-  createInstance: (prompt?: string) => Promise<ClaudeInstance | null>;
+  createInstance: (prompt?: string) => ClaudeInstance | null;
   killInstance: (id?: string) => void;
   sendInput: (input: string) => void;
   refreshInstances: () => void;
@@ -128,7 +128,7 @@ export function useInstances(projectId: string | null): UseInstancesResult {
 
       try {
         const pm = getProcessManager();
-        pm.killInstance(targetId);
+        void pm.killInstance(targetId);
 
         if (targetId === selectedInstanceId) {
           setSelectedInstanceId(null);

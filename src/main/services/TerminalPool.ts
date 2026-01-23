@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
+import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import { ShellDetector } from './ShellDetector';
 import { DataStore } from './DataStore';
@@ -8,7 +9,6 @@ import type {
   TerminalPoolConfig,
   TerminalPoolStats,
   PooledTerminalInfo,
-  DEFAULT_TERMINAL_POOL_CONFIG,
 } from '@shared/types/pool';
 
 /**
@@ -203,14 +203,15 @@ export class TerminalPool extends EventEmitter {
 
   /**
    * Spawn a new terminal and add it to the pool
+   * @returns Promise that resolves when terminal is spawned
    */
-  private spawnTerminal(): void {
-    if (this.shuttingDown) return;
+  private spawnTerminal(): Promise<void> {
+    if (this.shuttingDown) return Promise.resolve();
 
     const totalCount = this.pool.size;
     if (totalCount >= this.config.maxPoolSize) {
       console.log('[TerminalPool] At max capacity, not spawning');
-      return;
+      return Promise.resolve();
     }
 
     const { shell, shellArgs } = this.getShellConfig();
@@ -269,6 +270,7 @@ export class TerminalPool extends EventEmitter {
       console.error(`[TerminalPool] Failed to spawn terminal:`, error);
       this.emit('spawnError', error);
     }
+    return Promise.resolve();
   }
 
   /**
@@ -296,9 +298,9 @@ export class TerminalPool extends EventEmitter {
 
     const actualDelay = delay ?? this.config.replenishDelayMs;
 
-    this.replenishTimer = setTimeout(async () => {
+    this.replenishTimer = setTimeout(() => {
       this.replenishTimer = null;
-      await this.replenish();
+      void this.replenish();
     }, actualDelay);
   }
 
@@ -346,15 +348,10 @@ export class TerminalPool extends EventEmitter {
       ].filter(Boolean) as string[];
 
       for (const bashPath of gitBashPaths) {
-        try {
-          const fs = require('fs');
-          if (fs.existsSync(bashPath)) {
-            console.log(`[TerminalPool] Found Git Bash at: ${bashPath} (for env var)`);
-            this.gitBashPath = bashPath;
-            break;
-          }
-        } catch {
-          // Continue to next path
+        if (fs.existsSync(bashPath)) {
+          console.log(`[TerminalPool] Found Git Bash at: ${bashPath} (for env var)`);
+          this.gitBashPath = bashPath;
+          break;
         }
       }
 
@@ -451,7 +448,7 @@ export class TerminalPool extends EventEmitter {
       else if (terminal.status === 'assigned') assignedCount++;
     }
 
-    const totalAcquires = this.acquireCount + this.fallbackCount;
+    const _totalAcquires = this.acquireCount + this.fallbackCount;
     const avgTimeSavedMs =
       this.acquireCount > 0 ? Math.round(this.totalTimeSavedMs / this.acquireCount) : 0;
 

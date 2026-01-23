@@ -92,13 +92,32 @@ rl.on('line', async (line) => {
 rl.on('close', () => process.exit(0));
 `;
 
-// Session Start Hook script content (embedded to avoid path issues in packaged app)
-// This hook captures session_id from stdin JSON (Claude Code passes hook data via stdin)
-// and sends it to the dashboard API
-const SESSION_START_HOOK_SCRIPT = `#!/usr/bin/env node
+/**
+ * Generate the Session Start Hook script with embedded instance-specific values.
+ *
+ * IMPORTANT: Claude Code hooks are executed as separate processes that do NOT inherit
+ * the environment variables from the pty process. Therefore, we cannot rely on
+ * CLAUDE_DASHBOARD_INSTANCE_ID or CLAUDE_DASHBOARD_API_URL being available.
+ *
+ * The solution is to embed these values directly in the script when generating it
+ * for each instance. This ensures the hook always has the correct values.
+ *
+ * The script:
+ * 1. Reads JSON input from stdin (Claude Code passes hook data this way)
+ * 2. Extracts session_id from the input OR from CLAUDE_SESSION_ID env var
+ * 3. Sends the session_id to the dashboard API along with the embedded instanceId
+ */
+function generateSessionStartHookScript(instanceId: string, apiUrl: string): string {
+  return `#!/usr/bin/env node
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+
+// Instance-specific values (embedded at script generation time)
+// These are NOT read from environment variables because Claude Code hooks
+// run as separate processes that don't inherit our custom env vars
+const INSTANCE_ID = '${instanceId}';
+const API_URL = '${apiUrl}';
 
 // Debug logging to file (since stdout is captured by Claude Code)
 const logFile = path.join(process.env.TEMP || '/tmp', 'claude-dashboard-hook.log');
@@ -115,7 +134,7 @@ process.stdin.on('data', (chunk) => {
 });
 
 process.stdin.on('end', () => {
-  log('SessionStart hook executed');
+  log('SessionStart hook executed for instance: ' + INSTANCE_ID);
   log('Raw stdin: ' + inputData);
 
   let hookInput = {};
@@ -126,20 +145,18 @@ process.stdin.on('end', () => {
     log('Failed to parse stdin JSON: ' + e.message);
   }
 
-  // Get session_id from hook input (passed via stdin JSON)
-  const sessionId = hookInput.session_id;
-  // Get dashboard vars from environment (passed by ClaudeInstance)
-  const instanceId = process.env.CLAUDE_DASHBOARD_INSTANCE_ID;
-  const apiUrl = process.env.CLAUDE_DASHBOARD_API_URL;
+  // Get session_id from hook input (stdin JSON) OR from CLAUDE_SESSION_ID env var
+  // Claude Code may pass it in either location depending on version
+  const sessionId = hookInput.session_id || process.env.CLAUDE_SESSION_ID;
 
   log('session_id: ' + (sessionId || 'NOT SET'));
-  log('instanceId: ' + (instanceId || 'NOT SET'));
-  log('apiUrl: ' + (apiUrl || 'NOT SET'));
+  log('instanceId (embedded): ' + INSTANCE_ID);
+  log('apiUrl (embedded): ' + API_URL);
 
-  if (sessionId && instanceId && apiUrl) {
+  if (sessionId && INSTANCE_ID && API_URL) {
     log('All vars present, sending request...');
-    const url = new URL('/api/instances/session-id', apiUrl);
-    const data = JSON.stringify({ instanceId, sessionId });
+    const url = new URL('/api/instances/session-id', API_URL);
+    const data = JSON.stringify({ instanceId: INSTANCE_ID, sessionId });
 
     const req = http.request(url, {
       method: 'POST',
@@ -161,7 +178,7 @@ process.stdin.on('end', () => {
     req.write(data);
     req.end();
   } else {
-    log('Missing vars, skipping request');
+    log('Missing session_id, skipping request');
     outputResponse();
   }
 });
@@ -173,6 +190,7 @@ function outputResponse() {
   }));
 }
 `;
+}
 
 // Cache for Claude CLI path
 let cachedClaudePath: string | null = null;
@@ -502,7 +520,7 @@ export class ClaudeInstance extends EventEmitter {
       if (fs.existsSync(mcpConfigPath)) {
         try {
           const content = fs.readFileSync(mcpConfigPath, 'utf-8');
-          mcpConfig = JSON.parse(content);
+          mcpConfig = JSON.parse(content) as Record<string, unknown>;
         } catch {
           // Invalid JSON, start fresh
           mcpConfig = {};
@@ -553,6 +571,25 @@ export class ClaudeInstance extends EventEmitter {
         console.error('[ClaudeInstance] Failed to unregister MCP token:', error);
       }
     }
+
+    // Also cleanup the hook script file
+    this.cleanupHookScript();
+  }
+
+  /**
+   * Cleanup the hook script file for this instance
+   */
+  private cleanupHookScript(): void {
+    try {
+      const hookScriptPath = path.join(getUserDataPath(), `session-start-hook-${this.id}.js`);
+      if (fs.existsSync(hookScriptPath)) {
+        fs.unlinkSync(hookScriptPath);
+        console.log(`[ClaudeInstance] Cleaned up hook script: ${hookScriptPath}`);
+      }
+    } catch (error) {
+      // Non-critical error, just log it
+      console.error('[ClaudeInstance] Failed to cleanup hook script:', error);
+    }
   }
 
   /**
@@ -561,9 +598,14 @@ export class ClaudeInstance extends EventEmitter {
    */
   private setupSessionHook(): void {
     try {
-      // Write hook script to userData directory (always overwrite to ensure latest version)
-      const hookScriptPath = path.join(getUserDataPath(), 'session-start-hook.js');
-      fs.writeFileSync(hookScriptPath, SESSION_START_HOOK_SCRIPT, 'utf-8');
+      // Get the API URL for the hook to communicate with the dashboard
+      const apiUrl = `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`;
+
+      // Generate hook script with embedded instance-specific values
+      // Each instance gets its own script file to ensure correct instanceId is used
+      const hookScriptPath = path.join(getUserDataPath(), `session-start-hook-${this.id}.js`);
+      const hookScript = generateSessionStartHookScript(this.id, apiUrl);
+      fs.writeFileSync(hookScriptPath, hookScript, 'utf-8');
       console.log(`[ClaudeInstance] Session hook script written to ${hookScriptPath}`);
 
       // Add hook to .claude/settings.local.json (not committed to git)
@@ -573,7 +615,10 @@ export class ClaudeInstance extends EventEmitter {
       let settings: Record<string, unknown> = {};
       if (fs.existsSync(localSettingsPath)) {
         try {
-          settings = JSON.parse(fs.readFileSync(localSettingsPath, 'utf-8'));
+          settings = JSON.parse(fs.readFileSync(localSettingsPath, 'utf-8')) as Record<
+            string,
+            unknown
+          >;
         } catch {
           // Invalid JSON, start fresh
           settings = {};
@@ -1157,7 +1202,8 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
-   * Kill the process
+   * Kill the process (force kill, immediate)
+   * On Windows, uses taskkill /T to kill the entire process tree (including child processes like servers)
    */
   kill(): void {
     // Clean up idle timer
@@ -1173,9 +1219,184 @@ export class ClaudeInstance extends EventEmitter {
     if (this.ptyProcess) {
       this._status = 'killed';
       this.emit('status', this._status);
-      this.ptyProcess.kill();
+
+      // Get PID before killing
+      const pid = this.ptyProcess.pid;
+
+      // On Windows, use taskkill to kill the entire process tree
+      // This ensures child processes (like PHP servers, npm watch, etc.) are also killed
+      if (process.platform === 'win32' && pid) {
+        try {
+          // /F = Force, /T = Tree (kill child processes), /PID = Process ID
+          execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+          console.log(`[ClaudeInstance ${this.id}] Killed process tree (PID: ${pid})`);
+        } catch {
+          // taskkill may fail if process already exited, fallback to pty.kill()
+          console.log(`[ClaudeInstance ${this.id}] taskkill failed, falling back to pty.kill()`);
+          this.ptyProcess.kill();
+        }
+      } else {
+        // On Unix, kill the process group (negative PID kills the group)
+        if (pid) {
+          try {
+            process.kill(-pid, 'SIGKILL');
+            console.log(`[ClaudeInstance ${this.id}] Killed process group (PGID: ${pid})`);
+          } catch {
+            // May fail if not process group leader, fallback to pty.kill()
+            this.ptyProcess.kill();
+          }
+        } else {
+          this.ptyProcess.kill();
+        }
+      }
+
       this.ptyProcess = null;
     }
+  }
+
+  /**
+   * Gracefully kill the process by sending /exit to Claude, then exit to shell
+   * Falls back to force kill if graceful methods fail
+   * @param options Configuration for graceful kill timeouts
+   */
+  async gracefulKill(options?: {
+    interruptTimeout?: number; // Time to wait after Ctrl+C interrupt (default: 500ms)
+    claudeExitTimeout?: number; // Time to wait for Claude to exit after /exit (default: 2000ms)
+    shellExitTimeout?: number; // Time to wait for shell to exit after exit command (default: 500ms)
+    forceKillTimeout?: number; // Time to wait after second Ctrl+C before force kill (default: 1000ms)
+  }): Promise<void> {
+    const interruptTimeout = options?.interruptTimeout ?? 500;
+    const claudeExitTimeout = options?.claudeExitTimeout ?? 2000;
+    const shellExitTimeout = options?.shellExitTimeout ?? 500;
+    const forceKillTimeout = options?.forceKillTimeout ?? 1000;
+
+    // Clean up idle timer first
+    this.clearIdleTimer();
+
+    // If already exited or no process, just clean up and return
+    if (this._hasExited || !this.ptyProcess) {
+      this.cleanupMcpResources();
+      const tracker = getSubagentTracker();
+      tracker.clearSubagents(this.id);
+      return;
+    }
+
+    // Set status to terminating and emit
+    this._status = 'terminating';
+    this.emit('status', this._status);
+
+    console.log(`[ClaudeInstance ${this.id}] Starting graceful kill sequence`);
+
+    try {
+      // Step 1: Send Ctrl+C to interrupt any running command (like a server)
+      // This is needed before /exit because Claude can't process /exit while tool is running
+      console.log(`[ClaudeInstance ${this.id}] Sending Ctrl+C to interrupt`);
+      this.ptyProcess.write('\x03'); // Ctrl+C
+
+      // Brief wait to allow interrupt to process
+      const exitedAfterInterrupt = await this.waitForExit(interruptTimeout);
+      if (exitedAfterInterrupt) {
+        console.log(`[ClaudeInstance ${this.id}] Process exited after interrupt`);
+        return;
+      }
+
+      // Step 2: Send /exit to Claude Code
+      if (!this._hasExited && this.ptyProcess) {
+        console.log(`[ClaudeInstance ${this.id}] Sending /exit to Claude`);
+        this.ptyProcess.write('/exit\r');
+
+        const exitedAfterClaudeExit = await this.waitForExit(claudeExitTimeout);
+        if (exitedAfterClaudeExit) {
+          console.log(`[ClaudeInstance ${this.id}] Claude exited cleanly after /exit`);
+          return;
+        }
+      }
+
+      // Step 3: If still alive, send exit to shell
+      if (!this._hasExited && this.ptyProcess) {
+        console.log(`[ClaudeInstance ${this.id}] Claude didn't exit, sending exit to shell`);
+        this.ptyProcess.write('exit\r');
+
+        const exitedAfterShellExit = await this.waitForExit(shellExitTimeout);
+        if (exitedAfterShellExit) {
+          console.log(`[ClaudeInstance ${this.id}] Shell exited cleanly after exit command`);
+          return;
+        }
+      }
+
+      // Step 4: If still alive, send another Ctrl+C (in case shell has job control prompt)
+      if (!this._hasExited && this.ptyProcess) {
+        console.log(`[ClaudeInstance ${this.id}] Shell didn't exit, sending another Ctrl+C`);
+        this.ptyProcess.write('\x03'); // Ctrl+C
+
+        const exitedAfterCtrlC = await this.waitForExit(forceKillTimeout);
+        if (exitedAfterCtrlC) {
+          console.log(`[ClaudeInstance ${this.id}] Process exited after Ctrl+C`);
+          return;
+        }
+      }
+
+      // Step 5: Force kill as last resort
+      if (!this._hasExited && this.ptyProcess) {
+        console.log(`[ClaudeInstance ${this.id}] Force killing process`);
+        this.kill();
+      }
+    } catch (error) {
+      console.error(`[ClaudeInstance ${this.id}] Error during graceful kill:`, error);
+      // Fall back to force kill on any error
+      this.kill();
+    }
+  }
+
+  /**
+   * Wait for process to exit with a timeout
+   * @returns true if process exited, false if timeout
+   */
+  private waitForExit(timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      // If already exited, resolve immediately
+      if (this._hasExited) {
+        resolve(true);
+        return;
+      }
+
+      let resolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+        }
+      }, timeoutMs);
+
+      // Listen for exit event
+      const onExit = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          resolve(true);
+        }
+      };
+
+      this.once('exit', onExit);
+
+      // Also check if _hasExited flag was set (in case event already fired)
+      const checkInterval = setInterval(() => {
+        if (this._hasExited && !resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          clearInterval(checkInterval);
+          this.removeListener('exit', onExit);
+          resolve(true);
+        }
+      }, 100);
+
+      // Clean up interval on timeout
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        this.removeListener('exit', onExit);
+      }, timeoutMs + 100);
+    });
   }
 
   /**

@@ -133,9 +133,9 @@ export const App: React.FC = () => {
   );
 
   // Handle instance creation
-  const handleCreateInstance = useCallback(async () => {
+  const handleCreateInstance = useCallback(() => {
     if (selectedProject) {
-      await createInstance();
+      createInstance();
     }
   }, [selectedProject, createInstance]);
 
