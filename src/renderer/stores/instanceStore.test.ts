@@ -54,13 +54,19 @@ describe('instanceStore', () => {
       instances: [],
       outputs: new Map(),
       instanceConversations: new Map(),
+      activities: new Map(),
       selectedInstanceId: null,
+      lastSelectionTime: 0,
       isLoading: false,
       error: null,
+      removingInstanceIds: new Set(), // Reset removing instances tracking
       // Shell state
       shellInstances: [],
       shellOutputs: new Map(),
       selectedShellId: null,
+      // Split tab state
+      splitTabs: new Map(),
+      activeSplitId: null,
     });
 
     // Reset mocks
@@ -214,7 +220,7 @@ describe('instanceStore', () => {
   });
 
   describe('killInstance', () => {
-    it('should kill instance and remove from store', async () => {
+    it('should kill instance and remove from store', () => {
       useInstanceStore.setState({
         instances: [mockInstance],
         outputs: new Map([
@@ -225,19 +231,30 @@ describe('instanceStore', () => {
 
       window.electronAPI.instance.kill = vi.fn().mockResolvedValue(undefined);
 
-      await useInstanceStore.getState().killInstance(mockInstance.id);
+      useInstanceStore.getState().killInstance(mockInstance.id);
 
       expect(window.electronAPI.instance.kill).toHaveBeenCalledWith(mockInstance.id);
       expect(useInstanceStore.getState().instances).toHaveLength(0);
     });
 
-    it('should handle kill errors', async () => {
+    it('should handle kill errors gracefully (fire-and-forget)', async () => {
       useInstanceStore.setState({ instances: [mockInstance] });
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       window.electronAPI.instance.kill = vi.fn().mockRejectedValue(new Error('Kill failed'));
 
-      await useInstanceStore.getState().killInstance(mockInstance.id);
+      useInstanceStore.getState().killInstance(mockInstance.id);
 
-      expect(useInstanceStore.getState().error).toBe('Kill failed');
+      // Instance should still be removed from UI immediately
+      expect(useInstanceStore.getState().instances).toHaveLength(0);
+
+      // Wait for the promise rejection to be handled
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Error is logged but not set to state (fire-and-forget pattern)
+      expect(consoleWarn).toHaveBeenCalled();
+      expect(useInstanceStore.getState().error).toBeNull();
+
+      consoleWarn.mockRestore();
     });
   });
 
