@@ -16,6 +16,7 @@ import type {
   StreamMessage,
 } from '@shared/types';
 import type { SubagentStartedEvent, SubagentCompletedEvent } from '@shared/types/orchestration';
+import type { PooledTerminal } from '@shared/types/pool';
 import { randomUUID } from 'crypto';
 
 // MCP Bridge script content (embedded to avoid path issues in packaged app)
@@ -178,42 +179,42 @@ let cachedClaudePath: string | null = null;
 
 /**
  * Find the Claude CLI executable path
+ * Priority order:
+ * 1. Native installation (recommended by Anthropic, npm is deprecated)
+ * 2. System PATH (respects user's environment)
+ * 3. Legacy npm installations (fallback)
  */
 function findClaudePath(): string {
   if (cachedClaudePath) {
     return cachedClaudePath;
   }
 
-  // On Windows, check common npm global installation paths first
   if (process.platform === 'win32') {
-    const possiblePaths = [
-      // npm global (default location)
-      path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
-      // npm global (alternative)
-      path.join(process.env.LOCALAPPDATA || '', 'npm', 'claude.cmd'),
-      // Custom npm prefix
-      path.join(process.env.USERPROFILE || '', '.npm-global', 'claude.cmd'),
-      // nvm for windows
-      path.join(process.env.NVM_SYMLINK || '', 'claude.cmd'),
-      // Scoop
-      path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'claude.cmd'),
+    // Windows: Check native installation paths FIRST (npm is deprecated)
+    const nativePaths = [
+      // Native installer location (primary)
+      path.join(process.env.USERPROFILE || '', '.local', 'bin', 'claude.exe'),
+      // Program Files (system-wide installation)
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'ClaudeCode', 'claude.exe'),
+      // Scoop (native package manager)
+      path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'claude.exe'),
     ];
 
-    for (const p of possiblePaths) {
+    for (const p of nativePaths) {
       if (p && fs.existsSync(p)) {
-        console.log(`[ClaudeInstance] Found Claude at: ${p}`);
+        console.log(`[ClaudeInstance] Found Claude (native) at: ${p}`);
         cachedClaudePath = p;
         return p;
       }
     }
 
-    // Try 'where' command as fallback
+    // Try 'where' command to respect system PATH order
     try {
       const result = execSync('where claude', {
         encoding: 'utf-8',
         timeout: 5000,
         windowsHide: true,
-        env: process.env, // Use full env for detection
+        env: process.env,
       });
       const paths = result.trim().split(/\r?\n/);
       if (paths.length > 0 && paths[0]) {
@@ -224,8 +225,42 @@ function findClaudePath(): string {
     } catch (err) {
       console.log(`[ClaudeInstance] 'where claude' failed:`, err);
     }
+
+    // Legacy npm paths (deprecated, fallback only)
+    const legacyPaths = [
+      path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
+      path.join(process.env.LOCALAPPDATA || '', 'npm', 'claude.cmd'),
+      path.join(process.env.USERPROFILE || '', '.npm-global', 'claude.cmd'),
+      path.join(process.env.NVM_SYMLINK || '', 'claude.cmd'),
+      path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'claude.cmd'),
+    ];
+
+    for (const p of legacyPaths) {
+      if (p && fs.existsSync(p)) {
+        console.log(`[ClaudeInstance] Found Claude (legacy npm) at: ${p}`);
+        cachedClaudePath = p;
+        return p;
+      }
+    }
   } else {
-    // Unix: Try 'which' command
+    // Unix/macOS: Check native installation paths FIRST
+    const nativePaths = [
+      // Native installer location (primary)
+      path.join(process.env.HOME || '', '.local', 'bin', 'claude'),
+      // Homebrew (macOS)
+      '/opt/homebrew/bin/claude',
+      '/usr/local/bin/claude',
+    ];
+
+    for (const p of nativePaths) {
+      if (p && fs.existsSync(p)) {
+        console.log(`[ClaudeInstance] Found Claude (native) at: ${p}`);
+        cachedClaudePath = p;
+        return p;
+      }
+    }
+
+    // Try 'which' command to respect system PATH
     try {
       const result = execSync('which claude', { encoding: 'utf-8', timeout: 5000 });
       cachedClaudePath = result.trim();
@@ -252,6 +287,7 @@ export interface ClaudeInstanceConfig {
   resumeSessionId?: string; // For --resume flag
   planMode?: boolean; // For --plan flag
   enableMcp?: boolean; // Enable MCP server integration
+  pooledTerminal?: PooledTerminal; // Pre-spawned terminal from pool (local-only)
 }
 
 export class ClaudeInstance extends EventEmitter {
@@ -275,6 +311,7 @@ export class ClaudeInstance extends EventEmitter {
   private projectPath: string;
   private _hasExited: boolean = false; // Flag to prevent race conditions on resize
   private idleTimer: NodeJS.Timeout | null = null;
+  private pooledTerminal?: PooledTerminal; // Pre-spawned terminal from pool
 
   // Time in ms without output before considering Claude is waiting for input
   private static readonly IDLE_TIMEOUT = 2000;
@@ -291,6 +328,7 @@ export class ClaudeInstance extends EventEmitter {
     this.resumeSessionId = config.resumeSessionId;
     this.planMode = config.planMode ?? false;
     this.enableMcp = config.enableMcp ?? false;
+    this.pooledTerminal = config.pooledTerminal;
     this.createdAt = Date.now();
 
     this.parser = new StreamJSONParser();
@@ -589,6 +627,7 @@ export class ClaudeInstance extends EventEmitter {
     // Log instance details for debugging
     console.log(`[ClaudeInstance] Starting instance ${this.id}`);
     console.log(`[ClaudeInstance]   mode: ${this.mode}`);
+    console.log(`[ClaudeInstance]   pooled: ${this.pooledTerminal ? 'yes' : 'no'}`);
     console.log(
       `[ClaudeInstance]   prompt: ${this.prompt ? this.prompt.substring(0, 100) + '...' : '(none)'}`
     );
@@ -603,6 +642,12 @@ export class ClaudeInstance extends EventEmitter {
 
     const args = this.buildArgs();
     const claudePath = findClaudePath();
+
+    // If we have a pooled terminal, use it instead of spawning a new process
+    if (this.pooledTerminal) {
+      this.startWithPooledTerminal(claudePath, args);
+      return;
+    }
 
     // Log the detected path for debugging
     console.log(`[ClaudeInstance] Using Claude CLI at: ${claudePath}`);
@@ -735,6 +780,264 @@ export class ClaudeInstance extends EventEmitter {
       this._error = error instanceof Error ? error.message : 'Failed to start process';
       this.emit('status', this._status);
       this.emit('error', this._error);
+    }
+  }
+
+  /**
+   * Detect the shell type from the pooled terminal
+   * Note: Git Bash on Windows is treated as Unix shell
+   */
+  private detectShellType(shell: string): 'powershell' | 'cmd' | 'unix' | 'gitbash' {
+    const shellLower = shell.toLowerCase();
+
+    // Check for Git Bash specifically on Windows (needs special path handling)
+    if (process.platform === 'win32' && shellLower.includes('bash')) {
+      return 'gitbash';
+    }
+
+    // Check for other bash/unix shells
+    if (
+      shellLower.includes('bash') ||
+      shellLower.includes('zsh') ||
+      shellLower.includes('fish') ||
+      shellLower.includes('sh')
+    ) {
+      return 'unix';
+    } else if (shellLower.includes('powershell') || shellLower.includes('pwsh')) {
+      return 'powershell';
+    } else if (shellLower.includes('cmd')) {
+      return 'cmd';
+    } else {
+      // Default to unix for unknown shells
+      return 'unix';
+    }
+  }
+
+  /**
+   * Convert a Windows path to Git Bash compatible path
+   * e.g., C:\Users\name -> /c/Users/name
+   */
+  private toGitBashPath(windowsPath: string): string {
+    // Replace backslashes with forward slashes
+    let path = windowsPath.replace(/\\/g, '/');
+
+    // Convert drive letter (C: -> /c)
+    if (/^[A-Za-z]:/.test(path)) {
+      const driveLetter = path[0].toLowerCase();
+      path = `/${driveLetter}${path.substring(2)}`;
+    }
+
+    return path;
+  }
+
+  /**
+   * Start Claude using a pre-spawned pooled terminal
+   * This significantly reduces startup time by reusing an already-running shell
+   */
+  private startWithPooledTerminal(claudePath: string, args: string[]): void {
+    if (!this.pooledTerminal) {
+      throw new Error('startWithPooledTerminal called without pooledTerminal');
+    }
+
+    console.log(`[ClaudeInstance] Using pooled terminal ${this.pooledTerminal.id}`);
+    const shellType = this.detectShellType(this.pooledTerminal.shell);
+    console.log(`[ClaudeInstance] Detected shell type: ${shellType}`);
+
+    try {
+      console.log(`[ClaudeInstance] Entering try block for pooled terminal setup`);
+
+      // Take ownership of the PTY from the pool
+      console.log(`[ClaudeInstance] Taking ownership of PTY...`);
+      console.log(`[ClaudeInstance] pooledTerminal.pty exists: ${!!this.pooledTerminal.pty}`);
+      console.log(`[ClaudeInstance] pooledTerminal.pty.pid: ${this.pooledTerminal.pty?.pid}`);
+      this.ptyProcess = this.pooledTerminal.pty;
+      console.log(`[ClaudeInstance] PTY assigned: ${!!this.ptyProcess}`);
+      console.log(`[ClaudeInstance] PTY pid after assignment: ${this.ptyProcess?.pid}`);
+
+      this._status = 'starting';
+      this.emit('status', this._status);
+
+      // Setup event handlers (same as direct spawn)
+      console.log(`[ClaudeInstance] Setting up event handlers...`);
+      console.log(`[ClaudeInstance] ptyProcess type: ${typeof this.ptyProcess}`);
+      console.log(`[ClaudeInstance] ptyProcess.onData type: ${typeof this.ptyProcess?.onData}`);
+
+      this.ptyProcess.onData((data: string) => {
+        this.emit('rawOutput', data);
+        this.parser.process(data);
+
+        if (this.mode !== 'stream-json') {
+          if (this._status === 'starting' || this._status === 'waiting_input') {
+            this._status = 'running';
+            this.emit('status', this._status);
+          }
+          this.resetIdleTimer();
+        }
+      });
+
+      this.ptyProcess.onExit(({ exitCode }) => {
+        this._hasExited = true;
+        this.clearIdleTimer();
+        this.cleanupMcpResources();
+        this.parser.flush();
+
+        if (exitCode === 0) {
+          this._status = 'completed';
+        } else if (this._status !== 'killed') {
+          this._status = 'error';
+          this._error = `Process exited with code ${exitCode}`;
+        }
+
+        this.emit('status', this._status);
+        this.emit('exit', exitCode);
+        this.ptyProcess = null;
+      });
+
+      console.log(`[ClaudeInstance] Converting paths for shell type: ${shellType}`);
+      // For Git Bash on Windows, convert paths to Unix-style
+      let projectPathForShell = this.projectPath;
+      let claudePathForShell = claudePath;
+      if (shellType === 'gitbash') {
+        projectPathForShell = this.toGitBashPath(this.projectPath);
+        claudePathForShell = this.toGitBashPath(claudePath);
+        console.log(`[ClaudeInstance] Converted project path: ${projectPathForShell}`);
+        console.log(`[ClaudeInstance] Converted claude path: ${claudePathForShell}`);
+      }
+
+      // Escape path for shell (handle spaces and special characters)
+      const escapedProjectPath = this.escapeShellPath(projectPathForShell, shellType);
+      const escapedClaudePath = this.escapeShellPath(claudePathForShell, shellType);
+      console.log(`[ClaudeInstance] Escaped project path: ${escapedProjectPath}`);
+      console.log(`[ClaudeInstance] Escaped claude path: ${escapedClaudePath}`);
+
+      // Build a single combined command: env vars + cd + clear + claude
+      console.log(`[ClaudeInstance] Getting API URL from DataStore...`);
+      const apiUrl = `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`;
+
+      const fullCommand = this.buildFullCommand(
+        escapedProjectPath,
+        escapedClaudePath,
+        args,
+        apiUrl,
+        shellType
+      );
+
+      console.log(`[ClaudeInstance] Full command: ${fullCommand}`);
+      console.log(`[ClaudeInstance] PTY process exists: ${!!this.ptyProcess}`);
+
+      const pty = this.ptyProcess;
+      if (!pty) {
+        console.error(`[ClaudeInstance] PTY process is null!`);
+        return;
+      }
+
+      // Send the single combined command
+      console.log(`[ClaudeInstance] Sending command to PTY...`);
+      pty.write(fullCommand + '\r');
+
+      // Send prompt if provided (after a delay for Claude to start)
+      if (this.mode === 'stream-json' && this.prompt) {
+        setTimeout(() => {
+          console.log(`[ClaudeInstance] Sending prompt`);
+          pty.write(this.prompt + '\r');
+        }, 2000);
+      }
+    } catch (error) {
+      console.error(`[ClaudeInstance] ERROR in startWithPooledTerminal:`, error);
+      console.error(
+        `[ClaudeInstance] Error stack:`,
+        error instanceof Error ? error.stack : 'no stack'
+      );
+      this._status = 'error';
+      this._error = error instanceof Error ? error.message : 'Failed to start with pooled terminal';
+      this.emit('status', this._status);
+      this.emit('error', this._error);
+    }
+  }
+
+  /**
+   * Build a single full command that sets env vars, cd, clears, and runs Claude
+   */
+  private buildFullCommand(
+    projectPath: string,
+    claudePath: string,
+    args: string[],
+    apiUrl: string,
+    shellType: 'powershell' | 'cmd' | 'unix' | 'gitbash'
+  ): string {
+    const argsStr = args.join(' ');
+
+    // Build environment variables
+    const envVars: Record<string, string> = {
+      CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
+      CLAUDE_DASHBOARD_PROJECT_ID: this.projectId,
+      CLAUDE_DASHBOARD_PROJECT_PATH: this.projectPath,
+      CLAUDE_DASHBOARD_API_URL: apiUrl,
+    };
+
+    if (this.enableMcp && this.mcpToken) {
+      envVars.ORCHESTRA_MCP_ENABLED = 'true';
+      envVars.ORCHESTRA_MCP_TOKEN = this.mcpToken;
+      envVars.ORCHESTRA_MCP_URL = `${apiUrl}/mcp`;
+    }
+
+    if (process.platform === 'win32' && this.pooledTerminal?.gitBashPath) {
+      if (shellType === 'gitbash') {
+        envVars.CLAUDE_CODE_GIT_BASH_PATH = this.pooledTerminal.gitBashPath.replace(/\\/g, '/');
+      } else {
+        envVars.CLAUDE_CODE_GIT_BASH_PATH = this.pooledTerminal.gitBashPath;
+      }
+    }
+
+    switch (shellType) {
+      case 'powershell': {
+        const envStr = Object.entries(envVars)
+          .map(([k, v]) => `$env:${k}="${v}"`)
+          .join('; ');
+        return `${envStr}; Set-Location -Path ${projectPath}; Clear-Host; & ${claudePath} ${argsStr}`;
+      }
+      case 'cmd': {
+        const envStr = Object.entries(envVars)
+          .map(([k, v]) => `set "${k}=${v}"`)
+          .join(' && ');
+        return `${envStr} && cd /d ${projectPath} && cls & ${claudePath} ${argsStr}`;
+      }
+      case 'gitbash':
+      case 'unix':
+      default: {
+        const envStr = Object.entries(envVars)
+          .map(([k, v]) => `export ${k}="${v}"`)
+          .join(' && ');
+        return `${envStr} && cd ${projectPath} && clear && ${claudePath} ${argsStr}`;
+      }
+    }
+  }
+
+  /**
+   * Escape a path for shell command execution
+   */
+  private escapeShellPath(p: string, shellType: 'powershell' | 'cmd' | 'unix' | 'gitbash'): string {
+    switch (shellType) {
+      case 'powershell':
+        // PowerShell: wrap in single quotes, escape single quotes by doubling
+        if (p.includes(' ') || p.includes("'") || p.includes('"')) {
+          return `'${p.replace(/'/g, "''")}'`;
+        }
+        return p;
+      case 'cmd':
+        // CMD: wrap in double quotes if contains spaces
+        if (p.includes(' ')) {
+          return `"${p}"`;
+        }
+        return p;
+      case 'gitbash':
+      case 'unix':
+      default:
+        // Unix/Git Bash: escape special characters or wrap in single quotes
+        if (/[\s'"\\$`!]/.test(p)) {
+          return `'${p.replace(/'/g, "'\\''")}'`;
+        }
+        return p;
     }
   }
 

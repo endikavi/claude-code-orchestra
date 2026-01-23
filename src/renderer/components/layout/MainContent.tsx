@@ -28,6 +28,7 @@ export function MainContent() {
     selectedShellId,
     activeSplitId,
     getActiveSplit,
+    removingInstanceIds,
   } = useInstanceStore();
   const { globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { viewingConversation } = useConversationStore();
@@ -52,17 +53,28 @@ export function MainContent() {
     const local = getInstancesByProject(selectedProjectId);
 
     // If cluster is connected, also get global instances for this project
+    let combined;
     if (clusterConnected) {
       const global = globalInstances.filter((i) => i.projectId === selectedProjectId && !i.isLocal);
       // Combine, avoiding duplicates (prefer local if same id)
       const localIds = new Set(local.map((i) => i.id));
-      return [...local, ...global.filter((i) => !localIds.has(i.id))];
+      combined = [...local, ...global.filter((i) => !localIds.has(i.id))];
+    } else {
+      combined = local;
     }
 
-    return local;
+    // Filter out instances that are being removed (prevents ghost tabs)
+    return combined.filter((i) => !removingInstanceIds.has(i.id));
     // Note: allInstances is included to trigger recalculation when instances change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances, allInstances]);
+  }, [
+    selectedProjectId,
+    getInstancesByProject,
+    clusterConnected,
+    globalInstances,
+    allInstances,
+    removingInstanceIds,
+  ]);
 
   const hasInstances = projectInstances.length > 0;
 

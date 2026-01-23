@@ -15,6 +15,10 @@ export function RemoteAccessSettings() {
 
   // Load config and status
   const loadData = useCallback(async () => {
+    // Check if electronAPI.remote is available (not available in web-only mode)
+    if (!window.electronAPI?.remote) {
+      return;
+    }
     try {
       const [configData, statusData] = await Promise.all([
         window.electronAPI.remote.getConfig(),
@@ -44,7 +48,7 @@ export function RemoteAccessSettings() {
 
     // Poll status every 5 seconds when server is running
     const interval = setInterval(() => {
-      if (status?.running) {
+      if (status?.running && window.electronAPI?.remote) {
         void window.electronAPI.remote.getStatus().then(setStatus);
       }
     }, 5000);

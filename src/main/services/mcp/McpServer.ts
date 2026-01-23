@@ -10,6 +10,7 @@ import { ProcessManager } from '../ProcessManager';
 import { DataStore } from '../DataStore';
 import { GitStatusManager } from '../GitStatusManager';
 import { registerProjectTools } from './tools/ProjectTools';
+import { registerProxyTools } from './tools/ProxyTools';
 
 /**
  * MCP Server Implementation
@@ -43,6 +44,9 @@ export class McpServer {
       gitStatusManager: this.gitStatusManager,
       processManager: this.processManager,
     });
+
+    // Register proxy/preview tools
+    registerProxyTools(this.tools, {});
 
     console.log(`[MCP] Initialized ${this.tools.size} tools`);
   }

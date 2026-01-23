@@ -18,6 +18,8 @@ import type {
   ConversationStatus,
   ClaudeSessionInfo,
   SessionImportBatchResult,
+  ProxyConfig,
+  AllowedPort,
 } from '@shared/types';
 import type { SyncState } from '@shared/types/remote';
 import type { SubagentInstance } from '@shared/types/orchestration';
@@ -208,6 +210,20 @@ export function connectSocket(): void {
     disconnectSocket();
     window.dispatchEvent(new CustomEvent('auth:kicked', { detail: reason }));
   });
+
+  // Proxy events
+  socket.on(
+    'proxy:open',
+    (data: {
+      port: number;
+      path?: string;
+      split?: boolean;
+      title?: string;
+      instanceId?: string;
+    }) => {
+      window.dispatchEvent(new CustomEvent('proxy:open', { detail: data }));
+    }
+  );
 }
 
 export function disconnectSocket(): void {
@@ -410,7 +426,7 @@ export const webAPI = {
 
     kill: async (id: string): Promise<void> => {
       await apiFetch(`/api/instances/${id}`, { method: 'DELETE' });
-      unsubscribeFromInstance(id);
+      void unsubscribeFromInstance(id);
       instanceConversations.delete(id);
     },
 
@@ -742,6 +758,158 @@ export const webAPI = {
       callback: (instanceId: string, subagent: SubagentInstance) => void
     ): (() => void) => {
       return addEventListener('subagent:completed', callback);
+    },
+  },
+
+  // Proxy operations (web preview tunneling)
+  proxy: {
+    getConfig: async (): Promise<{ success: boolean; data?: ProxyConfig; error?: string }> => {
+      try {
+        const response = await apiFetch<{ success: boolean; data: ProxyConfig }>(
+          '/api/proxy/config'
+        );
+        return response;
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to get config',
+        };
+      }
+    },
+
+    updateConfig: async (
+      config: Partial<ProxyConfig>
+    ): Promise<{ success: boolean; data?: ProxyConfig; error?: string }> => {
+      try {
+        const response = await apiFetch<{ success: boolean; data: ProxyConfig }>(
+          '/api/proxy/config',
+          {
+            method: 'PUT',
+            body: JSON.stringify(config),
+          }
+        );
+        return response;
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to update config',
+        };
+      }
+    },
+
+    getPorts: async (): Promise<{ success: boolean; data?: AllowedPort[]; error?: string }> => {
+      try {
+        const response = await apiFetch<{ success: boolean; data: AllowedPort[] }>(
+          '/api/proxy/ports'
+        );
+        return response;
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to get ports',
+        };
+      }
+    },
+
+    addPort: async (
+      port: number,
+      description?: string
+    ): Promise<{ success: boolean; data?: AllowedPort; error?: string }> => {
+      try {
+        const response = await apiFetch<{ success: boolean; data: AllowedPort }>(
+          '/api/proxy/ports',
+          {
+            method: 'POST',
+            body: JSON.stringify({ port, description }),
+          }
+        );
+        return response;
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to add port',
+        };
+      }
+    },
+
+    removePort: async (port: number): Promise<{ success: boolean; error?: string }> => {
+      try {
+        await apiFetch<{ success: boolean }>(`/api/proxy/ports/${port}`, { method: 'DELETE' });
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to remove port',
+        };
+      }
+    },
+  },
+
+  // DevTools operations (for web preview console capture)
+  devtools: {
+    registerView: (viewId: string, instanceId: string): { success: boolean } => {
+      try {
+        if (socket?.connected) {
+          socket.emit('devtools:registerView', { viewId, instanceId });
+        }
+        return { success: true };
+      } catch {
+        return { success: false };
+      }
+    },
+
+    unregisterView: (viewId: string): { success: boolean } => {
+      try {
+        if (socket?.connected) {
+          socket.emit('devtools:unregisterView', { viewId });
+        }
+        return { success: true };
+      } catch {
+        return { success: false };
+      }
+    },
+
+    addConsoleEntry: (
+      viewId: string,
+      entry: {
+        level: 'log' | 'warn' | 'error' | 'info' | 'debug';
+        message: string;
+        timestamp: number;
+        source?: string;
+        line?: number;
+      }
+    ): { success: boolean } => {
+      try {
+        // Send via WebSocket for real-time sync
+        if (socket?.connected) {
+          socket.emit('devtools:console', { viewId, entry });
+        }
+        return { success: true };
+      } catch {
+        return { success: false };
+      }
+    },
+
+    clearConsole: (viewId: string): { success: boolean } => {
+      try {
+        if (socket?.connected) {
+          socket.emit('devtools:clearConsole', { viewId });
+        }
+        return { success: true };
+      } catch {
+        return { success: false };
+      }
+    },
+
+    toggleInspector: (viewId: string, enabled?: boolean): { success: boolean } => {
+      try {
+        if (socket?.connected) {
+          socket.emit('devtools:toggleInspector', { viewId, enabled });
+        }
+        return { success: true };
+      } catch {
+        return { success: false };
+      }
     },
   },
 };

@@ -38,6 +38,7 @@ import {
   createInstanceRoutes,
   createConversationRoutes,
   createHookRoutes,
+  createProxyRoutes,
   type AuthenticatedRequest,
 } from './routes';
 import type {
@@ -49,6 +50,16 @@ import type {
 import { DEFAULT_REMOTE_PORT } from '@shared/types/remote';
 import type { StreamMessage, InstanceStatus } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
+
+// DevTools console entry interface (simplified for server-side storage)
+interface ServerConsoleEntry {
+  id: string;
+  level: 'log' | 'warn' | 'error' | 'info' | 'debug';
+  message: string;
+  timestamp: number;
+  source?: string;
+  line?: number;
+}
 
 export class WebServer extends EventEmitter {
   private static instance: WebServer | null = null;
@@ -63,6 +74,11 @@ export class WebServer extends EventEmitter {
   private processManagerHandler: (() => void) | null = null;
   private mainWindow: import('electron').BrowserWindow | null = null;
   private mcpServer: McpServer | null = null;
+
+  // DevTools state storage (for MCP tools access)
+  private devToolsConsoleEntries: Map<string, ServerConsoleEntry[]> = new Map(); // viewId -> entries
+  private devToolsInspectorState: Map<string, boolean> = new Map(); // viewId -> enabled
+  private instanceViewMap: Map<string, string> = new Map(); // instanceId -> viewId
 
   private constructor() {
     super();
@@ -391,6 +407,14 @@ export class WebServer extends EventEmitter {
       })
     );
 
+    // Proxy routes (for web preview tunneling)
+    this.app.use(
+      '/api/proxy',
+      createProxyRoutes({
+        authMiddleware: this.authMiddleware,
+      })
+    );
+
     // MCP endpoint (token-based auth for Claude instances)
     this.setupMcpEndpoint();
 
@@ -634,6 +658,58 @@ export class WebServer extends EventEmitter {
         socket.emit('sync:state', state);
       });
 
+      // DevTools events (web preview console capture)
+      socket.on('devtools:registerView', (data: { viewId: string; instanceId: string }) => {
+        if (!data?.viewId || !data?.instanceId) return;
+        this.registerProxyView(data.viewId, data.instanceId);
+      });
+
+      socket.on('devtools:unregisterView', (data: { viewId: string }) => {
+        if (!data?.viewId) return;
+        this.unregisterProxyView(data.viewId);
+      });
+
+      socket.on(
+        'devtools:console',
+        (data: {
+          viewId: string;
+          entry: {
+            level: string;
+            message: string;
+            timestamp: number;
+            source?: string;
+            line?: number;
+          };
+        }) => {
+          if (!data?.viewId || !data?.entry) return;
+          this.addDevToolsConsoleEntry(data.viewId, {
+            level: data.entry.level as 'log' | 'warn' | 'error' | 'info' | 'debug',
+            message: data.entry.message,
+            timestamp: data.entry.timestamp,
+            source: data.entry.source,
+            line: data.entry.line,
+          });
+        }
+      );
+
+      socket.on('devtools:clearConsole', (data: { viewId: string }) => {
+        if (!data?.viewId) return;
+        this.clearDevToolsConsoleEntries(data.viewId);
+      });
+
+      socket.on('devtools:toggleInspector', (data: { viewId: string; enabled?: boolean }) => {
+        if (!data?.viewId) return;
+        this.broadcastDevToolsCommand(undefined, {
+          type:
+            data.enabled === undefined
+              ? 'toggle-inspector'
+              : data.enabled
+                ? 'enable-inspector'
+                : 'disable-inspector',
+          viewId: data.viewId,
+        });
+      });
+
       // Handle disconnect
       socket.on('disconnect', () => {
         console.log(`[WebServer] Socket disconnected: ${socket.id}`);
@@ -750,6 +826,164 @@ export class WebServer extends EventEmitter {
     if (this.io) {
       this.io.emit('hook:activity', data);
     }
+  }
+
+  /**
+   * Broadcast proxy open event to web clients (from MCP tool)
+   */
+  public broadcastProxyOpen(data: {
+    port: number;
+    path?: string;
+    split?: boolean;
+    title?: string;
+    instanceId?: string;
+  }): void {
+    if (this.io) {
+      this.io.emit('proxy:open', data);
+    }
+    // Also send to renderer process for desktop app
+    this.sendToRenderer('proxy:open', data);
+  }
+
+  /**
+   * Register a proxy view for an instance (for MCP tools to find views)
+   */
+  public registerProxyView(viewId: string, instanceId: string): void {
+    this.instanceViewMap.set(instanceId, viewId);
+    this.devToolsConsoleEntries.set(viewId, []);
+    this.devToolsInspectorState.set(viewId, false);
+  }
+
+  /**
+   * Unregister a proxy view
+   */
+  public unregisterProxyView(viewId: string): void {
+    // Find and remove instance mapping
+    for (const [instId, vId] of this.instanceViewMap) {
+      if (vId === viewId) {
+        this.instanceViewMap.delete(instId);
+        break;
+      }
+    }
+    this.devToolsConsoleEntries.delete(viewId);
+    this.devToolsInspectorState.delete(viewId);
+  }
+
+  /**
+   * Add console entry from a proxy view (received from renderer via IPC/Socket)
+   */
+  public addDevToolsConsoleEntry(viewId: string, entry: Omit<ServerConsoleEntry, 'id'>): void {
+    const entries = this.devToolsConsoleEntries.get(viewId) || [];
+    const newEntry: ServerConsoleEntry = {
+      ...entry,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    };
+    entries.push(newEntry);
+
+    // Keep max 1000 entries
+    if (entries.length > 1000) {
+      entries.splice(0, entries.length - 1000);
+    }
+
+    this.devToolsConsoleEntries.set(viewId, entries);
+  }
+
+  /**
+   * Get console entries for MCP tools
+   */
+  public getDevToolsConsoleEntries(
+    instanceId: string | undefined,
+    level: string = 'all',
+    limit: number = 50
+  ): ServerConsoleEntry[] {
+    let viewId: string | undefined;
+
+    if (instanceId) {
+      viewId = this.instanceViewMap.get(instanceId);
+    }
+
+    // If no specific view, get entries from all views
+    let entries: ServerConsoleEntry[] = [];
+
+    if (viewId) {
+      entries = this.devToolsConsoleEntries.get(viewId) || [];
+    } else {
+      // Combine entries from all views
+      for (const viewEntries of this.devToolsConsoleEntries.values()) {
+        entries = entries.concat(viewEntries);
+      }
+      // Sort by timestamp
+      entries.sort((a, b) => a.timestamp - b.timestamp);
+    }
+
+    // Filter by level
+    if (level !== 'all') {
+      entries = entries.filter((e) => e.level === level);
+    }
+
+    // Limit results (take most recent)
+    if (entries.length > limit) {
+      entries = entries.slice(-limit);
+    }
+
+    return entries;
+  }
+
+  /**
+   * Clear console entries for a view
+   */
+  public clearDevToolsConsoleEntries(viewId: string): void {
+    this.devToolsConsoleEntries.set(viewId, []);
+  }
+
+  /**
+   * Broadcast devtools command to web clients (for MCP tools)
+   */
+  public broadcastDevToolsCommand(
+    instanceId: string | undefined,
+    command: { type: string; [key: string]: unknown }
+  ): void {
+    const viewId = instanceId ? this.instanceViewMap.get(instanceId) : undefined;
+
+    if (command.type === 'toggle-inspector') {
+      // Toggle the inspector state
+      if (viewId) {
+        const currentState = this.devToolsInspectorState.get(viewId) || false;
+        this.devToolsInspectorState.set(viewId, !currentState);
+      }
+    } else if (command.type === 'enable-inspector') {
+      if (viewId) {
+        this.devToolsInspectorState.set(viewId, true);
+      }
+    } else if (command.type === 'disable-inspector') {
+      if (viewId) {
+        this.devToolsInspectorState.set(viewId, false);
+      }
+    } else if (command.type === 'clear-console') {
+      if (viewId) {
+        this.clearDevToolsConsoleEntries(viewId);
+      } else {
+        // Clear all console entries
+        for (const vId of this.devToolsConsoleEntries.keys()) {
+          this.devToolsConsoleEntries.set(vId, []);
+        }
+      }
+    }
+
+    // Broadcast to web clients
+    if (this.io) {
+      this.io.emit('devtools:command', { viewId, instanceId, command });
+    }
+
+    // Send to renderer for Electron
+    this.sendToRenderer('devtools:command', { viewId, instanceId, command });
+  }
+
+  /**
+   * Get inspector state for a view
+   */
+  public getDevToolsInspectorState(viewId: string): boolean {
+    return this.devToolsInspectorState.get(viewId) || false;
   }
 
   /**

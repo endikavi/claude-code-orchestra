@@ -39,6 +39,8 @@ import { getPermissionManager } from '../services/PermissionManager';
 import { getMetricsService } from '../services/MetricsService';
 import { getGitStatusManager } from '../services/GitStatusManager';
 import { getSubagentTracker } from '../services/SubagentTracker';
+import { getTerminalPool } from '../services/TerminalPool';
+import type { TerminalPoolConfig } from '@shared/types/pool';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   const dataStore = DataStore.getInstance();
@@ -896,6 +898,155 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return subagentTracker.getAllSubagents();
   });
 
+  // ==================== Proxy Handlers (Web Preview Tunneling) ====================
+  ipcMain.handle(IPC_CHANNELS.PROXY_GET_CONFIG, () => {
+    try {
+      const config = dataStore.getProxyConfig();
+      return { success: true, data: config };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get config',
+      };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.PROXY_UPDATE_CONFIG,
+    (
+      _event,
+      config: { enabled?: boolean; maxConcurrentTunnels?: number; rateLimitPerMinute?: number }
+    ) => {
+      try {
+        const updated = dataStore.updateProxyConfig(config);
+        return { success: true, data: updated };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to update config',
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PROXY_GET_PORTS, () => {
+    try {
+      const ports = dataStore.getAllowedPorts();
+      return { success: true, data: ports };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get ports',
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROXY_ADD_PORT, (_event, port: number, description?: string) => {
+    try {
+      // Validate port range
+      if (port < 1024 || port > 65535) {
+        return { success: false, error: 'Port must be between 1024 and 65535' };
+      }
+
+      // Check if port is already allowed
+      if (dataStore.isPortAllowed(port)) {
+        return { success: false, error: `Port ${port} is already allowed` };
+      }
+
+      const added = dataStore.addAllowedPort(port, description);
+      return { success: true, data: added };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to add port',
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROXY_REMOVE_PORT, (_event, port: number) => {
+    try {
+      dataStore.deleteAllowedPort(port);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to remove port',
+      };
+    }
+  });
+
+  // ==================== DevTools Handlers (Web Preview DevTools) ====================
+
+  // Register a proxy view for an instance
+  ipcMain.handle(
+    IPC_CHANNELS.DEVTOOLS_REGISTER_VIEW,
+    (_event, viewId: string, instanceId: string) => {
+      webServer.registerProxyView(viewId, instanceId);
+      return { success: true };
+    }
+  );
+
+  // Unregister a proxy view
+  ipcMain.handle(IPC_CHANNELS.DEVTOOLS_UNREGISTER_VIEW, (_event, viewId: string) => {
+    webServer.unregisterProxyView(viewId);
+    return { success: true };
+  });
+
+  // Add console entry from renderer (for Electron webview mode)
+  ipcMain.handle(
+    IPC_CHANNELS.DEVTOOLS_ADD_CONSOLE_ENTRY,
+    (
+      _event,
+      viewId: string,
+      entry: {
+        level: 'log' | 'warn' | 'error' | 'info' | 'debug';
+        message: string;
+        timestamp: number;
+        source?: string;
+        line?: number;
+      }
+    ) => {
+      webServer.addDevToolsConsoleEntry(viewId, entry);
+      return { success: true };
+    }
+  );
+
+  // Clear console entries
+  ipcMain.handle(IPC_CHANNELS.DEVTOOLS_CLEAR_CONSOLE, (_event, viewId: string) => {
+    webServer.clearDevToolsConsoleEntries(viewId);
+    return { success: true };
+  });
+
+  // Toggle inspector
+  ipcMain.handle(
+    IPC_CHANNELS.DEVTOOLS_TOGGLE_INSPECTOR,
+    (_event, viewId: string, enabled?: boolean) => {
+      const command =
+        enabled === undefined
+          ? { type: 'toggle-inspector' }
+          : { type: enabled ? 'enable-inspector' : 'disable-inspector' };
+      // Find instance for view
+      webServer.broadcastDevToolsCommand(undefined, { ...command, viewId });
+      return { success: true };
+    }
+  );
+
+  // Send HTML to terminal (for context menu action)
+  ipcMain.handle(
+    IPC_CHANNELS.DEVTOOLS_SEND_TO_TERMINAL,
+    (_event, instanceId: string, html: string) => {
+      try {
+        processManager.sendInput(instanceId, html);
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to send to terminal',
+        };
+      }
+    }
+  );
+
   // Open external URL handler (for terminal links)
   ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
     try {
@@ -975,6 +1126,28 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: message };
     }
+  });
+
+  // ==================== Terminal Pool Handlers (LOCAL-ONLY) ====================
+  // SECURITY: These handlers are only accessible via IPC from the local renderer.
+  // They are NOT exposed through WebServer or ClusterManager.
+  const terminalPool = getTerminalPool();
+
+  ipcMain.handle(IPC_CHANNELS.POOL_GET_CONFIG, () => {
+    return terminalPool.getConfig();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.POOL_UPDATE_CONFIG, (_event, config: Partial<TerminalPoolConfig>) => {
+    return terminalPool.updateConfig(config);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.POOL_GET_STATS, () => {
+    return terminalPool.getStats();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.POOL_RESET_STATS, () => {
+    terminalPool.resetStats();
+    return { success: true };
   });
 }
 

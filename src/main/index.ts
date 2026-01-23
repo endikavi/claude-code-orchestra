@@ -5,6 +5,7 @@ import { getProcessManager } from './services/ProcessManager';
 import { DataStore } from './services/DataStore';
 import { getWebServer } from './services/WebServer';
 import { getClusterManager } from './services/ClusterManager';
+import { getTerminalPool } from './services/TerminalPool';
 
 // GPU cache configuration for xterm.js WebGL performance
 // By default, we enable GPU caches for better terminal rendering performance
@@ -113,6 +114,16 @@ app
         dataStore.updateClusterConfig({ enabled: false });
       }
     }
+
+    // Initialize terminal pool for faster instance creation
+    try {
+      const terminalPool = getTerminalPool();
+      await terminalPool.initialize();
+      console.log(`[Main] Terminal pool initialized`);
+    } catch (error) {
+      console.error('[Main] Failed to initialize terminal pool:', error);
+      // Non-fatal - instances will fall back to direct spawn
+    }
   })
   .catch((error) => {
     console.error('[Main] Failed to initialize app:', error);
@@ -154,4 +165,6 @@ app.on('activate', () => {
 // Handle app quit
 app.on('before-quit', () => {
   getProcessManager().killAll();
+  // Shutdown terminal pool
+  void getTerminalPool().shutdown();
 });

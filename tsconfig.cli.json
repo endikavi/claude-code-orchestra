@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
+    "module": "NodeNext",
     "lib": ["ES2022"],
     "skipLibCheck": true,
-    "moduleResolution": "node",
+    "moduleResolution": "NodeNext",
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -15,6 +15,7 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
     "outDir": "dist/cli",
     "rootDir": "src",
     "baseUrl": ".",
@@ -25,7 +26,8 @@
     }
   },
   "include": [
-    "src/main/cli/**/*",
+    "src/main/cli/**/*.ts",
+    "src/main/cli/**/*.tsx",
     "src/main/services/**/*",
     "src/main/utils/**/*",
     "src/main/ipc/channels.ts",
@@ -37,6 +39,7 @@
     "src/main/preload.ts",
     "src/main/ipc/handlers.ts",
     "src/main/services/UISettingsStore.ts",
+    "src/main/services/devtools/**/*",
     "src/renderer/**/*",
     "src/web/**/*",
     "src/**/*.test.ts",

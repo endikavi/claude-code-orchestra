@@ -15,17 +15,23 @@ import { Command } from 'commander';
 import { existsSync, mkdirSync } from 'fs';
 import { hashSync } from 'bcryptjs';
 
-import { CliArgs, HeadlessConfig, mergeConfig, validateConfig, printConfigSummary } from './config';
-import { setUserDataPath } from '../utils/pathProvider';
+import {
+  CliArgs,
+  HeadlessConfig,
+  mergeConfig,
+  validateConfig,
+  printConfigSummary,
+} from './config.js';
+import { setUserDataPath } from '../utils/pathProvider.js';
 
 // Package info - will be loaded from package.json
 const pkg = { name: 'claude-code-orchestra', version: '0.1.0-beta.2' };
 
 // Services will be loaded after path setup
-let DataStore: typeof import('../services/DataStore').DataStore;
-let getWebServer: typeof import('../services/WebServer').getWebServer;
-let getClusterManager: typeof import('../services/ClusterManager').getClusterManager;
-let getProcessManager: typeof import('../services/ProcessManager').getProcessManager;
+let DataStore: typeof import('../services/DataStore.js').DataStore;
+let getWebServer: typeof import('../services/WebServer.js').getWebServer;
+let getClusterManager: typeof import('../services/ClusterManager.js').getClusterManager;
+let getProcessManager: typeof import('../services/ProcessManager.js').getProcessManager;
 
 /**
  * Initialize the data directory
@@ -41,10 +47,10 @@ function initializeDataDir(dataDir: string): void {
  * Load services dynamically after path setup
  */
 async function loadServices(): Promise<void> {
-  const dataStoreModule = await import('../services/DataStore');
-  const webServerModule = await import('../services/WebServer');
-  const clusterManagerModule = await import('../services/ClusterManager');
-  const processManagerModule = await import('../services/ProcessManager');
+  const dataStoreModule = await import('../services/DataStore.js');
+  const webServerModule = await import('../services/WebServer.js');
+  const clusterManagerModule = await import('../services/ClusterManager.js');
+  const processManagerModule = await import('../services/ProcessManager.js');
 
   DataStore = dataStoreModule.DataStore;
   getWebServer = webServerModule.getWebServer;
@@ -191,11 +197,12 @@ async function main(): Promise<void> {
     .option('--data-dir <path>', 'Data directory path')
     .option('--config <path>', 'Path to configuration JSON file')
     .option('--allow-any-cors', 'Allow any CORS origin (use with caution)')
+    .option('--tui', 'Launch interactive TUI dashboard instead of web server')
     .parse(process.argv);
 
   const options = program.opts<CliArgs>();
 
-  console.log('Starting Claude Code Orchestra in headless mode...\n');
+  console.log('Starting Claude Code Orchestra...\n');
 
   try {
     // Merge configuration from all sources
@@ -219,7 +226,15 @@ async function main(): Promise<void> {
     // Apply configuration to services
     applyConfiguration(config);
 
-    // Setup signal handlers for graceful shutdown
+    // Check if TUI mode is requested
+    if (options.tui) {
+      // Import and start TUI
+      const { startTUI } = await import('./tui/index.js');
+      await startTUI(config);
+      return; // TUI handles its own exit
+    }
+
+    // Setup signal handlers for graceful shutdown (headless/server mode)
     process.on('SIGINT', () => void shutdown('SIGINT'));
     process.on('SIGTERM', () => void shutdown('SIGTERM'));
     // SIGHUP doesn't exist on Windows, only register on Unix-like systems

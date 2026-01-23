@@ -26,6 +26,6 @@
     "types": ["vitest/globals"]
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**", "src/main/cli/tui/**"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

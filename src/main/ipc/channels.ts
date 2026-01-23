@@ -205,6 +205,33 @@ export const IPC_CHANNELS = {
   // Subagent events (main -> renderer)
   SUBAGENT_STARTED: 'subagent:started',
   SUBAGENT_COMPLETED: 'subagent:completed',
+
+  // Proxy operations (web preview tunneling)
+  PROXY_GET_CONFIG: 'proxy:getConfig',
+  PROXY_UPDATE_CONFIG: 'proxy:updateConfig',
+  PROXY_GET_PORTS: 'proxy:getPorts',
+  PROXY_ADD_PORT: 'proxy:addPort',
+  PROXY_REMOVE_PORT: 'proxy:removePort',
+
+  // Proxy events (main -> renderer)
+  PROXY_OPEN: 'proxy:open',
+
+  // DevTools operations
+  DEVTOOLS_REGISTER_VIEW: 'devtools:registerView',
+  DEVTOOLS_UNREGISTER_VIEW: 'devtools:unregisterView',
+  DEVTOOLS_ADD_CONSOLE_ENTRY: 'devtools:addConsoleEntry',
+  DEVTOOLS_CLEAR_CONSOLE: 'devtools:clearConsole',
+  DEVTOOLS_TOGGLE_INSPECTOR: 'devtools:toggleInspector',
+  DEVTOOLS_SEND_TO_TERMINAL: 'devtools:sendToTerminal',
+
+  // DevTools events (main -> renderer)
+  DEVTOOLS_COMMAND: 'devtools:command',
+
+  // Terminal Pool operations (local-only, never exposed to web/cluster)
+  POOL_GET_CONFIG: 'pool:getConfig',
+  POOL_UPDATE_CONFIG: 'pool:updateConfig',
+  POOL_GET_STATS: 'pool:getStats',
+  POOL_RESET_STATS: 'pool:resetStats',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

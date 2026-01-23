@@ -17,8 +17,8 @@ export interface SplitTab {
   id: string;
   leftInstanceId: string;
   rightInstanceId: string;
-  leftType: 'instance' | 'shell';
-  rightType: 'instance' | 'shell';
+  leftType: 'instance' | 'shell' | 'proxy';
+  rightType: 'instance' | 'shell' | 'proxy';
 }
 
 // Shell instance interface (for integrated terminal)
@@ -290,6 +290,9 @@ export * from './metrics';
 
 // Re-export orchestration types
 export * from './orchestration';
+
+// Re-export proxy types
+export * from './proxy';
 
 // Git status types
 export interface GitStatus {

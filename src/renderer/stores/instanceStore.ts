@@ -79,6 +79,8 @@ interface InstanceState {
   lastSelectionTime: number;
   isLoading: boolean;
   error: string | null;
+  // Track instances being removed to prevent re-adding via sync
+  removingInstanceIds: Set<string>;
 
   // Shell state
   shellInstances: ShellInstance[];
@@ -154,8 +156,8 @@ interface InstanceState {
   createSplit: (
     leftId: string,
     rightId: string,
-    leftType: 'instance' | 'shell',
-    rightType: 'instance' | 'shell'
+    leftType: 'instance' | 'shell' | 'proxy',
+    rightType: 'instance' | 'shell' | 'proxy'
   ) => void;
   removeSplit: (splitId: string) => void;
   selectSplit: (splitId: string | null) => void;
@@ -172,6 +174,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   lastSelectionTime: 0,
   isLoading: false,
   error: null,
+  removingInstanceIds: new Set(),
 
   // Shell initial state
   shellInstances: [],
@@ -304,15 +307,24 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   killInstance: async (id) => {
+    // Mark instance as being removed PERMANENTLY to prevent re-adding via sync
+    // We don't clear this - the ID stays in the set forever for this session
+    // This prevents ghost tabs from appearing when delayed syncs arrive
+    set((state) => ({
+      removingInstanceIds: new Set(state.removingInstanceIds).add(id),
+    }));
+
     try {
       await window.electronAPI.instance.kill(id);
-      // Remove instance from store after killing
-      get().removeInstance(id);
     } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to kill instance',
-      });
+      // Log error but don't block removal - instance may already be dead
+      // or may be a remote/cluster instance that doesn't exist locally
+      console.warn(`[instanceStore] Failed to kill instance ${id}:`, error);
     }
+
+    // Always remove instance from store, regardless of kill success
+    // This ensures tabs are always cleaned up
+    get().removeInstance(id);
   },
 
   removeInstance: (id) => {
@@ -409,32 +421,61 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       `[instanceStore] syncInstances called with ${instances.length} server instances, current local: ${currentState.instances.length}`
     );
 
+    // Filter out instances that are being removed (prevents ghost tabs)
+    const filteredServerInstances = instances.filter(
+      (i) => !currentState.removingInstanceIds.has(i.id)
+    );
+
     // Build a map of server instances for quick lookup
-    const serverInstanceMap = new Map(instances.map((i) => [i.id, i]));
+    const serverInstanceMap = new Map(filteredServerInstances.map((i) => [i.id, i]));
 
     // Merge strategy:
     // 1. Keep local instances that have terminal status (completed/error/killed) and are NOT in server list
     //    (server has already cleaned them up, but we want to keep showing them)
-    // 2. Update/add instances that come from the server
-    // 3. Remove instances that are in "running" state locally but not in server (they were killed externally)
+    // 2. Keep local instances that are very new (created in last 3 seconds) and not yet in server
+    //    (prevents race condition where sync arrives before server knows about new instance)
+    // 3. Update/add instances that come from the server (excluding those being removed)
+    // 4. Remove instances that are in "running" state locally but not in server (they were killed externally)
     const terminalStatuses: InstanceStatus[] = ['completed', 'error', 'killed'];
+    const recentCreationThreshold = 3000; // 3 seconds
 
-    // Start with local instances that should be preserved (terminal status, not in server)
+    // Start with local instances that should be preserved
     const preservedLocalInstances = currentState.instances.filter((localInst) => {
+      // Never preserve instances that are being removed
+      if (currentState.removingInstanceIds.has(localInst.id)) return false;
+
       const isInServer = serverInstanceMap.has(localInst.id);
+
+      // Already in server - don't preserve (server version is authoritative)
+      if (isInServer) return false;
+
       const hasTerminalStatus = terminalStatuses.includes(localInst.status);
-      // Preserve if it's terminal AND not in server (server cleaned it up)
-      return hasTerminalStatus && !isInServer;
+      // Preserve if it's terminal (server cleaned it up but we want to show it)
+      if (hasTerminalStatus) return true;
+
+      // Preserve if it was created very recently (race condition protection)
+      // This prevents the "ghost tab" bug where a newly created instance disappears
+      // because sync arrives before server knows about it
+      const isRecentlyCreated = Date.now() - (localInst.createdAt || 0) < recentCreationThreshold;
+      if (isRecentlyCreated) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[instanceStore] Preserving recently created instance ${localInst.id} not yet in server`
+        );
+        return true;
+      }
+
+      return false;
     });
 
-    // Merge: server instances + preserved local instances
+    // Merge: server instances (excluding removed) + preserved local instances
     const mergedInstances = [
-      ...instances, // All instances from server (these are authoritative for active instances)
-      ...preservedLocalInstances, // Local terminal instances not in server
+      ...filteredServerInstances, // All instances from server (excluding those being removed)
+      ...preservedLocalInstances, // Local terminal instances not in server + recently created
     ];
 
     // Sync instances from server - initialize outputs for new instances
-    instances.forEach((instance) => {
+    filteredServerInstances.forEach((instance) => {
       // Initialize output storage for each instance if not exists
       if (!newOutputs.has(instance.id)) {
         newOutputs.set(instance.id, {
@@ -470,33 +511,35 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       });
     }
 
-    // Preserve selectedInstanceId if:
-    // 1. The instance still exists in the merged list, OR
-    // 2. The selection was made very recently (within 2 seconds) - to handle race conditions
+    // Preserve selectedInstanceId ONLY if the instance exists in the merged list
+    // The previous logic of preserving based on "recent selection" was buggy:
+    // it could keep selectedInstanceId pointing to a non-existent instance,
+    // causing a "ghost tab" to appear
     const currentSelectedId = currentState.selectedInstanceId;
-    const lastSelectionTime = currentState.lastSelectionTime;
-    const isRecentSelection = Date.now() - lastSelectionTime < 2000;
     const selectedStillExists =
       currentSelectedId && mergedInstances.some((i) => i.id === currentSelectedId);
-
-    // Don't override recent explicit selections (handles race condition with createInstance)
-    const shouldPreserveSelection = selectedStillExists || isRecentSelection;
 
     set({
       instances: mergedInstances,
       outputs: newOutputs,
       instanceConversations: newInstanceConversations,
-      selectedInstanceId: shouldPreserveSelection ? currentSelectedId : null,
+      selectedInstanceId: selectedStillExists ? currentSelectedId : null,
     });
   },
 
   updateInstanceStatus: (id, status) => {
+    // Ignore updates for instances being removed (prevents ghost updates)
+    if (get().removingInstanceIds.has(id)) return;
+
     set((state) => ({
       instances: state.instances.map((inst) => (inst.id === id ? { ...inst, status } : inst)),
     }));
   },
 
   updateTerminalTitle: (id, title) => {
+    // Ignore updates for instances being removed
+    if (get().removingInstanceIds.has(id)) return;
+
     set((state) => ({
       instances: state.instances.map((inst) =>
         inst.id === id ? { ...inst, terminalTitle: title } : inst
@@ -516,6 +559,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   addInstanceOutput: (id, message) => {
+    // Ignore output for instances being removed
+    if (get().removingInstanceIds.has(id)) return;
+
     const state = get();
     const outputs = new Map(state.outputs);
     const existing = outputs.get(id) || {
@@ -542,6 +588,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   addRawOutput: (id, data) => {
+    // Ignore output for instances being removed
+    if (get().removingInstanceIds.has(id)) return;
+
     set((state) => {
       const outputs = new Map(state.outputs);
       const existing = outputs.get(id) || {
@@ -565,6 +614,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   setInstanceError: (id, error) => {
+    // Ignore errors for instances being removed
+    if (get().removingInstanceIds.has(id)) return;
+
     set((state) => ({
       instances: state.instances.map((inst) =>
         inst.id === id ? { ...inst, status: 'error' as const, error } : inst
@@ -573,6 +625,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   handleInstanceExit: (id, code) => {
+    // Ignore exit events for instances being removed
+    if (get().removingInstanceIds.has(id)) return;
+
     const state = get();
     const conversationId = state.instanceConversations.get(id);
     const newStatus = code === 0 ? 'completed' : 'error';
@@ -600,6 +655,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   handleSessionId: (instanceId, sessionId) => {
+    // Ignore for instances being removed
+    if (get().removingInstanceIds.has(instanceId)) return;
+
     const conversationId = get().instanceConversations.get(instanceId);
     if (conversationId) {
       useConversationStore
@@ -612,6 +670,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   updateActivity: (instanceId, activity) => {
+    // Ignore for instances being removed
+    if (get().removingInstanceIds.has(instanceId)) return;
+
     set((state) => {
       const activities = new Map(state.activities);
       const existing = activities.get(instanceId) || {
@@ -650,51 +711,72 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       updateActivity,
     } = get();
 
-    const unsubOutput = window.electronAPI.instance.onOutput((id, message) => {
-      addInstanceOutput(id, message);
-    });
+    // Check if electronAPI is available (not available in Vite dev mode)
+    const hasElectronAPI =
+      typeof window !== 'undefined' &&
+      'electronAPI' in window &&
+      window.electronAPI?.instance !== undefined;
 
-    const unsubStatus = window.electronAPI.instance.onStatus((id, status) => {
-      updateInstanceStatus(id, status);
-    });
+    // Only set up Electron IPC listeners if electronAPI is available
+    let unsubOutput: (() => void) | undefined;
+    let unsubStatus: (() => void) | undefined;
+    let unsubError: (() => void) | undefined;
+    let unsubExit: (() => void) | undefined;
+    let unsubRaw: (() => void) | undefined;
+    let unsubSessionId: (() => void) | undefined;
+    let unsubTerminalTitle: (() => void) | undefined;
+    let unsubSync: (() => void) | undefined;
+    let unsubShellRawOutput: (() => void) | undefined;
+    let unsubShellStatus: (() => void) | undefined;
+    let unsubShellExit: (() => void) | undefined;
 
-    const unsubError = window.electronAPI.instance.onError((id, error) => {
-      setInstanceError(id, error);
-    });
+    if (hasElectronAPI) {
+      unsubOutput = window.electronAPI.instance.onOutput((id, message) => {
+        addInstanceOutput(id, message);
+      });
 
-    const unsubExit = window.electronAPI.instance.onExit((id, code) => {
-      handleInstanceExit(id, code);
-    });
+      unsubStatus = window.electronAPI.instance.onStatus((id, status) => {
+        updateInstanceStatus(id, status);
+      });
 
-    const unsubRaw = window.electronAPI.instance.onRawOutput((id, data) => {
-      addRawOutput(id, data);
-    });
+      unsubError = window.electronAPI.instance.onError((id, error) => {
+        setInstanceError(id, error);
+      });
 
-    const unsubSessionId = window.electronAPI.instance.onSessionId((id, sessionId) => {
-      handleSessionId(id, sessionId);
-    });
+      unsubExit = window.electronAPI.instance.onExit((id, code) => {
+        handleInstanceExit(id, code);
+      });
 
-    const unsubTerminalTitle = window.electronAPI.instance.onTerminalTitle((id, title) => {
-      updateTerminalTitle(id, title);
-    });
+      unsubRaw = window.electronAPI.instance.onRawOutput((id, data) => {
+        addRawOutput(id, data);
+      });
 
-    // Instance sync listener (for updates from web clients or other sources)
-    const unsubSync = window.electronAPI.instance.onSync((instances) => {
-      syncInstances(instances);
-    });
+      unsubSessionId = window.electronAPI.instance.onSessionId((id, sessionId) => {
+        handleSessionId(id, sessionId);
+      });
 
-    // Shell event listeners
-    const unsubShellRawOutput = window.electronAPI.shell.onRawOutput((id, data) => {
-      addShellRawOutput(id, data);
-    });
+      unsubTerminalTitle = window.electronAPI.instance.onTerminalTitle((id, title) => {
+        updateTerminalTitle(id, title);
+      });
 
-    const unsubShellStatus = window.electronAPI.shell.onStatus((id, status) => {
-      updateShellStatus(id, status);
-    });
+      // Instance sync listener (for updates from web clients or other sources)
+      unsubSync = window.electronAPI.instance.onSync((instances) => {
+        syncInstances(instances);
+      });
 
-    const unsubShellExit = window.electronAPI.shell.onExit((id, code) => {
-      handleShellExit(id, code);
-    });
+      // Shell event listeners
+      unsubShellRawOutput = window.electronAPI.shell.onRawOutput((id, data) => {
+        addShellRawOutput(id, data);
+      });
+
+      unsubShellStatus = window.electronAPI.shell.onStatus((id, status) => {
+        updateShellStatus(id, status);
+      });
+
+      unsubShellExit = window.electronAPI.shell.onExit((id, code) => {
+        handleShellExit(id, code);
+      });
+    }
 
     // Listen for sync:state events from web socket (for web clients)
     const handleSyncState = (event: Event) => {
@@ -745,17 +827,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
 
     return () => {
-      unsubOutput();
-      unsubStatus();
-      unsubError();
-      unsubExit();
-      unsubRaw();
-      unsubSessionId();
-      unsubTerminalTitle();
-      unsubSync();
-      unsubShellRawOutput();
-      unsubShellStatus();
-      unsubShellExit();
+      unsubOutput?.();
+      unsubStatus?.();
+      unsubError?.();
+      unsubExit?.();
+      unsubRaw?.();
+      unsubSessionId?.();
+      unsubTerminalTitle?.();
+      unsubSync?.();
+      unsubShellRawOutput?.();
+      unsubShellStatus?.();
+      unsubShellExit?.();
       window.removeEventListener('sync:state', handleSyncState);
       window.removeEventListener('hook:activity', handleHookActivity);
       unsubActivity?.();

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevTools Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .log { background: #4a90d9; color: white; }
+    .warn { background: #f5a623; color: black; }
+    .error { background: #d9534f; color: white; }
+    .info { background: #5bc0de; color: black; }
+    h1 { color: #7c3aed; }
+    .box {
+      padding: 20px;
+      margin: 10px 0;
+      border: 2px solid #333;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>DevTools Test Page</h1>
+
+  <div class="box">
+    <h2>Console Tests</h2>
+    <button class="log" onclick="console.log('Hello from console.log!')">console.log</button>
+    <button class="info" onclick="console.info('Info message here')">console.info</button>
+    <button class="warn" onclick="console.warn('Warning! Something might be wrong')">console.warn</button>
+    <button class="error" onclick="console.error('Error! Something went wrong')">console.error</button>
+  </div>
+
+  <div class="box" id="inspector-test">
+    <h2>Inspector Test</h2>
+    <p>Hover over these elements with inspector enabled:</p>
+    <div style="padding: 10px; background: #2d2d44; margin: 5px;">Element 1</div>
+    <div style="padding: 10px; background: #3d3d54; margin: 5px;">Element 2</div>
+    <div style="padding: 10px; background: #4d4d64; margin: 5px;">Element 3</div>
+  </div>
+
+  <script>
+    // Check if devtools script was injected
+    setTimeout(function() {
+      var injected = !!window.__devtoolsInjected;
+      var status = document.getElementById('injection-status');
+      if (status) {
+        status.textContent = injected ? 'YES - DevTools script injected!' : 'NO - Script NOT injected (not loaded through proxy)';
+        status.style.color = injected ? '#4ade80' : '#f87171';
+      }
+      console.log('DevTools script injected:', injected);
+    }, 100);
+
+    // Auto-run some console messages on load
+    console.log('Page loaded at:', new Date().toISOString());
+    console.info('DevTools test page ready');
+    console.warn('This is a test warning on load');
+  </script>
+</body>
+</html>

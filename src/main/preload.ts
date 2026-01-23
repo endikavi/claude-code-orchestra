@@ -44,6 +44,8 @@ import type {
   MetricsPeriod,
   GitStatus,
   SubagentInstance,
+  ProxyConfig,
+  AllowedPort,
 } from '@shared/types';
 import type { RemoteConfig, RemoteServerStatus } from '@shared/types/remote';
 import type {
@@ -59,6 +61,7 @@ import type {
   ClusterPermissionChangeEvent,
 } from '@shared/types/cluster';
 import type { UISettings } from '@shared/types/uiSettings';
+import type { TerminalPoolConfig, TerminalPoolStats } from '@shared/types/pool';
 
 // Expose protected methods to renderer
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -755,6 +758,110 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.SUBAGENT_COMPLETED, listener);
     },
   },
+
+  // Proxy operations (web preview tunneling)
+  proxy: {
+    getConfig: (): Promise<{ success: boolean; data?: ProxyConfig; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROXY_GET_CONFIG),
+
+    updateConfig: (
+      config: Partial<ProxyConfig>
+    ): Promise<{ success: boolean; data?: ProxyConfig; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROXY_UPDATE_CONFIG, config),
+
+    getPorts: (): Promise<{ success: boolean; data?: AllowedPort[]; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROXY_GET_PORTS),
+
+    addPort: (
+      port: number,
+      description?: string
+    ): Promise<{ success: boolean; data?: AllowedPort; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROXY_ADD_PORT, port, description),
+
+    removePort: (port: number): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROXY_REMOVE_PORT, port),
+
+    // Event listener for proxy:open from MCP
+    onOpen: (
+      callback: (data: {
+        port: number;
+        path?: string;
+        split?: boolean;
+        title?: string;
+        instanceId?: string;
+      }) => void
+    ) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        data: {
+          port: number;
+          path?: string;
+          split?: boolean;
+          title?: string;
+          instanceId?: string;
+        }
+      ) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.PROXY_OPEN, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.PROXY_OPEN, listener);
+    },
+  },
+
+  // DevTools operations (for web preview)
+  devtools: {
+    registerView: (viewId: string, instanceId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DEVTOOLS_REGISTER_VIEW, viewId, instanceId),
+
+    unregisterView: (viewId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DEVTOOLS_UNREGISTER_VIEW, viewId),
+
+    addConsoleEntry: (
+      viewId: string,
+      entry: {
+        level: 'log' | 'warn' | 'error' | 'info' | 'debug';
+        message: string;
+        timestamp: number;
+        source?: string;
+        line?: number;
+      }
+    ): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DEVTOOLS_ADD_CONSOLE_ENTRY, viewId, entry),
+
+    clearConsole: (viewId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DEVTOOLS_CLEAR_CONSOLE, viewId),
+
+    toggleInspector: (viewId: string, enabled?: boolean): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DEVTOOLS_TOGGLE_INSPECTOR, viewId, enabled),
+
+    sendToTerminal: (
+      instanceId: string,
+      html: string
+    ): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DEVTOOLS_SEND_TO_TERMINAL, instanceId, html),
+
+    onCommand: (
+      callback: (data: { viewId?: string; instanceId?: string; command: { type: string } }) => void
+    ) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        data: { viewId?: string; instanceId?: string; command: { type: string } }
+      ) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.DEVTOOLS_COMMAND, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.DEVTOOLS_COMMAND, listener);
+    },
+  },
+
+  // Terminal Pool operations (local-only, never exposed to web/cluster)
+  pool: {
+    getConfig: (): Promise<TerminalPoolConfig> => ipcRenderer.invoke(IPC_CHANNELS.POOL_GET_CONFIG),
+
+    updateConfig: (config: Partial<TerminalPoolConfig>): Promise<TerminalPoolConfig> =>
+      ipcRenderer.invoke(IPC_CHANNELS.POOL_UPDATE_CONFIG, config),
+
+    getStats: (): Promise<TerminalPoolStats> => ipcRenderer.invoke(IPC_CHANNELS.POOL_GET_STATS),
+
+    resetStats: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.POOL_RESET_STATS),
+  },
 });
 
 // Type declarations for renderer
@@ -1052,6 +1159,60 @@ declare global {
         onCompleted: (
           callback: (instanceId: string, subagent: SubagentInstance) => void
         ) => () => void;
+      };
+      proxy: {
+        getConfig: () => Promise<{ success: boolean; data?: ProxyConfig; error?: string }>;
+        updateConfig: (
+          config: Partial<ProxyConfig>
+        ) => Promise<{ success: boolean; data?: ProxyConfig; error?: string }>;
+        getPorts: () => Promise<{ success: boolean; data?: AllowedPort[]; error?: string }>;
+        addPort: (
+          port: number,
+          description?: string
+        ) => Promise<{ success: boolean; data?: AllowedPort; error?: string }>;
+        removePort: (port: number) => Promise<{ success: boolean; error?: string }>;
+        onOpen: (
+          callback: (data: {
+            port: number;
+            path?: string;
+            split?: boolean;
+            title?: string;
+            instanceId?: string;
+          }) => void
+        ) => () => void;
+      };
+      devtools: {
+        registerView: (viewId: string, instanceId: string) => Promise<{ success: boolean }>;
+        unregisterView: (viewId: string) => Promise<{ success: boolean }>;
+        addConsoleEntry: (
+          viewId: string,
+          entry: {
+            level: 'log' | 'warn' | 'error' | 'info' | 'debug';
+            message: string;
+            timestamp: number;
+            source?: string;
+            line?: number;
+          }
+        ) => Promise<{ success: boolean }>;
+        clearConsole: (viewId: string) => Promise<{ success: boolean }>;
+        toggleInspector: (viewId: string, enabled?: boolean) => Promise<{ success: boolean }>;
+        sendToTerminal: (
+          instanceId: string,
+          html: string
+        ) => Promise<{ success: boolean; error?: string }>;
+        onCommand: (
+          callback: (data: {
+            viewId?: string;
+            instanceId?: string;
+            command: { type: string };
+          }) => void
+        ) => () => void;
+      };
+      pool: {
+        getConfig: () => Promise<TerminalPoolConfig>;
+        updateConfig: (config: Partial<TerminalPoolConfig>) => Promise<TerminalPoolConfig>;
+        getStats: () => Promise<TerminalPoolStats>;
+        resetStats: () => Promise<{ success: boolean }>;
       };
     };
   }

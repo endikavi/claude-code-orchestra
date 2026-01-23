@@ -56,6 +56,8 @@
       "general": "General",
       "notifications": "Notificaciones",
       "remoteAccess": "Acceso Remoto",
+      "proxy": "Proxy",
+      "pool": "Pool",
       "security": "Seguridad",
       "cluster": "Clúster"
     }
@@ -396,6 +398,80 @@
       "permission": "Permiso",
       "complete": "Completado"
     }
+  },
+  "proxy": {
+    "enable": "Habilitar Proxy de Vista Previa",
+    "enableDescription": "Permite a Claude abrir vistas previas web de tus servidores de desarrollo a través de la herramienta MCP preview_open",
+    "allowedPorts": "Puertos Permitidos",
+    "allowedPortsDescription": "Solo estos puertos pueden ser proxeados por seguridad. Añade puertos donde corren tus servidores de desarrollo.",
+    "portPlaceholder": "Puerto (ej: 3000)",
+    "descriptionPlaceholder": "Descripción (opcional)",
+    "addPort": "Añadir",
+    "removePort": "Eliminar puerto",
+    "noPorts": "No hay puertos configurados. Añade puertos para habilitar el proxy de vista previa.",
+    "commonPorts": "Añadir Puertos Comunes",
+    "invalidPort": "El puerto debe estar entre 1024 y 65535",
+    "portExists": "Este puerto ya está en la lista",
+    "rateLimiting": "Limitación de Peticiones",
+    "maxConcurrentTunnels": "Túneles Concurrentes Máximos",
+    "rateLimitPerMinute": "Peticiones por minuto",
+    "securityInfo": "Información de Seguridad",
+    "securityTip1": "Solo localhost (127.0.0.1) puede ser proxeado",
+    "securityTip2": "Los puertos del sistema (< 1024) están bloqueados por seguridad",
+    "securityTip3": "Se requiere autenticación para todas las peticiones proxy",
+    "securityTip4": "La limitación de peticiones previene abusos",
+    "connectionError": "Error al conectar al puerto {{port}}",
+    "refresh": "Actualizar",
+    "openExternal": "Abrir en navegador",
+    "retry": "Reintentar",
+    "noViews": "No hay vistas previas abiertas",
+    "noViewsHint": "Inicia un servidor de desarrollo y usa preview_open para verlo aquí"
+  },
+  "devtools": {
+    "console": {
+      "title": "Consola",
+      "all": "Todo",
+      "clear": "Limpiar consola",
+      "empty": "Sin salida de consola",
+      "toggle": "Alternar consola"
+    },
+    "inspector": {
+      "toggle": "Alternar inspector",
+      "enabled": "Inspector habilitado",
+      "disabled": "Inspector deshabilitado"
+    },
+    "contextMenu": {
+      "copyHtml": "Copiar HTML",
+      "copyText": "Copiar texto",
+      "sendToTerminal": "Enviar a terminal",
+      "inspect": "Inspeccionar elemento"
+    }
+  },
+  "pool": {
+    "enable": "Habilitar Pool de Terminales",
+    "enableDescription": "Pre-crear terminales para acelerar la creación de instancias Claude (10-30x más rápido)",
+    "loadError": "Error al cargar la configuración del pool de terminales",
+    "minPoolSize": "Tamaño Mínimo del Pool",
+    "minPoolSizeDesc": "Terminales mantenidas listas (1-10)",
+    "maxPoolSize": "Tamaño Máximo del Pool",
+    "maxPoolSizeDesc": "Máximo de terminales permitidas (min-20)",
+    "idleTimeout": "Timeout de Inactividad",
+    "idleTimeoutDesc": "Eliminar terminales no usadas después de",
+    "replenishDelay": "Retraso de Reposición",
+    "replenishDelayDesc": "Retraso antes de crear nuevas terminales",
+    "never": "Nunca",
+    "immediately": "Inmediatamente",
+    "minutes": "{{count}} min",
+    "ms": "{{count}} ms",
+    "statistics": "Estadísticas del Pool",
+    "resetStats": "Reiniciar",
+    "idleTerminals": "Inactivas",
+    "assignedTerminals": "En Uso",
+    "acquireCount": "Usos del Pool",
+    "fallbackCount": "Spawns Directos",
+    "timeSaved": "Tiempo ahorrado promedio: ~{{ms}}ms por instancia",
+    "securityTitle": "Solo Local",
+    "securityDesc": "El pool de terminales solo se usa para peticiones locales. Las peticiones remotas y del clúster siempre usan spawn directo por seguridad."
   },
   "orchestration": {
     "orchestraView": "Orquesta",

@@ -62,6 +62,20 @@ export interface ServerToClientEvents {
   // Subagent events (native Claude Task tool tracking)
   'subagent:started': (data: { instanceId: string; subagent: SubagentInstance }) => void;
   'subagent:completed': (data: { instanceId: string; subagent: SubagentInstance }) => void;
+  // Proxy events (for web preview tunneling)
+  'proxy:open': (data: {
+    port: number;
+    path?: string;
+    split?: boolean;
+    title?: string;
+    instanceId?: string;
+  }) => void;
+  // DevTools events (for web preview console/inspector)
+  'devtools:command': (data: {
+    viewId?: string;
+    instanceId?: string;
+    command: { type: string; [key: string]: unknown };
+  }) => void;
 }
 
 // Subscription callback response
@@ -82,6 +96,21 @@ export interface ClientToServerEvents {
     callback?: (response: SubscriptionResponse) => void
   ) => void;
   'request:sync': () => void;
+  // DevTools events (from web client to server)
+  'devtools:registerView': (data: { viewId: string; instanceId: string }) => void;
+  'devtools:unregisterView': (data: { viewId: string }) => void;
+  'devtools:console': (data: {
+    viewId: string;
+    entry: {
+      level: string;
+      message: string;
+      timestamp: number;
+      source?: string;
+      line?: number;
+    };
+  }) => void;
+  'devtools:clearConsole': (data: { viewId: string }) => void;
+  'devtools:toggleInspector': (data: { viewId: string; enabled?: boolean }) => void;
 }
 
 // Output buffer for instance synchronization

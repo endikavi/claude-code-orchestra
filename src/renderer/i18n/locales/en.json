@@ -56,6 +56,8 @@
       "general": "General",
       "notifications": "Notifications",
       "remoteAccess": "Remote Access",
+      "proxy": "Proxy",
+      "pool": "Pool",
       "security": "Security",
       "cluster": "Cluster"
     }
@@ -396,6 +398,80 @@
       "permission": "Permission",
       "complete": "Complete"
     }
+  },
+  "proxy": {
+    "enable": "Enable Web Preview Proxy",
+    "enableDescription": "Allow Claude to open web previews of your development servers through the MCP preview_open tool",
+    "allowedPorts": "Allowed Ports",
+    "allowedPortsDescription": "Only these ports can be proxied for security. Add ports where your development servers run.",
+    "portPlaceholder": "Port (e.g., 3000)",
+    "descriptionPlaceholder": "Description (optional)",
+    "addPort": "Add",
+    "removePort": "Remove port",
+    "noPorts": "No ports configured. Add ports to enable preview proxying.",
+    "commonPorts": "Quick Add Common Ports",
+    "invalidPort": "Port must be between 1024 and 65535",
+    "portExists": "This port is already in the list",
+    "rateLimiting": "Rate Limiting",
+    "maxConcurrentTunnels": "Max Concurrent Tunnels",
+    "rateLimitPerMinute": "Requests per minute",
+    "securityInfo": "Security Information",
+    "securityTip1": "Only localhost (127.0.0.1) can be proxied",
+    "securityTip2": "System ports (< 1024) are blocked for safety",
+    "securityTip3": "Authentication is required for all proxy requests",
+    "securityTip4": "Rate limiting prevents abuse",
+    "connectionError": "Failed to connect to port {{port}}",
+    "refresh": "Refresh",
+    "openExternal": "Open in browser",
+    "retry": "Retry",
+    "noViews": "No preview views open",
+    "noViewsHint": "Start a dev server and use preview_open to see it here"
+  },
+  "devtools": {
+    "console": {
+      "title": "Console",
+      "all": "All",
+      "clear": "Clear console",
+      "empty": "No console output",
+      "toggle": "Toggle console"
+    },
+    "inspector": {
+      "toggle": "Toggle inspector",
+      "enabled": "Inspector enabled",
+      "disabled": "Inspector disabled"
+    },
+    "contextMenu": {
+      "copyHtml": "Copy HTML",
+      "copyText": "Copy text content",
+      "sendToTerminal": "Send to terminal",
+      "inspect": "Inspect element"
+    }
+  },
+  "pool": {
+    "enable": "Enable Terminal Pool",
+    "enableDescription": "Pre-spawn terminals to accelerate Claude instance creation (10-30x faster)",
+    "loadError": "Failed to load terminal pool configuration",
+    "minPoolSize": "Minimum Pool Size",
+    "minPoolSizeDesc": "Terminals kept ready (1-10)",
+    "maxPoolSize": "Maximum Pool Size",
+    "maxPoolSizeDesc": "Maximum terminals allowed (min-20)",
+    "idleTimeout": "Idle Timeout",
+    "idleTimeoutDesc": "Dispose unused terminals after",
+    "replenishDelay": "Replenish Delay",
+    "replenishDelayDesc": "Delay before spawning new terminals",
+    "never": "Never",
+    "immediately": "Immediately",
+    "minutes": "{{count}} min",
+    "ms": "{{count}} ms",
+    "statistics": "Pool Statistics",
+    "resetStats": "Reset",
+    "idleTerminals": "Idle",
+    "assignedTerminals": "In Use",
+    "acquireCount": "Pool Hits",
+    "fallbackCount": "Direct Spawns",
+    "timeSaved": "Avg time saved: ~{{ms}}ms per instance",
+    "securityTitle": "Local Only",
+    "securityDesc": "Terminal pool is only used for local requests. Remote and cluster requests always use direct spawn for security."
   },
   "orchestration": {
     "orchestraView": "Orchestra",

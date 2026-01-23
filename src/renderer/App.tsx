@@ -8,6 +8,7 @@ import { useProjectStore } from './stores/projectStore';
 import { useInstanceStore } from './stores/instanceStore';
 import { useUIStore } from './stores/uiStore';
 import { useClusterStore } from './stores/clusterStore';
+import { useProxyStore } from './stores/proxyStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { setupOrchestrationEventListeners } from './stores/orchestrationStore';
 
@@ -22,6 +23,10 @@ function App() {
   const loadClusterStatus = useClusterStore((state) => state.loadStatus);
   const loadGlobalProjects = useClusterStore((state) => state.loadGlobalProjects);
   const setupClusterListeners = useClusterStore((state) => state.setupListeners);
+
+  // Proxy store
+  const loadProxyConfig = useProxyStore((state) => state.loadConfig);
+  const setupProxyListeners = useProxyStore((state) => state.setupListeners);
 
   // Setup keyboard shortcuts
   useKeyboardShortcuts();
@@ -50,11 +55,16 @@ function App() {
     // Setup orchestration (subagent tracking) event listeners globally
     const cleanupOrchestration = setupOrchestrationEventListeners();
 
+    // Initialize proxy store (load config and setup listeners)
+    void loadProxyConfig();
+    const cleanupProxy = setupProxyListeners();
+
     return () => {
       cleanupProjects();
       cleanupInstances();
       cleanupCluster();
       cleanupOrchestration();
+      cleanupProxy();
     };
   }, [
     loadProjects,
@@ -66,6 +76,8 @@ function App() {
     loadClusterStatus,
     loadGlobalProjects,
     setupClusterListeners,
+    loadProxyConfig,
+    setupProxyListeners,
   ]);
 
   return (

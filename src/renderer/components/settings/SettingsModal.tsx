@@ -7,6 +7,8 @@ import { RemoteAccessSettings } from './RemoteAccessSettings';
 import { ClusterSettings } from './ClusterSettings';
 import { SecuritySettings } from './SecuritySettings';
 import { NotificationSettings } from './NotificationSettings';
+import { ProxySettings } from './ProxySettings';
+import { TerminalPoolSettings } from './TerminalPoolSettings';
 import type { Language } from '@shared/types';
 
 interface SettingsModalProps {
@@ -23,7 +25,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const { language, setLanguage, theme, setTheme } = useUIStore();
   const isWebVersion = (window as unknown as { __WEB_VERSION__?: boolean }).__WEB_VERSION__;
 
-  // Define tabs - Security and Cluster only visible in desktop version
+  // Define tabs - Security, Cluster, and Proxy only visible in desktop version
   const tabs: Tab[] = [
     {
       id: 'general',
@@ -41,6 +43,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             id: 'remote',
             label: t('settings.tabs.remoteAccess'),
             icon: <GlobeIcon className="w-4 h-4" />,
+          },
+          {
+            id: 'proxy',
+            label: t('settings.tabs.proxy', 'Proxy'),
+            icon: <WindowIcon className="w-4 h-4" />,
+          },
+          {
+            id: 'pool',
+            label: t('settings.tabs.pool', 'Pool'),
+            icon: <SpeedIcon className="w-4 h-4" />,
           },
           {
             id: 'security',
@@ -146,6 +158,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         {activeTab === 'notifications' && <NotificationSettings />}
 
         {activeTab === 'remote' && <RemoteAccessSettings />}
+
+        {activeTab === 'proxy' && <ProxySettings />}
+
+        {activeTab === 'pool' && <TerminalPoolSettings />}
 
         {activeTab === 'security' && <SecuritySettings />}
 
@@ -265,6 +281,32 @@ function BellIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+      />
+    </svg>
+  );
+}
+
+function WindowIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
+      />
+    </svg>
+  );
+}
+
+function SpeedIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13 10V3L4 14h7v7l9-11h-7z"
       />
     </svg>
   );

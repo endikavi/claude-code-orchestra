@@ -4,6 +4,7 @@ import { ShellInstance } from './ShellInstance';
 import { DataStore } from './DataStore';
 import { getInstanceBroadcaster, type InstanceEventType } from './InstanceBroadcaster';
 import { getClusterPermissionValidator } from './ClusterPermissionValidator';
+import { getTerminalPool } from './TerminalPool';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ShellInstance as ShellInstanceType,
@@ -28,10 +29,10 @@ import type { InstanceClusterPermissions } from '@shared/types/cluster';
 type BrowserWindowType = import('electron').BrowserWindow;
 
 // Lazy import to avoid circular dependencies
-let fileLockManagerModule: typeof import('./FileLockManager') | null = null;
+let fileLockManagerModule: typeof import('./FileLockManager.js') | null = null;
 async function getFileLockManagerModule() {
   if (!fileLockManagerModule) {
-    fileLockManagerModule = await import('./FileLockManager');
+    fileLockManagerModule = await import('./FileLockManager.js');
   }
   return fileLockManagerModule;
 }
@@ -103,9 +104,13 @@ export class ProcessManager extends EventEmitter {
 
   /**
    * Create and start a new Claude instance
+   * @param config Instance configuration
+   * @param isLocal Whether this is a local request (true) or remote/cluster request (false)
+   *                Terminal pool is ONLY used for local requests for security
    */
   createInstance(
-    config: Omit<ClaudeInstanceConfig, 'projectPath' | 'skipPermissions'>
+    config: Omit<ClaudeInstanceConfig, 'projectPath' | 'skipPermissions'>,
+    isLocal: boolean = true
   ): ClaudeInstanceType {
     // Get project from database
     const project = this.dataStore.getProjectById(config.projectId);
@@ -114,8 +119,23 @@ export class ProcessManager extends EventEmitter {
     }
 
     console.log(
-      `[ProcessManager] Creating instance for project ${project.name}, enableMcp=${project.enableMcp}`
+      `[ProcessManager] Creating instance for project ${project.name}, enableMcp=${project.enableMcp}, isLocal=${isLocal}`
     );
+
+    // SECURITY: Only use terminal pool for LOCAL requests
+    // Remote/cluster requests MUST use direct spawn
+    let pooledTerminal = undefined;
+    if (isLocal) {
+      try {
+        pooledTerminal = getTerminalPool().acquire() ?? undefined;
+        if (pooledTerminal) {
+          console.log(`[ProcessManager] Acquired pooled terminal ${pooledTerminal.id}`);
+        }
+      } catch (error) {
+        // Pool not initialized or disabled - fall back to direct spawn
+        console.log(`[ProcessManager] Pool not available, using direct spawn:`, error);
+      }
+    }
 
     const instance = new ClaudeInstance({
       projectId: config.projectId,
@@ -127,6 +147,7 @@ export class ProcessManager extends EventEmitter {
       enableMcp: project.enableMcp,
       resumeSessionId: config.resumeSessionId,
       planMode: config.planMode,
+      pooledTerminal,
     });
 
     this.setupInstanceListeners(instance);

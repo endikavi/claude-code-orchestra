@@ -7,34 +7,35 @@ import type { HookStatusUpdate } from '@shared/types/remote';
 type BrowserWindowType = import('electron').BrowserWindow;
 
 // Lazy import to avoid circular dependencies
-let webServerModule: typeof import('./WebServer') | null = null;
+let webServerModule: typeof import('./WebServer.js') | null = null;
 async function getWebServerModule() {
   if (!webServerModule) {
-    webServerModule = await import('./WebServer');
+    webServerModule = await import('./WebServer.js');
   }
   return webServerModule;
 }
 
-let clusterManagerModule: typeof import('./ClusterManager') | null = null;
+let clusterManagerModule: typeof import('./ClusterManager.js') | null = null;
 async function getClusterManagerModule() {
   if (!clusterManagerModule) {
-    clusterManagerModule = await import('./ClusterManager');
+    clusterManagerModule = await import('./ClusterManager.js');
   }
   return clusterManagerModule;
 }
 
-let clusterPermissionValidatorModule: typeof import('./ClusterPermissionValidator') | null = null;
+let clusterPermissionValidatorModule: typeof import('./ClusterPermissionValidator.js') | null =
+  null;
 async function getClusterPermissionValidatorModule() {
   if (!clusterPermissionValidatorModule) {
-    clusterPermissionValidatorModule = await import('./ClusterPermissionValidator');
+    clusterPermissionValidatorModule = await import('./ClusterPermissionValidator.js');
   }
   return clusterPermissionValidatorModule;
 }
 
-let dataStoreModule: typeof import('./DataStore') | null = null;
+let dataStoreModule: typeof import('./DataStore.js') | null = null;
 async function getDataStoreModule() {
   if (!dataStoreModule) {
-    dataStoreModule = await import('./DataStore');
+    dataStoreModule = await import('./DataStore.js');
   }
   return dataStoreModule;
 }

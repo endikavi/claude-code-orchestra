@@ -61,6 +61,7 @@ export interface CliArgs {
   dataDir?: string;
   config?: string;
   allowAnyCors?: boolean;
+  tui?: boolean;
 }
 
 /**

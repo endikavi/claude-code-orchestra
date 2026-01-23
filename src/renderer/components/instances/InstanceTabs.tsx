@@ -4,6 +4,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useProxyStore } from '../../stores/proxyStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { getStatusTabConfig } from '../../utils/statusConfig';
 import { ContextMenu } from '../common/ContextMenu';
@@ -27,6 +28,7 @@ export function InstanceTabs() {
     createSplit,
     removeSplit,
     selectSplit,
+    removingInstanceIds,
   } = useInstanceStore();
   const { globalProjects, globalInstances, isConnected: clusterConnected } = useClusterStore();
   const { setShowInstanceModal } = useUIStore();
@@ -53,17 +55,28 @@ export function InstanceTabs() {
     const local = getInstancesByProject(selectedProjectId);
 
     // If cluster is connected, also get global instances for this project
+    let combined: ClaudeInstance[];
     if (clusterConnected) {
       const global = globalInstances.filter((i) => i.projectId === selectedProjectId && !i.isLocal);
       // Combine, avoiding duplicates (prefer local if same id)
       const localIds = new Set(local.map((i) => i.id));
-      return [...local, ...global.filter((i) => !localIds.has(i.id))];
+      combined = [...local, ...global.filter((i) => !localIds.has(i.id))];
+    } else {
+      combined = local;
     }
 
-    return local;
+    // Filter out instances that are being removed (prevents ghost tabs)
+    return combined.filter((i) => !removingInstanceIds.has(i.id));
     // Note: allInstances is included to trigger recalculation when instances change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProjectId, getInstancesByProject, clusterConnected, globalInstances, allInstances]);
+  }, [
+    selectedProjectId,
+    getInstancesByProject,
+    clusterConnected,
+    globalInstances,
+    allInstances,
+    removingInstanceIds,
+  ]);
 
   const shells = useMemo(
     () => (selectedProjectId ? getShellsByProject(selectedProjectId) : []),
@@ -147,23 +160,34 @@ export function InstanceTabs() {
     return currentTabIndex < allTabs.length - 1;
   }, [contextMenu, allTabs]);
 
-  // Get title for an instance or shell
-  const getTabTitle = (id: string, type: 'instance' | 'shell'): string => {
+  // Get proxy views
+  const { proxyViews } = useProxyStore();
+
+  // Get title for an instance, shell, or proxy
+  const getTabTitle = (id: string, type: 'instance' | 'shell' | 'proxy'): string => {
     if (type === 'instance') {
       const instance = instances.find((i) => i.id === id);
       return instance?.terminalTitle || instance?.prompt || 'New session';
     }
+    if (type === 'proxy') {
+      const proxyView = proxyViews.get(id);
+      return proxyView?.title || `Preview :${proxyView?.port || '?'}`;
+    }
     return 'Shell';
   };
 
-  // Get status for an instance or shell
+  // Get status for an instance, shell, or proxy
   const getTabStatus = (
     id: string,
-    type: 'instance' | 'shell'
+    type: 'instance' | 'shell' | 'proxy'
   ): InstanceStatus | ShellInstanceStatus => {
     if (type === 'instance') {
       const instance = instances.find((i) => i.id === id);
       return instance?.status || 'starting';
+    }
+    if (type === 'proxy') {
+      // Proxy views are always "running"
+      return 'running';
     }
     const shell = shells.find((s) => s.id === id);
     return shell?.status || 'running';
@@ -207,6 +231,8 @@ export function InstanceTabs() {
           rightTitle={getTabTitle(split.rightInstanceId, split.rightType)}
           leftStatus={getTabStatus(split.leftInstanceId, split.leftType)}
           rightStatus={getTabStatus(split.rightInstanceId, split.rightType)}
+          leftType={split.leftType}
+          rightType={split.rightType}
           onSelect={() => selectSplit(split.id)}
           onClose={() => removeSplit(split.id)}
           isMobile={isMobile}
@@ -477,6 +503,8 @@ interface SplitTabComponentProps {
   rightTitle: string;
   leftStatus: InstanceStatus | ShellInstanceStatus;
   rightStatus: InstanceStatus | ShellInstanceStatus;
+  leftType: 'instance' | 'shell' | 'proxy';
+  rightType: 'instance' | 'shell' | 'proxy';
   onSelect: () => void;
   onClose: () => void;
   isMobile?: boolean;
@@ -489,6 +517,8 @@ function SplitTabComponent({
   rightTitle,
   leftStatus,
   rightStatus,
+  leftType,
+  rightType,
   onSelect,
   onClose,
   isMobile = false,
@@ -523,6 +553,17 @@ function SplitTabComponent({
   const leftConfig = getStatusConfig(leftStatus);
   const rightConfig = getStatusConfig(rightStatus);
 
+  // Render type-specific icon
+  const renderTypeIcon = (type: 'instance' | 'shell' | 'proxy') => {
+    if (type === 'proxy') {
+      return <GlobeIcon className="w-3 h-3 text-claude-orange" />;
+    }
+    if (type === 'shell') {
+      return <TerminalIcon className="w-3 h-3 text-gray-500 dark:text-gray-400" />;
+    }
+    return null;
+  };
+
   return (
     <div
       className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
@@ -533,18 +574,26 @@ function SplitTabComponent({
       onClick={onSelect}
       title={`${leftTitle} | ${rightTitle}`}
     >
-      {/* Left status badge */}
-      <div
-        className={`w-2 h-2 rounded-full ${leftConfig.color} ${leftConfig.pulse ? 'status-pulse' : ''}`}
-      />
+      {/* Left indicator */}
+      {leftType === 'proxy' ? (
+        renderTypeIcon(leftType)
+      ) : (
+        <div
+          className={`w-2 h-2 rounded-full ${leftConfig.color} ${leftConfig.pulse ? 'status-pulse' : ''}`}
+        />
+      )}
 
       {/* Split icon */}
       <SplitIcon className="w-3 h-3 text-gray-500 dark:text-gray-400" />
 
-      {/* Right status badge */}
-      <div
-        className={`w-2 h-2 rounded-full ${rightConfig.color} ${rightConfig.pulse ? 'status-pulse' : ''}`}
-      />
+      {/* Right indicator */}
+      {rightType === 'proxy' ? (
+        renderTypeIcon(rightType)
+      ) : (
+        <div
+          className={`w-2 h-2 rounded-full ${rightConfig.color} ${rightConfig.pulse ? 'status-pulse' : ''}`}
+        />
+      )}
 
       {/* Combined title */}
       <span className="text-sm truncate max-w-[150px] sm:max-w-[200px]">
@@ -573,6 +622,19 @@ function SplitIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"
+      />
+    </svg>
+  );
+}
+
+function GlobeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
       />
     </svg>
   );

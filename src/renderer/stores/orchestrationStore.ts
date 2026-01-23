@@ -31,6 +31,10 @@ export const useOrchestrationStore = create<OrchestrationState>((set, get) => ({
 
   // Load subagents for a specific instance
   loadSubagents: async (instanceId: string) => {
+    // Check if electronAPI.subagent is available
+    if (!window.electronAPI?.subagent) {
+      return;
+    }
     try {
       const subagents = await window.electronAPI.subagent.getByInstance(instanceId);
       set((state) => ({
@@ -46,6 +50,11 @@ export const useOrchestrationStore = create<OrchestrationState>((set, get) => ({
 
   // Load all subagents from all instances
   loadAllSubagents: async () => {
+    // Check if electronAPI.subagent is available
+    if (!window.electronAPI?.subagent) {
+      set({ isLoading: false });
+      return;
+    }
     set({ isLoading: true, error: null });
     try {
       const allSubagents = await window.electronAPI.subagent.getAll();
@@ -148,10 +157,21 @@ export const useOrchestrationStore = create<OrchestrationState>((set, get) => ({
 export function setupOrchestrationEventListeners(): () => void {
   const store = useOrchestrationStore.getState();
 
+  // eslint-disable-next-line no-console
   console.log('[OrchestrationStore] Setting up event listeners');
+
+  // Check if electronAPI and subagent are available (not available in web-only mode)
+  if (!window.electronAPI?.subagent) {
+    // eslint-disable-next-line no-console
+    console.log('[OrchestrationStore] electronAPI.subagent not available, skipping setup');
+    return () => {
+      // No-op cleanup
+    };
+  }
 
   // Native subagent event listeners
   const unsubSubagentStarted = window.electronAPI.subagent.onStarted((instanceId, subagent) => {
+    // eslint-disable-next-line no-console
     console.log(
       `[OrchestrationStore] Received subagent:started for instance ${instanceId}`,
       subagent
@@ -160,6 +180,7 @@ export function setupOrchestrationEventListeners(): () => void {
   });
 
   const unsubSubagentCompleted = window.electronAPI.subagent.onCompleted((instanceId, subagent) => {
+    // eslint-disable-next-line no-console
     console.log(
       `[OrchestrationStore] Received subagent:completed for instance ${instanceId}`,
       subagent
@@ -168,11 +189,13 @@ export function setupOrchestrationEventListeners(): () => void {
   });
 
   // Load initial data
+  // eslint-disable-next-line no-console
   console.log('[OrchestrationStore] Loading initial subagent data');
   void store.loadAllSubagents();
 
   // Return cleanup function
   return () => {
+    // eslint-disable-next-line no-console
     console.log('[OrchestrationStore] Cleaning up event listeners');
     unsubSubagentStarted();
     unsubSubagentCompleted();

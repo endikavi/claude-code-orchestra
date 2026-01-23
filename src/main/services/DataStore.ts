@@ -12,8 +12,12 @@ import type {
   AuditLogEntry,
   AuditEventType,
   AuditLogQueryOptions,
+  ProxyConfig,
+  AllowedPort,
 } from '@shared/types';
-import { DEFAULT_SECURITY_CONFIG } from '@shared/types';
+import { DEFAULT_SECURITY_CONFIG, DEFAULT_PROXY_CONFIG } from '@shared/types';
+import type { TerminalPoolConfig } from '@shared/types/pool';
+import { DEFAULT_TERMINAL_POOL_CONFIG } from '@shared/types/pool';
 import type { RemoteConfig } from '@shared/types/remote';
 import { DEFAULT_REMOTE_CONFIG } from '@shared/types/remote';
 import type {
@@ -176,6 +180,10 @@ export class DataStore {
       )
     `);
 
+    // Migration: Add privacy column to cluster_config if it doesn't exist
+    // IMPORTANT: This must run BEFORE the INSERT below to handle existing databases
+    this.migrateAddClusterPrivacy();
+
     // Insert default cluster config if not exists
     const existingCluster = this.db.prepare('SELECT * FROM cluster_config WHERE id = 1').get();
     if (!existingCluster) {
@@ -197,9 +205,6 @@ export class DataStore {
           JSON.stringify(DEFAULT_NODE_PRIVACY)
         );
     }
-
-    // Migration: Add privacy column to cluster_config if it doesn't exist
-    this.migrateAddClusterPrivacy();
 
     // Create instance_cluster_permissions table
     this.db.exec(`
@@ -276,6 +281,69 @@ export class DataStore {
         attempts INTEGER NOT NULL
       )
     `);
+
+    // Create proxy_config table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS proxy_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER DEFAULT 0,
+        maxConcurrentTunnels INTEGER DEFAULT 5,
+        rateLimitPerMinute INTEGER DEFAULT 100
+      )
+    `);
+
+    // Insert default proxy config if not exists
+    const existingProxy = this.db.prepare('SELECT * FROM proxy_config WHERE id = 1').get();
+    if (!existingProxy) {
+      this.db
+        .prepare(
+          `INSERT INTO proxy_config (id, enabled, maxConcurrentTunnels, rateLimitPerMinute)
+           VALUES (?, ?, ?, ?)`
+        )
+        .run(1, 0, 5, 100);
+    }
+
+    // Create proxy_allowed_ports table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS proxy_allowed_ports (
+        id TEXT PRIMARY KEY,
+        port INTEGER UNIQUE NOT NULL,
+        description TEXT,
+        createdAt INTEGER NOT NULL
+      )
+    `);
+
+    // Create terminal_pool_config table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS terminal_pool_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER DEFAULT 1,
+        minPoolSize INTEGER DEFAULT 2,
+        maxPoolSize INTEGER DEFAULT 5,
+        idleTimeoutMs INTEGER DEFAULT 300000,
+        replenishDelayMs INTEGER DEFAULT 1000
+      )
+    `);
+
+    // Insert default terminal pool config if not exists
+    const existingPoolConfig = this.db
+      .prepare('SELECT * FROM terminal_pool_config WHERE id = 1')
+      .get();
+    if (!existingPoolConfig) {
+      this.db
+        .prepare(
+          `INSERT INTO terminal_pool_config (id, enabled, minPoolSize, maxPoolSize, idleTimeoutMs, replenishDelayMs)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          1,
+          DEFAULT_TERMINAL_POOL_CONFIG.enabled ? 1 : 0,
+          DEFAULT_TERMINAL_POOL_CONFIG.minPoolSize,
+          DEFAULT_TERMINAL_POOL_CONFIG.maxPoolSize,
+          DEFAULT_TERMINAL_POOL_CONFIG.idleTimeoutMs,
+          DEFAULT_TERMINAL_POOL_CONFIG.replenishDelayMs
+        );
+    }
   }
 
   /**
@@ -1324,6 +1392,181 @@ export class DataStore {
       });
     }
     return result;
+  }
+
+  // ==================== Proxy Config CRUD ====================
+
+  /**
+   * Get proxy configuration
+   */
+  getProxyConfig(): ProxyConfig {
+    const stmt = this.db.prepare('SELECT * FROM proxy_config WHERE id = 1');
+    const row = stmt.get() as Record<string, unknown> | undefined;
+
+    if (!row) {
+      return { ...DEFAULT_PROXY_CONFIG };
+    }
+
+    return {
+      enabled: row.enabled === 1,
+      maxConcurrentTunnels: row.maxConcurrentTunnels as number,
+      rateLimitPerMinute: row.rateLimitPerMinute as number,
+    };
+  }
+
+  /**
+   * Update proxy configuration
+   */
+  updateProxyConfig(config: Partial<ProxyConfig>): ProxyConfig {
+    const current = this.getProxyConfig();
+    const updated: ProxyConfig = { ...current, ...config };
+
+    const stmt = this.db.prepare(`
+      UPDATE proxy_config
+      SET enabled = @enabled, maxConcurrentTunnels = @maxConcurrentTunnels, rateLimitPerMinute = @rateLimitPerMinute
+      WHERE id = 1
+    `);
+
+    stmt.run({
+      enabled: updated.enabled ? 1 : 0,
+      maxConcurrentTunnels: updated.maxConcurrentTunnels,
+      rateLimitPerMinute: updated.rateLimitPerMinute,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Reset proxy configuration to defaults
+   */
+  resetProxyConfig(): ProxyConfig {
+    return this.updateProxyConfig(DEFAULT_PROXY_CONFIG);
+  }
+
+  // ==================== Proxy Allowed Ports CRUD ====================
+
+  /**
+   * Get all allowed ports
+   */
+  getAllowedPorts(): AllowedPort[] {
+    const stmt = this.db.prepare('SELECT * FROM proxy_allowed_ports ORDER BY port ASC');
+    const rows = stmt.all() as Array<{
+      id: string;
+      port: number;
+      description: string | null;
+      createdAt: number;
+    }>;
+
+    return rows.map((row) => ({
+      id: row.id,
+      port: row.port,
+      description: row.description ?? undefined,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  /**
+   * Add an allowed port
+   */
+  addAllowedPort(port: number, description?: string): AllowedPort {
+    const newPort: AllowedPort = {
+      id: randomUUID(),
+      port,
+      description,
+      createdAt: Date.now(),
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO proxy_allowed_ports (id, port, description, createdAt)
+      VALUES (@id, @port, @description, @createdAt)
+    `);
+
+    stmt.run({
+      id: newPort.id,
+      port: newPort.port,
+      description: newPort.description ?? null,
+      createdAt: newPort.createdAt,
+    });
+
+    return newPort;
+  }
+
+  /**
+   * Delete an allowed port by port number
+   */
+  deleteAllowedPort(port: number): void {
+    const stmt = this.db.prepare('DELETE FROM proxy_allowed_ports WHERE port = ?');
+    stmt.run(port);
+  }
+
+  /**
+   * Check if a port is allowed
+   */
+  isPortAllowed(port: number): boolean {
+    const stmt = this.db.prepare('SELECT 1 FROM proxy_allowed_ports WHERE port = ?');
+    const row = stmt.get(port);
+    return !!row;
+  }
+
+  /**
+   * Clear all allowed ports
+   */
+  clearAllowedPorts(): void {
+    this.db.exec('DELETE FROM proxy_allowed_ports');
+  }
+
+  // ==================== Terminal Pool Config CRUD ====================
+
+  /**
+   * Get terminal pool configuration
+   */
+  getTerminalPoolConfig(): TerminalPoolConfig {
+    const stmt = this.db.prepare('SELECT * FROM terminal_pool_config WHERE id = 1');
+    const row = stmt.get() as Record<string, unknown> | undefined;
+
+    if (!row) {
+      return { ...DEFAULT_TERMINAL_POOL_CONFIG };
+    }
+
+    return {
+      enabled: row.enabled === 1,
+      minPoolSize: row.minPoolSize as number,
+      maxPoolSize: row.maxPoolSize as number,
+      idleTimeoutMs: row.idleTimeoutMs as number,
+      replenishDelayMs: row.replenishDelayMs as number,
+    };
+  }
+
+  /**
+   * Update terminal pool configuration
+   */
+  updateTerminalPoolConfig(config: Partial<TerminalPoolConfig>): TerminalPoolConfig {
+    const current = this.getTerminalPoolConfig();
+    const updated: TerminalPoolConfig = { ...current, ...config };
+
+    const stmt = this.db.prepare(`
+      UPDATE terminal_pool_config
+      SET enabled = @enabled, minPoolSize = @minPoolSize, maxPoolSize = @maxPoolSize,
+          idleTimeoutMs = @idleTimeoutMs, replenishDelayMs = @replenishDelayMs
+      WHERE id = 1
+    `);
+
+    stmt.run({
+      enabled: updated.enabled ? 1 : 0,
+      minPoolSize: updated.minPoolSize,
+      maxPoolSize: updated.maxPoolSize,
+      idleTimeoutMs: updated.idleTimeoutMs,
+      replenishDelayMs: updated.replenishDelayMs,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Reset terminal pool configuration to defaults
+   */
+  resetTerminalPoolConfig(): TerminalPoolConfig {
+    return this.updateTerminalPoolConfig(DEFAULT_TERMINAL_POOL_CONFIG);
   }
 
   // Clean up
