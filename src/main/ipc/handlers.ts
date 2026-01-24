@@ -43,6 +43,7 @@ import { getTaskTracker } from '../services/TaskTracker';
 import { getTerminalPool } from '../services/TerminalPool';
 import { getTerminalDimensionManager } from '../services/TerminalDimensionManager';
 import { SharedContextStore } from '../services/SharedContextStore';
+import { getSslCertificateService } from '../services/SslCertificateService';
 import type { TerminalPoolConfig } from '@shared/types/pool';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
@@ -408,14 +409,31 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return dataStore.updateRemoteConfig({ passwordHash });
   });
 
-  // Start web server
+  // Enable web access (server is always running, this just enables web routes)
   ipcMain.handle(IPC_CHANNELS.REMOTE_START_SERVER, async (_event, port?: number) => {
     const config = dataStore.getRemoteConfig();
-    const serverPort = port ?? config.port;
 
     try {
-      await webServer.start(serverPort);
-      dataStore.updateRemoteConfig({ enabled: true, port: serverPort });
+      // If a different port is specified and server is running, restart on new port
+      if (port && port !== config.port && webServer.running) {
+        await webServer.stop();
+        const bindAll = config.allowAnyCors;
+        await webServer.start(port, !bindAll);
+        dataStore.updateRemoteConfig({ port });
+      } else if (!webServer.running) {
+        // Server not running (shouldn't happen normally), start it
+        const bindAll = config.allowAnyCors;
+        await webServer.start(port ?? config.port, !bindAll);
+      }
+
+      // Enable web access
+      dataStore.updateRemoteConfig({ webAccessEnabled: true, enabled: true });
+
+      // Rebind to all interfaces if allowAnyCors is enabled
+      if (config.allowAnyCors) {
+        await webServer.updateBinding(true);
+      }
+
       return { success: true, status: webServer.getStatus() };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -423,11 +441,20 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
-  // Stop web server
+  // Disable web access (server keeps running for internal functionality)
   ipcMain.handle(IPC_CHANNELS.REMOTE_STOP_SERVER, async () => {
-    await webServer.stop();
-    dataStore.updateRemoteConfig({ enabled: false });
-    return { success: true };
+    try {
+      // Disable web access (internal routes like hooks/MCP stay available)
+      dataStore.updateRemoteConfig({ webAccessEnabled: false, enabled: false });
+
+      // Rebind to localhost only for security
+      await webServer.updateBinding(false);
+
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: message };
+    }
   });
 
   // Get server status (detailed for admin context)
@@ -1278,6 +1305,64 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   sharedContextStore.on('contextUpdated', (event) => {
     mainWindow.webContents.send(IPC_CHANNELS.CONTEXT_UPDATED, event);
   });
+
+  // ==================== SSL/TLS Handlers ====================
+  const sslService = getSslCertificateService();
+
+  ipcMain.handle(IPC_CHANNELS.SSL_VALIDATE_CERT, (_event, certPath: string) => {
+    try {
+      return sslService.validateCertificate(certPath);
+    } catch (error) {
+      return {
+        valid: false,
+        error: error instanceof Error ? error.message : 'Validation failed',
+      };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SSL_GENERATE_SELF_SIGNED,
+    (_event, hostname: string = 'localhost', days: number = 365) => {
+      try {
+        const paths = sslService.generateSelfSignedCert(hostname, days);
+        return { success: true, ...paths };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Generation failed',
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.SSL_GET_CERT_INFO, (_event, certPath: string) => {
+    try {
+      const info = sslService.getCertificateInfo(certPath);
+      if (!info) {
+        return { success: false, error: 'Could not read certificate' };
+      }
+      return { success: true, info };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get certificate info',
+      };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SSL_VALIDATE_CERT_KEY_PAIR,
+    (_event, certPath: string, keyPath: string, passphrase?: string) => {
+      try {
+        return sslService.validateCertKeyPair(certPath, keyPath, passphrase);
+      } catch (error) {
+        return {
+          valid: false,
+          error: error instanceof Error ? error.message : 'Validation failed',
+        };
+      }
+    }
+  );
 }
 
 export function cleanupIpcHandlers(): void {

@@ -10,15 +10,26 @@ import type {
   ProjectSharedKnowledge,
   ContextUpdateEvent,
 } from './index';
+import type { SslConfig } from './ssl';
 
 // Remote access configuration
 export interface RemoteConfig {
-  enabled: boolean;
   port: number;
   passwordHash: string;
+
+  // Controls web access (auth, projects, instances routes)
+  // When false, only internal routes (hooks, MCP, context) are accessible
+  webAccessEnabled: boolean;
+
+  // DEPRECATED: Ignored - server always starts automatically
   autoStart: boolean;
+
+  // DEPRECATED: Use webAccessEnabled instead (kept for backwards compatibility)
+  enabled: boolean;
+
   allowAnyCors: boolean; // Allow connections from any origin (for LAN access)
   customHostname: string; // Custom hostname/domain for CORS (e.g., "orchestra.local")
+  ssl: SslConfig; // SSL/TLS configuration for HTTPS
 }
 
 // Remote session information
@@ -175,12 +186,17 @@ export interface RemoteServerStatus {
 
 // Default remote config values
 export const DEFAULT_REMOTE_CONFIG: RemoteConfig = {
-  enabled: false,
   port: 3847,
   passwordHash: '',
-  autoStart: false,
+  webAccessEnabled: false, // Web access disabled by default, internal routes always available
+  autoStart: false, // DEPRECATED - server always starts
+  enabled: false, // DEPRECATED - use webAccessEnabled
   allowAnyCors: false,
   customHostname: '',
+  ssl: {
+    enabled: false,
+    selfSigned: false,
+  },
 };
 
 // Default port for remote access

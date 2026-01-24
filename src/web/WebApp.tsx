@@ -71,7 +71,7 @@ export function WebApp() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-claude-cream to-claude-light-tan dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-xl p-8">
+          <div className="backdrop-blur-sm rounded-xl shadow-xl p-8">
             {/* Logo/Title */}
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Orchestra</h1>

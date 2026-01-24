@@ -1,9 +1,11 @@
 import { EventEmitter } from 'events';
-import { createServer, Server as HttpServer } from 'http';
+import { createServer as createHttpServer, Server as HttpServer } from 'http';
+import { createServer as createHttpsServer, Server as HttpsServer } from 'https';
 import { Server as SocketIOServer, Socket as ServerSocket } from 'socket.io';
 import { io, Socket as ClientSocket } from 'socket.io-client';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { networkInterfaces } from 'os';
+import { getSslCertificateService } from './SslCertificateService';
 
 // BrowserWindow type for optional Electron dependency
 type BrowserWindowType = import('electron').BrowserWindow;
@@ -137,11 +139,12 @@ export class ClusterManager extends EventEmitter {
   private lastReceivedVersion: number = 0;
 
   // Server (when acting as primary)
-  private httpServer: HttpServer | null = null;
+  private httpServer: HttpServer | HttpsServer | null = null;
   private io: SocketIOServer<ClusterClientToServerEvents, ClusterServerToClientEvents> | null =
     null;
   private clusterSockets: Map<string, string> = new Map(); // socketId -> nodeId
   private serverRunning: boolean = false;
+  private isSslEnabled: boolean = false;
 
   // Pending states for nodes that sent state:update before completing registration
   private pendingStates: Map<string, { projects: Project[]; instances: ClaudeInstance[] }> =
@@ -376,8 +379,13 @@ export class ClusterManager extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       try {
-        // Create HTTP server with health check endpoint
-        this.httpServer = createServer((req, res) => {
+        const config = this.getConfig();
+
+        // Health check request handler
+        const requestHandler = (
+          req: import('http').IncomingMessage,
+          res: import('http').ServerResponse
+        ) => {
           if (req.url === '/health' || req.url === '/') {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
@@ -385,8 +393,9 @@ export class ClusterManager extends EventEmitter {
                 status: 'ok',
                 service: 'claude-orchestra-cluster',
                 nodeId: this.localNodeId,
-                nodeName: this.getConfig().nodeName,
+                nodeName: config.nodeName,
                 role: 'primary',
+                ssl: config.ssl.enabled,
                 timestamp: Date.now(),
               })
             );
@@ -394,7 +403,19 @@ export class ClusterManager extends EventEmitter {
             res.writeHead(404);
             res.end();
           }
-        });
+        };
+
+        // Create HTTP or HTTPS server based on SSL config
+        if (config.ssl.enabled) {
+          const sslService = getSslCertificateService();
+          const sslOptions = sslService.loadCertificates(config.ssl);
+          this.httpServer = createHttpsServer(sslOptions, requestHandler);
+          this.isSslEnabled = true;
+          console.log('[ClusterManager] SSL/TLS enabled - using HTTPS for cluster');
+        } else {
+          this.httpServer = createHttpServer(requestHandler);
+          this.isSslEnabled = false;
+        }
 
         // Create Socket.io server
         this.io = new SocketIOServer(this.httpServer, {
@@ -412,10 +433,11 @@ export class ClusterManager extends EventEmitter {
         this.httpServer.listen(port, '0.0.0.0', () => {
           this.serverRunning = true;
           const localIp = this.getLocalIpAddress();
+          const protocol = this.isSslEnabled ? 'https' : 'http';
           console.log(`[ClusterManager] Cluster server started on port ${port}`);
-          console.log(`[ClusterManager] Listening on http://0.0.0.0:${port}`);
+          console.log(`[ClusterManager] Listening on ${protocol}://0.0.0.0:${port}`);
           console.log(
-            `[ClusterManager] Local IP: ${localIp} - Secondary nodes should connect to http://${localIp}:${port}`
+            `[ClusterManager] Local IP: ${localIp} - Secondary nodes should connect to ${protocol}://${localIp}:${port}`
           );
           resolve();
         });
@@ -429,6 +451,7 @@ export class ClusterManager extends EventEmitter {
           }
         });
       } catch (error) {
+        console.error('[ClusterManager] Failed to start server:', error);
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
@@ -813,6 +836,13 @@ export class ClusterManager extends EventEmitter {
   }
 
   /**
+   * Check if SSL is enabled for cluster communication
+   */
+  public isSslActive(): boolean {
+    return this.isSslEnabled;
+  }
+
+  /**
    * Add local node to cluster
    */
   private addLocalNode(): void {
@@ -1014,17 +1044,28 @@ export class ClusterManager extends EventEmitter {
     this.intentionalDisconnect = false;
 
     try {
-      const url = `http://${config.primaryHost}:${config.primaryPort}`;
+      // Use https:// if SSL is enabled, otherwise http://
+      const protocol = config.ssl.enabled ? 'https' : 'http';
+      const url = `${protocol}://${config.primaryHost}:${config.primaryPort}`;
       console.log(`[ClusterManager] Connecting to primary at ${url}`);
 
-      this.clientSocket = io(url, {
+      // Configure Socket.IO client options
+      const socketOptions: Parameters<typeof io>[1] = {
         transports: ['websocket', 'polling'],
         timeout: CONNECTION_TIMEOUT,
         auth: {
           nodeId: this.localNodeId,
           sharedSecret: config.sharedSecret,
         },
-      });
+      };
+
+      // For self-signed certificates, allow insecure connections
+      if (config.ssl.enabled && config.ssl.selfSigned) {
+        socketOptions.rejectUnauthorized = false;
+      }
+
+      this.clientSocket = io(url, socketOptions);
+      this.isSslEnabled = config.ssl.enabled;
 
       this.setupClientSocketListeners();
     } catch (error) {

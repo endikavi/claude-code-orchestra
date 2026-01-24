@@ -970,6 +970,57 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTEXT_KNOWLEDGE_UPDATED, listener);
     },
   },
+
+  // SSL/TLS operations
+  ssl: {
+    validateCert: (
+      certPath: string
+    ): Promise<{
+      valid: boolean;
+      error?: string;
+      subject?: string;
+      issuer?: string;
+      validFrom?: Date;
+      validTo?: Date;
+      daysRemaining?: number;
+      isSelfSigned?: boolean;
+      fingerprint?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.SSL_VALIDATE_CERT, certPath),
+
+    generateSelfSigned: (
+      hostname?: string,
+      days?: number
+    ): Promise<{ success: boolean; certPath?: string; keyPath?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SSL_GENERATE_SELF_SIGNED, hostname, days),
+
+    getCertInfo: (
+      certPath: string
+    ): Promise<{
+      success: boolean;
+      info?: {
+        subject: {
+          commonName?: string;
+          organization?: string;
+          organizationalUnit?: string;
+          country?: string;
+        };
+        issuer: { commonName?: string; organization?: string };
+        validFrom: Date;
+        validTo: Date;
+        serialNumber: string;
+        fingerprint: string;
+        isSelfSigned: boolean;
+      };
+      error?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.SSL_GET_CERT_INFO, certPath),
+
+    validateCertKeyPair: (
+      certPath: string,
+      keyPath: string,
+      passphrase?: string
+    ): Promise<{ valid: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SSL_VALIDATE_CERT_KEY_PAIR, certPath, keyPath, passphrase),
+  },
 });
 
 // Type declarations for renderer
@@ -1356,6 +1407,46 @@ declare global {
         onKnowledgeUpdated: (
           callback: (projectId: string, knowledge: ProjectSharedKnowledge) => void
         ) => () => void;
+      };
+      ssl: {
+        validateCert: (certPath: string) => Promise<{
+          valid: boolean;
+          error?: string;
+          subject?: string;
+          issuer?: string;
+          validFrom?: Date;
+          validTo?: Date;
+          daysRemaining?: number;
+          isSelfSigned?: boolean;
+          fingerprint?: string;
+        }>;
+        generateSelfSigned: (
+          hostname?: string,
+          days?: number
+        ) => Promise<{ success: boolean; certPath?: string; keyPath?: string; error?: string }>;
+        getCertInfo: (certPath: string) => Promise<{
+          success: boolean;
+          info?: {
+            subject: {
+              commonName?: string;
+              organization?: string;
+              organizationalUnit?: string;
+              country?: string;
+            };
+            issuer: { commonName?: string; organization?: string };
+            validFrom: Date;
+            validTo: Date;
+            serialNumber: string;
+            fingerprint: string;
+            isSelfSigned: boolean;
+          };
+          error?: string;
+        }>;
+        validateCertKeyPair: (
+          certPath: string,
+          keyPath: string,
+          passphrase?: string
+        ) => Promise<{ valid: boolean; error?: string }>;
       };
     };
   }

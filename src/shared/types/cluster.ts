@@ -16,6 +16,7 @@ import type {
   ProjectSharedKnowledge,
   ContextUpdateEvent,
 } from './sharedContext';
+import type { SslConfig } from './ssl';
 import { DEFAULT_NODE_PRIVACY } from './clusterPermissions';
 export * from './clusterPermissions';
 
@@ -78,6 +79,7 @@ export interface ClusterConfig {
   primaryPort: number;
   sharedSecret: string; // Shared secret for authentication between nodes
   privacy: ClusterNodePrivacy; // Privacy and permission settings for this node
+  ssl: SslConfig; // SSL/TLS configuration for HTTPS/WSS
 }
 
 /** Default cluster configuration */
@@ -90,6 +92,10 @@ export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
   primaryPort: 3847,
   sharedSecret: '',
   privacy: DEFAULT_NODE_PRIVACY,
+  ssl: {
+    enabled: false,
+    selfSigned: false,
+  },
 };
 
 // ==================== Request/Response Types ====================

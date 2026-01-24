@@ -1,10 +1,12 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { createServer, Server as HttpServer } from 'http';
+import { createServer as createHttpServer, Server as HttpServer } from 'http';
+import { createServer as createHttpsServer, Server as HttpsServer } from 'https';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import cors from 'cors';
 import { join } from 'path';
 import { networkInterfaces } from 'os';
 import { EventEmitter } from 'events';
+import { getSslCertificateService } from './SslCertificateService';
 import { isElectronAvailable, isHeadlessMode } from '../utils/paths';
 
 // Lazy load Electron app to support headless mode
@@ -74,10 +76,12 @@ export class WebServer extends EventEmitter {
   private static instance: WebServer | null = null;
 
   private app: express.Application;
-  private httpServer: HttpServer | null = null;
+  private httpServer: HttpServer | HttpsServer | null = null;
   private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents> | null = null;
   private isRunning = false;
+  private isSslEnabled = false;
   private currentPort: number = DEFAULT_REMOTE_PORT;
+  private currentBinding: string = '127.0.0.1'; // Default to localhost only
   private authenticatedSockets: Map<string, string> = new Map(); // socketId -> sessionId
   private socketSubscriptions: Map<string, Set<string>> = new Map(); // socketId -> Set<instanceId>
   private clusterStateHandler: (() => void) | null = null;
@@ -353,76 +357,30 @@ export class WebServer extends EventEmitter {
     next();
   };
 
+  /**
+   * Web access guard middleware
+   * Blocks requests to web access routes when webAccessEnabled is false
+   */
+  private webAccessGuard = (_req: Request, res: Response, next: NextFunction): void => {
+    const config = DataStore.getInstance().getRemoteConfig();
+    if (!config.webAccessEnabled) {
+      res.status(403).json({
+        success: false,
+        error: 'Web access is disabled',
+      });
+      return;
+    }
+    next();
+  };
+
   private setupRoutes(): void {
+    // ==================== INTERNAL ROUTES (always available) ====================
+    // These routes are for local processes (hooks, MCP, health check)
+    // They work even when webAccessEnabled is false
+
     // Health check
     this.app.get('/api/health', (_req: Request, res: Response) => {
       res.json({ success: true, status: 'ok' });
-    });
-
-    // Auth routes
-    this.app.use(
-      '/api/auth',
-      createAuthRoutes({
-        ipAccessMiddleware: this.ipAccessMiddleware,
-        authMiddleware: this.authMiddleware,
-        emitter: this,
-      })
-    );
-
-    // Project routes
-    this.app.use(
-      '/api/projects',
-      createProjectRoutes({
-        authMiddleware: this.authMiddleware,
-        broadcastStateUpdate: () => this.broadcastStateUpdate(),
-      })
-    );
-
-    // Instance routes
-    this.app.use(
-      '/api/instances',
-      createInstanceRoutes({
-        authMiddleware: this.authMiddleware,
-        broadcastStateUpdate: () => this.broadcastStateUpdate(),
-      })
-    );
-
-    // Conversation routes
-    this.app.use(
-      '/api/conversations',
-      createConversationRoutes({
-        authMiddleware: this.authMiddleware,
-      })
-    );
-
-    // Sync endpoint
-    this.app.get('/api/sync', this.authMiddleware, (_req: Request, res: Response) => {
-      const state = this.getSyncState();
-      res.json({ success: true, data: state });
-    });
-
-    // Subagents endpoint (get all subagents across all instances)
-    this.app.get('/api/subagents', this.authMiddleware, (_req: Request, res: Response) => {
-      const tracker = getSubagentTracker();
-      const subagents = tracker.getAllSubagents();
-      res.json({ success: true, data: subagents });
-    });
-
-    // Tasks endpoint (get all tasks across all instances)
-    this.app.get('/api/tasks', this.authMiddleware, (_req: Request, res: Response) => {
-      const tracker = getTaskTracker();
-      const tasks = tracker.getAllTasks();
-      res.json({ success: true, data: tasks });
-    });
-
-    // Tasks by instance endpoint
-    this.app.get('/api/tasks/:instanceId', this.authMiddleware, (req: Request, res: Response) => {
-      const tracker = getTaskTracker();
-      const instanceId = Array.isArray(req.params.instanceId)
-        ? req.params.instanceId[0]
-        : req.params.instanceId;
-      const tasks = tracker.getTasks(instanceId);
-      res.json({ success: true, data: tasks });
     });
 
     // Hook routes (no auth - local hook scripts)
@@ -445,18 +403,112 @@ export class WebServer extends EventEmitter {
       })
     );
 
-    // Proxy routes (for web preview tunneling)
+    // MCP endpoint (token-based auth for Claude instances)
+    this.setupMcpEndpoint();
+
+    // ==================== WEB ACCESS ROUTES (require webAccessEnabled) ====================
+    // These routes are for remote web clients and require webAccessEnabled to be true
+
+    // Auth routes (protected by webAccessGuard)
+    this.app.use(
+      '/api/auth',
+      this.webAccessGuard,
+      createAuthRoutes({
+        ipAccessMiddleware: this.ipAccessMiddleware,
+        authMiddleware: this.authMiddleware,
+        emitter: this,
+      })
+    );
+
+    // Project routes (protected by webAccessGuard + auth)
+    this.app.use(
+      '/api/projects',
+      this.webAccessGuard,
+      createProjectRoutes({
+        authMiddleware: this.authMiddleware,
+        broadcastStateUpdate: () => this.broadcastStateUpdate(),
+      })
+    );
+
+    // Instance routes (protected by webAccessGuard + auth)
+    this.app.use(
+      '/api/instances',
+      this.webAccessGuard,
+      createInstanceRoutes({
+        authMiddleware: this.authMiddleware,
+        broadcastStateUpdate: () => this.broadcastStateUpdate(),
+      })
+    );
+
+    // Conversation routes (protected by webAccessGuard + auth)
+    this.app.use(
+      '/api/conversations',
+      this.webAccessGuard,
+      createConversationRoutes({
+        authMiddleware: this.authMiddleware,
+      })
+    );
+
+    // Sync endpoint (protected by webAccessGuard + auth)
+    this.app.get(
+      '/api/sync',
+      this.webAccessGuard,
+      this.authMiddleware,
+      (_req: Request, res: Response) => {
+        const state = this.getSyncState();
+        res.json({ success: true, data: state });
+      }
+    );
+
+    // Subagents endpoint (protected by webAccessGuard + auth)
+    this.app.get(
+      '/api/subagents',
+      this.webAccessGuard,
+      this.authMiddleware,
+      (_req: Request, res: Response) => {
+        const tracker = getSubagentTracker();
+        const subagents = tracker.getAllSubagents();
+        res.json({ success: true, data: subagents });
+      }
+    );
+
+    // Tasks endpoint (protected by webAccessGuard + auth)
+    this.app.get(
+      '/api/tasks',
+      this.webAccessGuard,
+      this.authMiddleware,
+      (_req: Request, res: Response) => {
+        const tracker = getTaskTracker();
+        const tasks = tracker.getAllTasks();
+        res.json({ success: true, data: tasks });
+      }
+    );
+
+    // Tasks by instance endpoint (protected by webAccessGuard + auth)
+    this.app.get(
+      '/api/tasks/:instanceId',
+      this.webAccessGuard,
+      this.authMiddleware,
+      (req: Request, res: Response) => {
+        const tracker = getTaskTracker();
+        const instanceId = Array.isArray(req.params.instanceId)
+          ? req.params.instanceId[0]
+          : req.params.instanceId;
+        const tasks = tracker.getTasks(instanceId);
+        res.json({ success: true, data: tasks });
+      }
+    );
+
+    // Proxy routes (protected by webAccessGuard + auth)
     this.app.use(
       '/api/proxy',
+      this.webAccessGuard,
       createProxyRoutes({
         authMiddleware: this.authMiddleware,
       })
     );
 
-    // MCP endpoint (token-based auth for Claude instances)
-    this.setupMcpEndpoint();
-
-    // Static files (web UI)
+    // Static files (web UI) - protected by webAccessGuard
     this.setupStaticFiles();
   }
 
@@ -557,6 +609,7 @@ export class WebServer extends EventEmitter {
 
   /**
    * Setup static file serving for web UI
+   * Protected by webAccessGuard - only available when webAccessEnabled is true
    */
   private setupStaticFiles(): void {
     const electronApp = getElectronApp();
@@ -575,10 +628,11 @@ export class WebServer extends EventEmitter {
       webBuildPath = join(process.resourcesPath || __dirname, 'web');
     }
 
-    this.app.use(express.static(webBuildPath));
+    // Static files protected by webAccessGuard
+    this.app.use(this.webAccessGuard, express.static(webBuildPath));
 
-    // SPA fallback - serve index.html for all non-API routes
-    this.app.get('/{*splat}', (_req: Request, res: Response) => {
+    // SPA fallback - serve index.html for all non-API routes (protected by webAccessGuard)
+    this.app.get('/{*splat}', this.webAccessGuard, (_req: Request, res: Response) => {
       res.sendFile(join(webBuildPath, 'index.html'));
     });
   }
@@ -598,6 +652,13 @@ export class WebServer extends EventEmitter {
 
     // Authentication middleware for Socket.IO
     this.io.use((socket, next) => {
+      // Check if web access is enabled
+      const config = DataStore.getInstance().getRemoteConfig();
+      if (!config.webAccessEnabled) {
+        next(new Error('Web access is disabled'));
+        return;
+      }
+
       const authToken = socket.handshake.auth as { token?: string };
       const token: string | undefined =
         authToken.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
@@ -1281,14 +1342,42 @@ export class WebServer extends EventEmitter {
 
   /**
    * Start the web server
+   * @param port - Port to listen on
+   * @param bindLocalhost - If true, bind to 127.0.0.1 only (default). If false, bind to 0.0.0.0
    */
-  public async start(port: number): Promise<void> {
+  public async start(port: number, bindLocalhost: boolean = true): Promise<void> {
     if (this.isRunning) {
       await this.stop();
     }
 
     return new Promise((resolve, reject) => {
-      this.httpServer = createServer(this.app);
+      // Get remote config to check SSL settings
+      const dataStore = DataStore.getInstance();
+      const config = dataStore.getRemoteConfig();
+
+      try {
+        if (config.ssl.enabled) {
+          // Create HTTPS server
+          const sslService = getSslCertificateService();
+          const sslOptions = sslService.loadCertificates(config.ssl);
+          this.httpServer = createHttpsServer(sslOptions, this.app);
+          this.isSslEnabled = true;
+          console.log('[WebServer] SSL/TLS enabled - using HTTPS');
+        } else {
+          // Create HTTP server
+          this.httpServer = createHttpServer(this.app);
+          this.isSslEnabled = false;
+        }
+      } catch (error) {
+        console.error('[WebServer] Failed to load SSL certificates:', error);
+        reject(
+          new Error(
+            `Failed to load SSL certificates: ${error instanceof Error ? error.message : 'Unknown error'}`
+          )
+        );
+        return;
+      }
+
       this.setupSocketIO();
 
       this.httpServer.on('error', (error: NodeJS.ErrnoException) => {
@@ -1299,10 +1388,14 @@ export class WebServer extends EventEmitter {
         }
       });
 
-      this.httpServer.listen(port, () => {
+      const host = bindLocalhost ? '127.0.0.1' : '0.0.0.0';
+      this.currentBinding = host;
+
+      this.httpServer.listen(port, host, () => {
         this.isRunning = true;
         this.currentPort = port;
-        console.log(`[WebServer] Started on port ${port}`);
+        const protocol = this.isSslEnabled ? 'https' : 'http';
+        console.log(`[WebServer] Started on ${protocol}://${host}:${port}`);
 
         // Subscribe to cluster state changes to broadcast to web clients
         const clusterManager = getClusterManager();
@@ -1381,6 +1474,29 @@ export class WebServer extends EventEmitter {
   }
 
   /**
+   * Update the server binding dynamically
+   * @param bindAllInterfaces - If true, bind to 0.0.0.0. If false, bind to 127.0.0.1
+   */
+  public async updateBinding(bindAllInterfaces: boolean): Promise<void> {
+    if (!this.isRunning) return;
+
+    const newHost = bindAllInterfaces ? '0.0.0.0' : '127.0.0.1';
+    if (this.currentBinding === newHost) return;
+
+    const port = this.currentPort;
+    console.log(`[WebServer] Changing binding from ${this.currentBinding} to ${newHost}`);
+    await this.stop();
+    await this.start(port, !bindAllInterfaces);
+  }
+
+  /**
+   * Get current binding address
+   */
+  public get binding(): string {
+    return this.currentBinding;
+  }
+
+  /**
    * Kick a specific session
    */
   public kickSession(
@@ -1420,11 +1536,12 @@ export class WebServer extends EventEmitter {
   public getStatus(): RemoteServerStatus {
     const authService = getAuthService();
     const localIp = this.getLocalIp();
+    const protocol = this.isSslEnabled ? 'https' : 'http';
 
     return {
       running: this.isRunning,
       port: this.currentPort,
-      url: this.isRunning && localIp ? `http://${localIp}:${this.currentPort}` : null,
+      url: this.isRunning && localIp ? `${protocol}://${localIp}:${this.currentPort}` : null,
       localIp,
       activeSessions: authService.getSessionCount(),
       // Omit detailed session info from general status for security
@@ -1439,11 +1556,12 @@ export class WebServer extends EventEmitter {
   public getDetailedStatus(): RemoteServerStatus {
     const authService = getAuthService();
     const localIp = this.getLocalIp();
+    const protocol = this.isSslEnabled ? 'https' : 'http';
 
     return {
       running: this.isRunning,
       port: this.currentPort,
-      url: this.isRunning && localIp ? `http://${localIp}:${this.currentPort}` : null,
+      url: this.isRunning && localIp ? `${protocol}://${localIp}:${this.currentPort}` : null,
       localIp,
       activeSessions: authService.getSessionCount(),
       sessions: authService.getAllSessions(),
@@ -1462,6 +1580,13 @@ export class WebServer extends EventEmitter {
    */
   public get port(): number {
     return this.currentPort;
+  }
+
+  /**
+   * Check if SSL is enabled
+   */
+  public get sslEnabled(): boolean {
+    return this.isSslEnabled;
   }
 
   /**

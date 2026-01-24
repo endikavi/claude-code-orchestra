@@ -20,6 +20,8 @@ import type { TerminalPoolConfig } from '@shared/types/pool';
 import { DEFAULT_TERMINAL_POOL_CONFIG } from '@shared/types/pool';
 import type { RemoteConfig } from '@shared/types/remote';
 import { DEFAULT_REMOTE_CONFIG } from '@shared/types/remote';
+import type { SslConfig } from '@shared/types/ssl';
+import { DEFAULT_SSL_CONFIG } from '@shared/types/ssl';
 import type {
   ClusterConfig,
   ClusterNodeRole,
@@ -166,6 +168,20 @@ export class DataStore {
       this.db.exec("ALTER TABLE remote_config ADD COLUMN customHostname TEXT DEFAULT ''");
     }
 
+    // Migration: Add ssl column if it doesn't exist
+    if (!columns.some((col) => col.name === 'ssl')) {
+      this.db.exec(
+        `ALTER TABLE remote_config ADD COLUMN ssl TEXT DEFAULT '${JSON.stringify({ enabled: false, selfSigned: false })}'`
+      );
+    }
+
+    // Migration: Add webAccessEnabled column if it doesn't exist
+    if (!columns.some((col) => col.name === 'webAccessEnabled')) {
+      this.db.exec('ALTER TABLE remote_config ADD COLUMN webAccessEnabled INTEGER DEFAULT 0');
+      // Migrate existing 'enabled' value to webAccessEnabled
+      this.db.exec('UPDATE remote_config SET webAccessEnabled = enabled WHERE enabled = 1');
+    }
+
     // Create cluster_config table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS cluster_config (
@@ -183,6 +199,9 @@ export class DataStore {
     // Migration: Add privacy column to cluster_config if it doesn't exist
     // IMPORTANT: This must run BEFORE the INSERT below to handle existing databases
     this.migrateAddClusterPrivacy();
+
+    // Migration: Add ssl column to cluster_config if it doesn't exist
+    this.migrateAddClusterSsl();
 
     // Insert default cluster config if not exists
     const existingCluster = this.db.prepare('SELECT * FROM cluster_config WHERE id = 1').get();
@@ -437,6 +456,24 @@ export class DataStore {
       }
     } catch (error) {
       console.warn('Migration cluster privacy:', error);
+    }
+  }
+
+  /**
+   * Migration: Add ssl column to cluster_config for existing databases
+   */
+  private migrateAddClusterSsl(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(cluster_config)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some((col) => col.name === 'ssl');
+
+      if (!hasColumn) {
+        this.db.exec(
+          `ALTER TABLE cluster_config ADD COLUMN ssl TEXT DEFAULT '${JSON.stringify({ enabled: false, selfSigned: false })}'`
+        );
+      }
+    } catch (error) {
+      console.warn('Migration cluster ssl:', error);
     }
   }
 
@@ -785,13 +822,25 @@ export class DataStore {
       return { ...DEFAULT_REMOTE_CONFIG };
     }
 
+    // Parse SSL JSON, falling back to defaults
+    let ssl: SslConfig = { ...DEFAULT_SSL_CONFIG };
+    if (row.ssl && typeof row.ssl === 'string') {
+      try {
+        ssl = { ...DEFAULT_SSL_CONFIG, ...JSON.parse(row.ssl) };
+      } catch {
+        // Keep defaults if JSON is invalid
+      }
+    }
+
     return {
-      enabled: row.enabled === 1,
       port: row.port as number,
       passwordHash: row.passwordHash as string,
-      autoStart: row.autoStart === 1,
+      webAccessEnabled: row.webAccessEnabled === 1,
+      autoStart: row.autoStart === 1, // DEPRECATED
+      enabled: row.enabled === 1, // DEPRECATED - mapped to webAccessEnabled
       allowAnyCors: row.allowAnyCors === 1,
       customHostname: (row.customHostname as string) || '',
+      ssl,
     };
   }
 
@@ -800,21 +849,30 @@ export class DataStore {
    */
   updateRemoteConfig(config: Partial<RemoteConfig>): RemoteConfig {
     const current = this.getRemoteConfig();
-    const updated: RemoteConfig = { ...current, ...config };
+    const updated: RemoteConfig = {
+      ...current,
+      ...config,
+      // Merge SSL settings if provided
+      ssl: config.ssl ? { ...current.ssl, ...config.ssl } : current.ssl,
+    };
 
     const stmt = this.db.prepare(`
       UPDATE remote_config
-      SET enabled = @enabled, port = @port, passwordHash = @passwordHash, autoStart = @autoStart, allowAnyCors = @allowAnyCors, customHostname = @customHostname
+      SET enabled = @enabled, port = @port, passwordHash = @passwordHash, autoStart = @autoStart,
+          allowAnyCors = @allowAnyCors, customHostname = @customHostname, ssl = @ssl,
+          webAccessEnabled = @webAccessEnabled
       WHERE id = 1
     `);
 
     stmt.run({
-      enabled: updated.enabled ? 1 : 0,
+      enabled: updated.enabled ? 1 : 0, // DEPRECATED - keep in sync with webAccessEnabled
       port: updated.port,
       passwordHash: updated.passwordHash,
-      autoStart: updated.autoStart ? 1 : 0,
+      autoStart: updated.autoStart ? 1 : 0, // DEPRECATED
       allowAnyCors: updated.allowAnyCors ? 1 : 0,
       customHostname: updated.customHostname || '',
+      ssl: JSON.stringify(updated.ssl),
+      webAccessEnabled: updated.webAccessEnabled ? 1 : 0,
     });
 
     return updated;
@@ -852,6 +910,16 @@ export class DataStore {
       }
     }
 
+    // Parse SSL JSON, falling back to defaults
+    let ssl: SslConfig = { ...DEFAULT_SSL_CONFIG };
+    if (row.ssl && typeof row.ssl === 'string') {
+      try {
+        ssl = { ...DEFAULT_SSL_CONFIG, ...JSON.parse(row.ssl) };
+      } catch {
+        // Keep defaults if JSON is invalid
+      }
+    }
+
     return {
       enabled: row.enabled === 1,
       role: row.role as ClusterNodeRole,
@@ -861,6 +929,7 @@ export class DataStore {
       primaryPort: row.primaryPort as number,
       sharedSecret: row.sharedSecret as string,
       privacy,
+      ssl,
     };
   }
 
@@ -874,13 +943,15 @@ export class DataStore {
       ...config,
       // Merge privacy settings if provided
       privacy: config.privacy ? { ...current.privacy, ...config.privacy } : current.privacy,
+      // Merge SSL settings if provided
+      ssl: config.ssl ? { ...current.ssl, ...config.ssl } : current.ssl,
     };
 
     const stmt = this.db.prepare(`
       UPDATE cluster_config
       SET enabled = @enabled, role = @role, nodeId = @nodeId, nodeName = @nodeName,
           primaryHost = @primaryHost, primaryPort = @primaryPort, sharedSecret = @sharedSecret,
-          privacy = @privacy
+          privacy = @privacy, ssl = @ssl
       WHERE id = 1
     `);
 
@@ -893,6 +964,7 @@ export class DataStore {
       primaryPort: updated.primaryPort,
       sharedSecret: updated.sharedSecret,
       privacy: JSON.stringify(updated.privacy),
+      ssl: JSON.stringify(updated.ssl),
     });
 
     return updated;

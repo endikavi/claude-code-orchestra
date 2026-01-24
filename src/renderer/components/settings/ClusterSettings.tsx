@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useClusterStore } from '../../stores/clusterStore';
 import { ClusterPrivacySettings } from './ClusterPrivacySettings';
 import type { ClusterNodeRole, ClusterNode } from '@shared/types/cluster';
+import type { SslConfig } from '@shared/types/ssl';
 
 export function ClusterSettings() {
   const { t } = useTranslation();
@@ -28,6 +29,13 @@ export function ClusterSettings() {
   const [clusterPort, setClusterPort] = useState('');
   const [showSecret, setShowSecret] = useState(false);
 
+  // SSL state
+  const [sslEnabled, setSslEnabled] = useState(false);
+  const [sslSelfSigned, setSslSelfSigned] = useState(true);
+  const [sslCertPath, setSslCertPath] = useState('');
+  const [sslKeyPath, setSslKeyPath] = useState('');
+  const [sslError, setSslError] = useState<string | null>(null);
+
   // Load config on mount
   useEffect(() => {
     void loadConfig();
@@ -43,6 +51,14 @@ export function ClusterSettings() {
       setPrimaryHost(config.primaryHost || '');
       setPrimaryPort(config.primaryPort.toString());
       setClusterPort(config.primaryPort.toString());
+
+      // Load SSL config
+      if (config.ssl) {
+        setSslEnabled(config.ssl.enabled);
+        setSslSelfSigned(config.ssl.selfSigned ?? true);
+        setSslCertPath(config.ssl.certPath || '');
+        setSslKeyPath(config.ssl.keyPath || '');
+      }
     }
   }, [config]);
 
@@ -96,6 +112,66 @@ export function ClusterSettings() {
 
   const copyToClipboard = (text: string) => {
     void navigator.clipboard.writeText(text);
+  };
+
+  // SSL handlers
+  const handleToggleSsl = async () => {
+    if (!config) return;
+
+    const newSslEnabled = !sslEnabled;
+    setSslEnabled(newSslEnabled);
+    setSslError(null);
+
+    try {
+      const sslConfig: SslConfig = {
+        enabled: newSslEnabled,
+        selfSigned: sslSelfSigned,
+        certPath: sslCertPath || undefined,
+        keyPath: sslKeyPath || undefined,
+      };
+
+      await updateConfig({ ssl: sslConfig });
+    } catch {
+      setSslError('Failed to update SSL configuration');
+      setSslEnabled(!newSslEnabled);
+    }
+  };
+
+  const handleSslTypeChange = async (useSelfSigned: boolean) => {
+    if (!config) return;
+
+    setSslSelfSigned(useSelfSigned);
+    setSslError(null);
+
+    try {
+      await updateConfig({
+        ssl: {
+          ...config.ssl,
+          selfSigned: useSelfSigned,
+        },
+      });
+    } catch {
+      setSslError('Failed to update SSL configuration');
+      setSslSelfSigned(!useSelfSigned);
+    }
+  };
+
+  const handleSslPathsBlur = async () => {
+    if (!config) return;
+
+    if (sslCertPath !== config.ssl?.certPath || sslKeyPath !== config.ssl?.keyPath) {
+      try {
+        await updateConfig({
+          ssl: {
+            ...config.ssl,
+            certPath: sslCertPath || undefined,
+            keyPath: sslKeyPath || undefined,
+          },
+        });
+      } catch {
+        setSslError('Failed to update SSL configuration');
+      }
+    }
   };
 
   const roleOptions: { value: ClusterNodeRole; label: string; description: string }[] = [
@@ -305,6 +381,91 @@ export function ClusterSettings() {
               )}
             </p>
           </div>
+
+          {/* SSL/TLS Configuration for Primary */}
+          <div className="space-y-3 pt-3 border-t border-blue-500/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  {t('cluster.sslTitle', 'SSL/TLS Encryption')}
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t('cluster.sslDescription', 'Use HTTPS/WSS for cluster communication')}
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={sslEnabled}
+                onChange={handleToggleSsl}
+                className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange"
+              />
+            </div>
+
+            {/* Restart warning */}
+            {isConnected && sslEnabled !== (config?.ssl?.enabled ?? false) && (
+              <div className="p-2 rounded bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs flex items-center gap-2">
+                <span>⚠️</span>
+                <span>
+                  {t(
+                    'cluster.sslRestartRequired',
+                    'Stop and start the cluster for SSL changes to take effect'
+                  )}
+                </span>
+              </div>
+            )}
+
+            {sslEnabled && (
+              <div className="space-y-2">
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={sslSelfSigned}
+                      onChange={() => handleSslTypeChange(true)}
+                      className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                    />
+                    <span className="text-sm text-gray-800 dark:text-white">
+                      {t('cluster.sslSelfSigned', 'Self-Signed')}
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!sslSelfSigned}
+                      onChange={() => handleSslTypeChange(false)}
+                      className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                    />
+                    <span className="text-sm text-gray-800 dark:text-white">
+                      {t('cluster.sslCustom', 'Custom')}
+                    </span>
+                  </label>
+                </div>
+
+                {!sslSelfSigned && (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={sslCertPath}
+                      onChange={(e) => setSslCertPath(e.target.value)}
+                      onBlur={handleSslPathsBlur}
+                      placeholder={t('cluster.sslCertPath', 'Certificate path (.crt/.pem)')}
+                      className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                    />
+                    <input
+                      type="text"
+                      value={sslKeyPath}
+                      onChange={(e) => setSslKeyPath(e.target.value)}
+                      onBlur={handleSslPathsBlur}
+                      placeholder={t('cluster.sslKeyPath', 'Private key path (.key)')}
+                      className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                    />
+                  </div>
+                )}
+
+                {sslError && <p className="text-xs text-red-500 dark:text-red-400">{sslError}</p>}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -362,6 +523,63 @@ export function ClusterSettings() {
               disabled={isConnected}
               className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange disabled:opacity-50"
             />
+          </div>
+
+          {/* SSL/TLS Configuration for Secondary */}
+          <div className="space-y-3 pt-3 border-t border-purple-500/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  {t('cluster.sslTitle', 'SSL/TLS Encryption')}
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t('cluster.sslSecondaryDescription', 'Connect to primary using HTTPS/WSS')}
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={sslEnabled}
+                onChange={handleToggleSsl}
+                className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange"
+              />
+            </div>
+
+            {/* Restart warning for secondary */}
+            {isConnected && sslEnabled !== (config?.ssl?.enabled ?? false) && (
+              <div className="p-2 rounded bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs flex items-center gap-2">
+                <span>⚠️</span>
+                <span>
+                  {t(
+                    'cluster.sslRestartRequired',
+                    'Disconnect and reconnect for SSL changes to take effect'
+                  )}
+                </span>
+              </div>
+            )}
+
+            {sslEnabled && (
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sslSelfSigned}
+                    onChange={(e) => handleSslTypeChange(e.target.checked)}
+                    className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange"
+                  />
+                  <span className="text-sm text-gray-800 dark:text-white">
+                    {t('cluster.sslAllowSelfSigned', 'Allow self-signed certificates')}
+                  </span>
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t(
+                    'cluster.sslAllowSelfSignedDesc',
+                    'Enable this if the primary node uses a self-signed certificate'
+                  )}
+                </p>
+
+                {sslError && <p className="text-xs text-red-500 dark:text-red-400">{sslError}</p>}
+              </div>
+            )}
           </div>
         </div>
       )}

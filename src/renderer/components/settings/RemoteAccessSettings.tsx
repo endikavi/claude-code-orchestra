@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RemoteConfig, RemoteServerStatus, RemoteSession } from '@shared/types/remote';
+import type { SslConfig } from '@shared/types/ssl';
 
 export function RemoteAccessSettings() {
   const { t } = useTranslation();
@@ -12,6 +13,17 @@ export function RemoteAccessSettings() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // SSL state
+  const [sslEnabled, setSslEnabled] = useState(false);
+  const [sslSelfSigned, setSslSelfSigned] = useState(true);
+  const [sslCertPath, setSslCertPath] = useState('');
+  const [sslKeyPath, setSslKeyPath] = useState('');
+  const [sslCertValidation, setSslCertValidation] = useState<{
+    valid: boolean;
+    error?: string;
+    daysRemaining?: number;
+  } | null>(null);
 
   // Load config and status
   const loadData = useCallback(async () => {
@@ -29,8 +41,16 @@ export function RemoteAccessSettings() {
       setNewPort(configData.port.toString());
       setCustomHostname(configData.customHostname || '');
 
-      // Load QR code if server is running
-      if (statusData.running) {
+      // Load SSL config
+      if (configData.ssl) {
+        setSslEnabled(configData.ssl.enabled);
+        setSslSelfSigned(configData.ssl.selfSigned ?? true);
+        setSslCertPath(configData.ssl.certPath || '');
+        setSslKeyPath(configData.ssl.keyPath || '');
+      }
+
+      // Load QR code if web access is enabled and server is running
+      if (configData.webAccessEnabled && statusData.running) {
         const qrResult = await window.electronAPI.remote.getQrCode();
         if (qrResult.success && qrResult.qrCode) {
           setQrCode(qrResult.qrCode);
@@ -76,14 +96,16 @@ export function RemoteAccessSettings() {
     }
   };
 
-  const handleToggleServer = async () => {
+  const handleToggleWebAccess = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      if (status?.running) {
+      if (config?.webAccessEnabled) {
+        // Disable web access (server keeps running for internal functionality)
         await window.electronAPI.remote.stopServer();
       } else {
+        // Enable web access
         const port = parseInt(newPort, 10);
         if (isNaN(port) || port < 1 || port > 65535) {
           setError(t('remoteAccess.invalidPort'));
@@ -103,17 +125,6 @@ export function RemoteAccessSettings() {
       setError(t('remoteAccess.serverError'));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleToggleAutoStart = async () => {
-    if (!config) return;
-
-    try {
-      await window.electronAPI.remote.updateConfig({ autoStart: !config.autoStart });
-      await loadData();
-    } catch {
-      setError(t('remoteAccess.failedToUpdate'));
     }
   };
 
@@ -148,6 +159,103 @@ export function RemoteAccessSettings() {
       await loadData();
     } catch {
       setError(t('remoteAccess.failedToKick'));
+    }
+  };
+
+  // SSL handlers
+  const handleToggleSsl = async () => {
+    if (!config) return;
+
+    const newSslEnabled = !sslEnabled;
+    setSslEnabled(newSslEnabled);
+
+    try {
+      const sslConfig: SslConfig = {
+        enabled: newSslEnabled,
+        selfSigned: sslSelfSigned,
+        certPath: sslCertPath || undefined,
+        keyPath: sslKeyPath || undefined,
+      };
+
+      await window.electronAPI.remote.updateConfig({ ssl: sslConfig });
+      await loadData();
+    } catch {
+      setError(t('remoteAccess.failedToUpdate'));
+      setSslEnabled(!newSslEnabled);
+    }
+  };
+
+  const handleSslTypeChange = async (useSelfSigned: boolean) => {
+    if (!config) return;
+
+    setSslSelfSigned(useSelfSigned);
+
+    try {
+      await window.electronAPI.remote.updateConfig({
+        ssl: {
+          ...config.ssl,
+          selfSigned: useSelfSigned,
+        },
+      });
+      await loadData();
+    } catch {
+      setError(t('remoteAccess.failedToUpdate'));
+      setSslSelfSigned(!useSelfSigned);
+    }
+  };
+
+  const handleSslPathsBlur = async () => {
+    if (!config) return;
+
+    // Only update if paths have changed
+    if (sslCertPath !== config.ssl?.certPath || sslKeyPath !== config.ssl?.keyPath) {
+      try {
+        await window.electronAPI.remote.updateConfig({
+          ssl: {
+            ...config.ssl,
+            certPath: sslCertPath || undefined,
+            keyPath: sslKeyPath || undefined,
+          },
+        });
+        await loadData();
+      } catch {
+        setError(t('remoteAccess.failedToUpdate'));
+      }
+    }
+  };
+
+  const handleValidateCert = async () => {
+    if (!sslCertPath || !window.electronAPI?.ssl) return;
+
+    try {
+      const result = await window.electronAPI.ssl.validateCert(sslCertPath);
+      setSslCertValidation({
+        valid: result.valid,
+        error: result.error,
+        daysRemaining: result.daysRemaining,
+      });
+    } catch {
+      setSslCertValidation({ valid: false, error: 'Validation failed' });
+    }
+  };
+
+  const handleGenerateSelfSigned = async () => {
+    if (!window.electronAPI?.ssl) return;
+
+    setLoading(true);
+    try {
+      const result = await window.electronAPI.ssl.generateSelfSigned('localhost', 365);
+      if (result.success) {
+        setSslCertPath(result.certPath || '');
+        setSslKeyPath(result.keyPath || '');
+        setSslCertValidation({ valid: true, daysRemaining: 365 });
+      } else {
+        setError(result.error || 'Failed to generate certificate');
+      }
+    } catch {
+      setError('Failed to generate certificate');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -238,53 +346,51 @@ export function RemoteAccessSettings() {
         </p>
       </div>
 
-      {/* Server Toggle */}
+      {/* Web Access Toggle */}
       <div className="flex items-center justify-between p-4 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600">
         <div>
           <p className="text-sm font-medium text-gray-800 dark:text-white">
-            {t('remoteAccess.serverStatus')}
+            {t('remoteAccess.webAccess', 'Web Access')}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {status?.running ? t('remoteAccess.running') : t('remoteAccess.stopped')}
+            {config?.webAccessEnabled
+              ? t('remoteAccess.webAccessEnabled', 'Remote web access enabled')
+              : t('remoteAccess.webAccessDisabled', 'Remote web access disabled')}
           </p>
+          {status?.running && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+              {t('remoteAccess.serverRunning', 'Server running on port')} {status.port}
+            </p>
+          )}
         </div>
         <button
-          onClick={handleToggleServer}
+          onClick={handleToggleWebAccess}
           disabled={loading || !hasPassword}
           className={`px-4 py-2 text-sm rounded-md transition-colors disabled:opacity-50 ${
-            status?.running
+            config?.webAccessEnabled
               ? 'bg-red-500 hover:bg-red-600 text-white'
               : 'bg-green-500 hover:bg-green-600 text-white'
           }`}
         >
           {loading ? (
             <LoadingSpinner />
-          ) : status?.running ? (
-            t('remoteAccess.stopServer')
+          ) : config?.webAccessEnabled ? (
+            t('remoteAccess.disableWebAccess', 'Disable')
           ) : (
-            t('remoteAccess.startServer')
+            t('remoteAccess.enableWebAccess', 'Enable')
           )}
         </button>
       </div>
 
-      {/* Auto-start Toggle */}
-      <label className="flex items-center gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={config?.autoStart ?? false}
-          onChange={handleToggleAutoStart}
-          disabled={!hasPassword}
-          className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange disabled:opacity-50"
-        />
-        <div>
-          <span className="text-sm text-gray-800 dark:text-white">
-            {t('remoteAccess.autoStart')}
-          </span>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {t('remoteAccess.autoStartDescription')}
-          </p>
-        </div>
-      </label>
+      {/* Info: Server always runs for internal functionality */}
+      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+        <p className="text-xs text-blue-700 dark:text-blue-400">
+          {t(
+            'remoteAccess.serverAlwaysRunning',
+            'The internal server always runs for hooks and MCP functionality. Web access controls whether remote clients can connect.'
+          )}
+        </p>
+      </div>
 
       {/* Allow Any CORS Toggle */}
       <label className="flex items-center gap-3 cursor-pointer">
@@ -305,8 +411,154 @@ export function RemoteAccessSettings() {
         </div>
       </label>
 
-      {/* Connection Info (shown when server is running) */}
-      {status?.running && status.url && (
+      {/* SSL/TLS Configuration */}
+      <div className="space-y-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('remoteAccess.sslTitle', 'SSL/TLS Encryption')}
+            </h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {t('remoteAccess.sslDescription', 'Enable HTTPS for secure communication')}
+            </p>
+          </div>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sslEnabled}
+              onChange={handleToggleSsl}
+              disabled={!hasPassword}
+              className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange disabled:opacity-50"
+            />
+          </label>
+        </div>
+
+        {/* Warning when SSL config changed while server running */}
+        {status?.running && sslEnabled !== (config?.ssl?.enabled ?? false) && (
+          <div className="p-2 rounded bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs flex items-center gap-2">
+            <span>⚠️</span>
+            <span>
+              {t(
+                'remoteAccess.sslRestartRequired',
+                'Stop and start the server for SSL changes to take effect'
+              )}
+            </span>
+          </div>
+        )}
+
+        {sslEnabled && (
+          <>
+            {/* SSL Type Selection */}
+            <div className="space-y-2">
+              <label className="block text-sm text-gray-700 dark:text-gray-300">
+                {t('remoteAccess.sslType', 'Certificate Type')}
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={sslSelfSigned}
+                    onChange={() => handleSslTypeChange(true)}
+                    className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                  />
+                  <span className="text-sm text-gray-800 dark:text-white">
+                    {t('remoteAccess.sslSelfSigned', 'Self-Signed')}
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={!sslSelfSigned}
+                    onChange={() => handleSslTypeChange(false)}
+                    className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                  />
+                  <span className="text-sm text-gray-800 dark:text-white">
+                    {t('remoteAccess.sslCustom', 'Custom Certificate')}
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {sslSelfSigned ? (
+              /* Self-signed certificate info */
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t(
+                    'remoteAccess.sslSelfSignedInfo',
+                    'A self-signed certificate will be auto-generated. Browsers will show a security warning, but traffic is still encrypted.'
+                  )}
+                </p>
+                <button
+                  onClick={handleGenerateSelfSigned}
+                  disabled={loading}
+                  className="px-3 py-1.5 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+                >
+                  {t('remoteAccess.sslGenerateCert', 'Generate New Certificate')}
+                </button>
+              </div>
+            ) : (
+              /* Custom certificate paths */
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">
+                    {t('remoteAccess.sslCertPath', 'Certificate Path (.crt/.pem)')}
+                  </label>
+                  <input
+                    type="text"
+                    value={sslCertPath}
+                    onChange={(e) => setSslCertPath(e.target.value)}
+                    onBlur={handleSslPathsBlur}
+                    placeholder="/path/to/certificate.crt"
+                    className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">
+                    {t('remoteAccess.sslKeyPath', 'Private Key Path (.key)')}
+                  </label>
+                  <input
+                    type="text"
+                    value={sslKeyPath}
+                    onChange={(e) => setSslKeyPath(e.target.value)}
+                    onBlur={handleSslPathsBlur}
+                    placeholder="/path/to/private.key"
+                    className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                  />
+                </div>
+                <button
+                  onClick={handleValidateCert}
+                  disabled={!sslCertPath || loading}
+                  className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md transition-colors disabled:opacity-50"
+                >
+                  {t('remoteAccess.sslValidate', 'Validate Certificate')}
+                </button>
+              </div>
+            )}
+
+            {/* Certificate validation result */}
+            {sslCertValidation && (
+              <div
+                className={`p-2 rounded text-sm ${
+                  sslCertValidation.valid
+                    ? 'bg-green-500/20 text-green-700 dark:text-green-400'
+                    : 'bg-red-500/20 text-red-700 dark:text-red-400'
+                }`}
+              >
+                {sslCertValidation.valid
+                  ? t('remoteAccess.sslCertValid', 'Certificate valid') +
+                    (sslCertValidation.daysRemaining
+                      ? ` (${sslCertValidation.daysRemaining} days remaining)`
+                      : '')
+                  : sslCertValidation.error ||
+                    t('remoteAccess.sslCertInvalid', 'Certificate invalid')}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Connection Info (shown when web access is enabled) */}
+      {config?.webAccessEnabled && status?.running && status.url && (
         <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/50">
           <div className="flex gap-4">
             {/* QR Code */}
@@ -336,37 +588,40 @@ export function RemoteAccessSettings() {
       )}
 
       {/* Active Sessions */}
-      {status?.running && status.sessions && status.sessions.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {t('remoteAccess.activeSessions')} ({status.sessions.length})
-          </h4>
-          <div className="space-y-2">
-            {status.sessions.map((session: RemoteSession) => (
-              <div
-                key={session.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600"
-              >
-                <div>
-                  <p className="text-sm text-gray-800 dark:text-white">{session.ip}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {session.userAgent.substring(0, 50)}...
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {t('remoteAccess.connectedAt')}: {formatDate(session.connectedAt)}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleKickSession(session.id)}
-                  className="px-3 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+      {config?.webAccessEnabled &&
+        status?.running &&
+        status.sessions &&
+        status.sessions.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('remoteAccess.activeSessions')} ({status.sessions.length})
+            </h4>
+            <div className="space-y-2">
+              {status.sessions.map((session: RemoteSession) => (
+                <div
+                  key={session.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600"
                 >
-                  {t('remoteAccess.kick')}
-                </button>
-              </div>
-            ))}
+                  <div>
+                    <p className="text-sm text-gray-800 dark:text-white">{session.ip}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {session.userAgent.substring(0, 50)}...
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {t('remoteAccess.connectedAt')}: {formatDate(session.connectedAt)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleKickSession(session.id)}
+                    className="px-3 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                  >
+                    {t('remoteAccess.kick')}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }

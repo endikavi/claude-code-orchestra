@@ -257,6 +257,12 @@ export const IPC_CHANNELS = {
   CONTEXT_INSTANCE_UPDATED: 'context:instanceUpdated',
   CONTEXT_KNOWLEDGE_UPDATED: 'context:knowledgeUpdated',
   CONTEXT_UPDATED: 'context:updated',
+
+  // SSL/TLS operations
+  SSL_VALIDATE_CERT: 'ssl:validateCert',
+  SSL_GENERATE_SELF_SIGNED: 'ssl:generateSelfSigned',
+  SSL_GET_CERT_INFO: 'ssl:getCertInfo',
+  SSL_VALIDATE_CERT_KEY_PAIR: 'ssl:validateCertKeyPair',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

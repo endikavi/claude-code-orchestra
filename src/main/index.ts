@@ -88,18 +88,31 @@ app
   .then(async () => {
     await createWindow();
 
-    // Auto-start web server if configured
+    // ALWAYS start the web server for internal functionality (hooks, MCP, context)
+    // The server listens on localhost by default; web access is controlled by webAccessEnabled
     const dataStore = DataStore.getInstance();
     const remoteConfig = dataStore.getRemoteConfig();
 
-    if (remoteConfig.autoStart && remoteConfig.passwordHash) {
-      try {
-        const webServer = getWebServer();
-        await webServer.start(remoteConfig.port);
-        console.log(`[Main] Web server auto-started on port ${remoteConfig.port}`);
-      } catch (error) {
-        console.error('[Main] Failed to auto-start web server:', error);
+    try {
+      const webServer = getWebServer();
+
+      // Determine binding: localhost by default, 0.0.0.0 if web access is enabled with allowAnyCors
+      const bindAllInterfaces = remoteConfig.webAccessEnabled && remoteConfig.allowAnyCors;
+      await webServer.start(remoteConfig.port, !bindAllInterfaces);
+
+      if (mainWindow) {
+        webServer.setMainWindow(mainWindow);
       }
+
+      const bindingInfo = bindAllInterfaces ? '0.0.0.0' : 'localhost';
+      const accessInfo = remoteConfig.webAccessEnabled ? 'web access enabled' : 'internal only';
+      console.log(
+        `[Main] Web server started on ${bindingInfo}:${remoteConfig.port} (${accessInfo})`
+      );
+    } catch (error) {
+      console.error('[Main] Failed to start web server:', error);
+      // CRITICAL: Without the server, hooks and MCP won't work
+      // The app can still function but with reduced capabilities
     }
 
     // Auto-start cluster if it was enabled

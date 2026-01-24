@@ -321,6 +321,9 @@ export * from './tasks';
 // Re-export shared context types
 export * from './sharedContext';
 
+// Re-export SSL types
+export * from './ssl';
+
 // Git status types
 export interface GitStatus {
   branch: string;
