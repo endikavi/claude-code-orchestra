@@ -39,7 +39,10 @@ import { getPermissionManager } from '../services/PermissionManager';
 import { getMetricsService } from '../services/MetricsService';
 import { getGitStatusManager } from '../services/GitStatusManager';
 import { getSubagentTracker } from '../services/SubagentTracker';
+import { getTaskTracker } from '../services/TaskTracker';
 import { getTerminalPool } from '../services/TerminalPool';
+import { getTerminalDimensionManager } from '../services/TerminalDimensionManager';
+import { SharedContextStore } from '../services/SharedContextStore';
 import type { TerminalPoolConfig } from '@shared/types/pool';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
@@ -80,7 +83,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, (_event, id: string) => {
     const validatedId = validators.id(id, 'project:delete');
     // Kill all instances for this project first
-    void processManager.killProjectInstances(validatedId);
+    processManager.killProjectInstances(validatedId).catch((error) => {
+      console.error(`[IPC] Error killing project instances for ${validatedId}:`, error);
+    });
     dataStore.deleteProject(validatedId);
     clusterManager.notifyProjectChange();
     // Untrack project from git status
@@ -195,9 +200,29 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return processManager.getInstancesByProject(validatedId);
   });
 
-  // Resize handler (from renderer)
+  // Resize handler (from renderer) with dimension synchronization
   ipcMain.on('instance:resize', (_event, id: string, cols: number, rows: number) => {
-    processManager.resizeInstance(id, cols, rows);
+    // Track dimensions from the Electron renderer client
+    const clientId = 'electron:renderer';
+    const dimManager = getTerminalDimensionManager();
+    const result = dimManager.updateClientDimensions(id, clientId, cols, rows);
+
+    if (result.changed) {
+      // Resize PTY to minimum dimensions
+      processManager.resizeInstance(id, result.min.cols, result.min.rows);
+
+      // Broadcast synchronized dimensions to Electron renderer
+      mainWindow.webContents.send(
+        IPC_CHANNELS.INSTANCE_DIMENSION_SYNC,
+        id,
+        result.min.cols,
+        result.min.rows
+      );
+
+      // Broadcast to web clients
+      const webServer = getWebServer();
+      webServer.broadcastDimensionSync(id, result.min.cols, result.min.rows);
+    }
   });
 
   // Config handlers
@@ -658,15 +683,27 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.SHELL_KILL, (_event, id: string) => {
-    processManager.killShellInstance(id);
+    try {
+      processManager.killShellInstance(id);
+    } catch (error) {
+      console.error(`[IPC] Error killing shell instance ${id}:`, error);
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.SHELL_SEND_INPUT, (_event, id: string, input: string) => {
-    processManager.sendShellInput(id, input);
+    try {
+      processManager.sendShellInput(id, input);
+    } catch (error) {
+      console.error(`[IPC] Error sending input to shell ${id}:`, error);
+    }
   });
 
   ipcMain.on(IPC_CHANNELS.SHELL_RESIZE, (_event, id: string, cols: number, rows: number) => {
-    processManager.resizeShellInstance(id, cols, rows);
+    try {
+      processManager.resizeShellInstance(id, cols, rows);
+    } catch {
+      // Silently ignore resize errors - shell may have exited
+    }
   });
 
   // Get available shells on the system
@@ -756,6 +793,59 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.HOOK_HAS_CONFIGURED, async (_event, projectPath: string) => {
     return hookManager.hasHooksConfigured(projectPath);
   });
+
+  // ==================== Orchestration Handlers ====================
+
+  ipcMain.handle(
+    IPC_CHANNELS.ORCHESTRATION_SETUP_AGENT_MD,
+    (_event, projectPath: string): { success: boolean; path?: string; error?: string } => {
+      try {
+        const agentMdPath = path.join(projectPath, 'AGENT.md');
+
+        // Check if AGENT.md already exists
+        if (fs.existsSync(agentMdPath)) {
+          console.log(`[Orchestration] AGENT.md already exists at ${agentMdPath}`);
+          return { success: true, path: agentMdPath };
+        }
+
+        // Try to read from app directory first (development)
+        const possiblePaths = [
+          path.join(__dirname, '..', '..', '..', 'AGENT.md'), // Development
+          path.join(__dirname, '..', '..', 'AGENT.md'), // Packaged
+          path.join(process.resourcesPath || '', 'AGENT.md'), // Electron resources
+        ];
+
+        let agentMdContent: string | null = null;
+        for (const p of possiblePaths) {
+          try {
+            if (fs.existsSync(p)) {
+              agentMdContent = fs.readFileSync(p, 'utf-8');
+              console.log(`[Orchestration] Found AGENT.md at ${p}`);
+              break;
+            }
+          } catch {
+            // Continue to next path
+          }
+        }
+
+        if (!agentMdContent) {
+          // Fallback: use embedded minimal content
+          agentMdContent = getEmbeddedAgentMd();
+          console.log(`[Orchestration] Using embedded AGENT.md content`);
+        }
+
+        // Write AGENT.md to project
+        fs.writeFileSync(agentMdPath, agentMdContent, 'utf-8');
+        console.log(`[Orchestration] AGENT.md copied to ${agentMdPath}`);
+
+        return { success: true, path: agentMdPath };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[Orchestration] Failed to setup AGENT.md:`, error);
+        return { success: false, error: message };
+      }
+    }
+  );
 
   // ==================== Skill Handlers ====================
   const skillManager = getSkillManager();
@@ -896,6 +986,17 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_CHANNELS.SUBAGENT_GET_ALL, () => {
     return subagentTracker.getAllSubagents();
+  });
+
+  // ==================== Task Handlers (Claude Code TaskCreate/TaskUpdate/TaskList) ====================
+  const taskTracker = getTaskTracker();
+
+  ipcMain.handle(IPC_CHANNELS.TASK_GET_BY_INSTANCE, (_event, instanceId: string) => {
+    return taskTracker.getTasks(instanceId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TASK_GET_ALL, () => {
+    return taskTracker.getAllTasks();
   });
 
   // ==================== Proxy Handlers (Web Preview Tunneling) ====================
@@ -1149,6 +1250,34 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     terminalPool.resetStats();
     return { success: true };
   });
+
+  // ==================== Shared Context Handlers ====================
+  const sharedContextStore = SharedContextStore.getInstance();
+
+  ipcMain.handle(IPC_CHANNELS.CONTEXT_GET_INSTANCES, (_event, projectId: string) => {
+    return sharedContextStore.getAllInstanceContexts(projectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CONTEXT_GET_INSTANCE, (_event, instanceId: string) => {
+    return sharedContextStore.getInstanceContext(instanceId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CONTEXT_GET_PROJECT_KNOWLEDGE, (_event, projectId: string) => {
+    return sharedContextStore.getProjectKnowledge(projectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CONTEXT_GET_SUMMARY, (_event, projectId: string) => {
+    return sharedContextStore.getContextSummary(projectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CONTEXT_GET_STATS, () => {
+    return sharedContextStore.getStats();
+  });
+
+  // Forward context update events to renderer
+  sharedContextStore.on('contextUpdated', (event) => {
+    mainWindow.webContents.send(IPC_CHANNELS.CONTEXT_UPDATED, event);
+  });
 }
 
 export function cleanupIpcHandlers(): void {
@@ -1157,4 +1286,76 @@ export function cleanupIpcHandlers(): void {
     ipcMain.removeHandler(channel);
     ipcMain.removeAllListeners(channel);
   });
+}
+
+/**
+ * Get embedded AGENT.md content for orchestration
+ * This is a fallback when the file cannot be found in the app directory
+ */
+function getEmbeddedAgentMd(): string {
+  return `# AGENT.md - Multi-Agent Orchestration Guide
+
+This file provides guidance for Claude instances running in Claude Dashboard to operate as effective orchestrators of parallel work.
+
+## Core Principles
+
+### 1. Parallelism First
+Before starting any non-trivial task, analyze which subtasks are **independent** and can run simultaneously.
+
+**Rule**: If tasks don't share dependencies, launch them in parallel using multiple \`Task\` tool calls in a single message.
+
+### 2. Clean Context Through Delegation
+Keep your main context focused on coordination. Delegate to subagents:
+- Deep codebase exploration (use \`Task\` with \`subagent_type: "Explore"\`)
+- Implementation of isolated components
+- Running tests and verification
+
+**Rule**: If a task requires reading >5 files or deep analysis, delegate it.
+
+### 3. Active Coordination
+Use the shared context system via MCP tools to:
+- Announce what you're working on (\`context_publish\`)
+- Check what peers are doing (\`context_get_peers\`)
+- Share discoveries (\`context_contribute_knowledge\`)
+
+## MCP Context Tools
+
+### context_publish
+\`\`\`json
+{
+  "workStatus": "implementing",
+  "currentTask": "Adding user authentication",
+  "currentFiles": ["src/auth/login.ts"]
+}
+\`\`\`
+
+### context_get_peers
+Check what other instances are doing before modifying shared files.
+
+### context_get_project_knowledge
+Get accumulated project insights (architecture, conventions, warnings).
+
+### context_contribute_knowledge
+Persist discoveries for future instances.
+
+## Automatic Behaviors (Dashboard-Managed)
+
+### Auto-Review on Task Completion
+When you complete a task (\`TaskUpdate status="completed"\`), the Dashboard **automatically** spawns a background review subagent that:
+- Runs typecheck and lint:fix
+- Fixes errors automatically when possible
+- **Publishes findings to shared context** via \`context_publish\`
+
+Check \`context_get_peers()\` to see review status:
+- \`workStatus: "reviewing"\` - Checks running
+- \`workStatus: "completed"\` - All passed
+- \`workStatus: "blocked"\` - Found unfixable issues (check \`notesForOthers\`)
+
+## Anti-Patterns to Avoid
+
+1. **Sequential when parallel is possible**: Don't wait for one exploration to finish before starting another independent one.
+2. **Deep diving in main context**: Don't read 20 files yourself - delegate to an Explore subagent.
+3. **Forgetting to publish context**: Other instances can't coordinate if they don't know what you're doing.
+4. **Not checking peers**: Before editing shared files, check if someone else is working on them.
+`;
 }

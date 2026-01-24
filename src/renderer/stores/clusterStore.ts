@@ -374,8 +374,7 @@ export const useClusterStore = create<ClusterStoreState>((set, get) => ({
     set({ error });
   },
 
-  handlePermissionsChanged: (event) => {
-    console.log('[ClusterStore] Permissions changed:', event);
+  handlePermissionsChanged: (_event) => {
     // Reload privacy settings and global data
     void get().loadPrivacy();
     void get().loadGlobalProjects();

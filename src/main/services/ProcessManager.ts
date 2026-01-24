@@ -1,10 +1,13 @@
 import { EventEmitter } from 'events';
+import * as path from 'path';
+import * as fs from 'fs';
 import { ClaudeInstance, ClaudeInstanceConfig } from './ClaudeInstance';
 import { ShellInstance } from './ShellInstance';
 import { DataStore } from './DataStore';
 import { getInstanceBroadcaster, type InstanceEventType } from './InstanceBroadcaster';
 import { getClusterPermissionValidator } from './ClusterPermissionValidator';
 import { getTerminalPool } from './TerminalPool';
+import { getTerminalDimensionManager } from './TerminalDimensionManager';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ShellInstance as ShellInstanceType,
@@ -15,6 +18,7 @@ import type {
   InstanceMode,
 } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
+import type { TrackedTask } from '@shared/types/tasks';
 import type { InstanceOutputBuffer } from '@shared/types/remote';
 
 // Internal buffer type using array for better performance (avoids repeated string concatenation)
@@ -50,6 +54,8 @@ export class ProcessManager extends EventEmitter {
 
   // Max raw output buffer size (to prevent memory issues)
   private static readonly MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
+  // Max number of structured messages per instance (to prevent memory bloat)
+  private static readonly MAX_MESSAGE_COUNT = 1000;
   // Delay before auto-cleaning up exited instances (allows UI to show completion status)
   private static readonly CLEANUP_DELAY_MS = 60000; // 1 minute
 
@@ -67,9 +73,6 @@ export class ProcessManager extends EventEmitter {
     // Check if there's a pending sessionId that arrived before this mapping was set (race condition fix)
     const pendingSessionId = this.pendingSessionIds.get(instanceId);
     if (pendingSessionId) {
-      console.log(
-        `[ProcessManager] Applying pending sessionId for instance ${instanceId}: ${pendingSessionId}`
-      );
       this.dataStore.updateConversation(conversationId, { sessionId: pendingSessionId });
       this.pendingSessionIds.delete(instanceId);
     }
@@ -88,9 +91,6 @@ export class ProcessManager extends EventEmitter {
    */
   setPendingSessionId(instanceId: string, sessionId: string): void {
     this.pendingSessionIds.set(instanceId, sessionId);
-    console.log(
-      `[ProcessManager] Stored pending sessionId for instance ${instanceId}: ${sessionId}`
-    );
   }
 
   /**
@@ -118,22 +118,24 @@ export class ProcessManager extends EventEmitter {
       throw new Error(`Project with id ${config.projectId} not found`);
     }
 
-    console.log(
-      `[ProcessManager] Creating instance for project ${project.name}, enableMcp=${project.enableMcp}, isLocal=${isLocal}`
-    );
-
     // SECURITY: Only use terminal pool for LOCAL requests
     // Remote/cluster requests MUST use direct spawn
     let pooledTerminal = undefined;
     if (isLocal) {
       try {
         pooledTerminal = getTerminalPool().acquire() ?? undefined;
-        if (pooledTerminal) {
-          console.log(`[ProcessManager] Acquired pooled terminal ${pooledTerminal.id}`);
-        }
-      } catch (error) {
+      } catch {
         // Pool not initialized or disabled - fall back to direct spawn
-        console.log(`[ProcessManager] Pool not available, using direct spawn:`, error);
+      }
+    }
+
+    // Check for AGENT.md in project directory (orchestration instructions)
+    // Use provided agentFile or detect AGENT.md automatically
+    let agentFile = config.agentFile;
+    if (!agentFile) {
+      const agentMdPath = path.join(project.path, 'AGENT.md');
+      if (fs.existsSync(agentMdPath)) {
+        agentFile = agentMdPath;
       }
     }
 
@@ -148,6 +150,8 @@ export class ProcessManager extends EventEmitter {
       resumeSessionId: config.resumeSessionId,
       planMode: config.planMode,
       pooledTerminal,
+      agentFile,
+      agents: config.agents || project.agents, // Custom agents from config or project
     });
 
     this.setupInstanceListeners(instance);
@@ -184,6 +188,13 @@ export class ProcessManager extends EventEmitter {
       throw new Error(`Project with id ${config.projectId} not found`);
     }
 
+    // Check for AGENT.md in project directory (orchestration instructions)
+    let agentFile: string | undefined;
+    const agentMdPath = path.join(project.path, 'AGENT.md');
+    if (fs.existsSync(agentMdPath)) {
+      agentFile = agentMdPath;
+    }
+
     const instance = new ClaudeInstance({
       projectId: config.projectId,
       projectPath: project.path,
@@ -192,6 +203,8 @@ export class ProcessManager extends EventEmitter {
       skipPermissions: project.skipPermissions,
       enableMcp: project.enableMcp,
       resumeSessionId: config.sessionId,
+      agentFile,
+      agents: project.agents, // Custom agents from project settings
     });
 
     this.setupInstanceListeners(instance);
@@ -221,12 +234,17 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Add message to output buffer
+   * Add message to output buffer (with limit to prevent memory bloat)
    */
   private addToOutputBuffer(instanceId: string, message: StreamMessage): void {
     const buffer = this.instanceOutputs.get(instanceId);
     if (buffer) {
       buffer.messages.push(message);
+
+      // Enforce max message count by removing oldest messages
+      if (buffer.messages.length > ProcessManager.MAX_MESSAGE_COUNT) {
+        buffer.messages.splice(0, buffer.messages.length - ProcessManager.MAX_MESSAGE_COUNT);
+      }
     }
   }
 
@@ -331,29 +349,41 @@ export class ProcessManager extends EventEmitter {
     });
 
     instance.on('exit', (code: number) => {
+      // Capture instance ID before cleanup (in case it's needed after listeners are removed)
+      const instanceId = instance.id;
+
       // Broadcast to all destinations
-      this.broadcastInstanceEvent('exit', instance.id, code);
+      this.broadcastInstanceEvent('exit', instanceId, code);
 
       // Mark conversation as completed on exit
-      const conversationId = this.instanceConversations.get(instance.id);
+      const conversationId = this.instanceConversations.get(instanceId);
       if (conversationId) {
         this.dataStore.updateConversation(conversationId, { status: 'completed' });
       }
 
-      // Clean up file locks for this instance
-      getFileLockManagerModule()
-        .then((module) => {
-          const fileLockManager = module.getFileLockManager();
-          fileLockManager.cleanupInstance(instance.id);
-        })
-        .catch((error) => {
-          console.error('[ProcessManager] Failed to cleanup file locks:', error);
-        });
+      // Schedule delayed cleanup to allow UI to show completion status
+      // Use setImmediate to ensure all pending events in the current tick are processed
+      // before removing listeners, preventing race conditions with in-flight events
+      setImmediate(() => {
+        // Remove listeners first to prevent any further event processing
+        instance.removeAllListeners();
 
-      // Remove event listeners but schedule delayed cleanup
-      // This allows the UI to show completion status before removing the instance
-      instance.removeAllListeners();
-      this.scheduleCleanup(instance.id);
+        // Clean up file locks (async, but doesn't need instance listeners)
+        getFileLockManagerModule()
+          .then((module) => {
+            const fileLockManager = module.getFileLockManager();
+            fileLockManager.cleanupInstance(instanceId);
+          })
+          .catch((error) => {
+            console.error(
+              `[ProcessManager] Failed to cleanup file locks for ${instanceId}:`,
+              error
+            );
+          });
+
+        // Schedule instance removal
+        this.scheduleCleanup(instanceId);
+      });
     });
 
     instance.on('rawOutput', (data: string) => {
@@ -375,29 +405,33 @@ export class ProcessManager extends EventEmitter {
       } else {
         // Store sessionId for later - conversation mapping may not exist yet (race condition fix)
         this.pendingSessionIds.set(instance.id, sessionId);
-        console.log(
-          `[ProcessManager] Stored pending sessionId for instance ${instance.id}: ${sessionId}`
-        );
       }
     });
 
     // Subagent events (native Claude Task tool)
     instance.on('subagent:started', (data: { instanceId: string; subagent: SubagentInstance }) => {
-      console.log(
-        `[ProcessManager] Received subagent:started for instance ${data.instanceId}, subagent ${data.subagent.id}`
-      );
       this.broadcastInstanceEvent('subagentStarted', data.instanceId, data.subagent);
     });
 
     instance.on(
       'subagent:completed',
       (data: { instanceId: string; subagent: SubagentInstance }) => {
-        console.log(
-          `[ProcessManager] Received subagent:completed for instance ${data.instanceId}, subagent ${data.subagent.id}`
-        );
         this.broadcastInstanceEvent('subagentCompleted', data.instanceId, data.subagent);
       }
     );
+
+    // Task events (Claude Code TaskCreate/TaskUpdate/TaskList tools)
+    instance.on('task:created', (data: { instanceId: string; task: TrackedTask }) => {
+      this.broadcastInstanceEvent('taskCreated', data.instanceId, data.task);
+    });
+
+    instance.on('task:updated', (data: { instanceId: string; task: TrackedTask }) => {
+      this.broadcastInstanceEvent('taskUpdated', data.instanceId, data.task);
+    });
+
+    instance.on('task:list', (data: { instanceId: string; tasks: TrackedTask[] }) => {
+      this.broadcastInstanceEvent('taskList', data.instanceId, data.tasks);
+    });
   }
 
   /**
@@ -722,6 +756,8 @@ export class ProcessManager extends EventEmitter {
     this.pendingSessionIds.delete(id);
     // Clean up cluster permissions for this instance
     this.dataStore.deleteInstanceClusterPermissions(id);
+    // Clean up terminal dimension tracking for this instance
+    getTerminalDimensionManager().cleanup(id);
     this.emit('instanceRemoved', id);
   }
 
@@ -741,7 +777,6 @@ export class ProcessManager extends EventEmitter {
       // Only cleanup if instance is no longer running
       const instance = this.instances.get(instanceId);
       if (instance && !instance.isRunning) {
-        console.log(`[ProcessManager] Auto-cleaning up instance ${instanceId} after delay`);
         this.cleanupInstance(instanceId);
         this.broadcastStateUpdate();
       }
@@ -773,7 +808,6 @@ export class ProcessManager extends EventEmitter {
   sendRemoteInput(instanceId: string, input: string, sourceNodeId: string): boolean {
     const instance = this.instances.get(instanceId);
     if (!instance) {
-      console.log(`[ProcessManager] sendRemoteInput: instance ${instanceId} not found`);
       return false;
     }
 
@@ -784,9 +818,6 @@ export class ProcessManager extends EventEmitter {
     const check = validator.validateAction('send_input', sourceNodeId, config.nodeId, instanceId);
 
     if (!check.allowed) {
-      console.log(
-        `[ProcessManager] sendRemoteInput denied for instance ${instanceId}: ${check.reason}`
-      );
       return false;
     }
 

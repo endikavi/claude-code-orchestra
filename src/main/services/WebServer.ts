@@ -21,13 +21,16 @@ function getElectronApp(): { isPackaged: boolean; getPath: (name: string) => str
   }
 }
 
+import { IPC_CHANNELS } from '../ipc/channels';
 import { getAuthService } from './AuthService';
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
 import { getSubagentTracker } from './SubagentTracker';
+import { getTaskTracker } from './TaskTracker';
 import { getClusterManager } from './ClusterManager';
 import { getAuditLogger } from './AuditLogger';
 import { getStateSyncManager } from './managers/StateSyncManager';
+import { getTerminalDimensionManager } from './TerminalDimensionManager';
 import { McpServer } from './mcp/McpServer';
 import { MetricsService } from './MetricsService';
 import { GitStatusManager } from './GitStatusManager';
@@ -39,6 +42,7 @@ import {
   createConversationRoutes,
   createHookRoutes,
   createProxyRoutes,
+  createContextRoutes,
   type AuthenticatedRequest,
 } from './routes';
 import type {
@@ -48,7 +52,7 @@ import type {
   SyncState,
 } from '@shared/types/remote';
 import { DEFAULT_REMOTE_PORT } from '@shared/types/remote';
-import type { StreamMessage, InstanceStatus } from '@shared/types';
+import type { StreamMessage, InstanceStatus, TrackedTask } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
 
 // DevTools console entry interface (simplified for server-side storage)
@@ -61,6 +65,11 @@ interface ServerConsoleEntry {
   line?: number;
 }
 
+// DevTools memory limits
+const DEVTOOLS_MAX_ENTRIES_PER_VIEW = 1000;
+const DEVTOOLS_MAX_MESSAGE_SIZE = 10000; // 10KB max per message
+const DEVTOOLS_TRUNCATION_SUFFIX = '... [truncated]';
+
 export class WebServer extends EventEmitter {
   private static instance: WebServer | null = null;
 
@@ -70,6 +79,7 @@ export class WebServer extends EventEmitter {
   private isRunning = false;
   private currentPort: number = DEFAULT_REMOTE_PORT;
   private authenticatedSockets: Map<string, string> = new Map(); // socketId -> sessionId
+  private socketSubscriptions: Map<string, Set<string>> = new Map(); // socketId -> Set<instanceId>
   private clusterStateHandler: (() => void) | null = null;
   private processManagerHandler: (() => void) | null = null;
   private mainWindow: import('electron').BrowserWindow | null = null;
@@ -79,6 +89,7 @@ export class WebServer extends EventEmitter {
   private devToolsConsoleEntries: Map<string, ServerConsoleEntry[]> = new Map(); // viewId -> entries
   private devToolsInspectorState: Map<string, boolean> = new Map(); // viewId -> enabled
   private instanceViewMap: Map<string, string> = new Map(); // instanceId -> viewId
+  private socketViewMap: Map<string, Set<string>> = new Map(); // socketId -> Set<viewId>
 
   private constructor() {
     super();
@@ -168,11 +179,11 @@ export class WebServer extends EventEmitter {
     // JSON body parser
     this.app.use(express.json());
 
-    // Logging middleware
-    this.app.use((req: Request, _res: Response, next: NextFunction) => {
-      console.log(`[WebServer] ${req.method} ${req.path}`);
-      next();
-    });
+    // Logging middleware (disabled for production - uncomment for debugging)
+    // this.app.use((req: Request, _res: Response, next: NextFunction) => {
+    //   console.log(`[WebServer] ${req.method} ${req.path}`);
+    //   next();
+    // });
   }
 
   /**
@@ -397,10 +408,37 @@ export class WebServer extends EventEmitter {
       res.json({ success: true, data: subagents });
     });
 
+    // Tasks endpoint (get all tasks across all instances)
+    this.app.get('/api/tasks', this.authMiddleware, (_req: Request, res: Response) => {
+      const tracker = getTaskTracker();
+      const tasks = tracker.getAllTasks();
+      res.json({ success: true, data: tasks });
+    });
+
+    // Tasks by instance endpoint
+    this.app.get('/api/tasks/:instanceId', this.authMiddleware, (req: Request, res: Response) => {
+      const tracker = getTaskTracker();
+      const instanceId = Array.isArray(req.params.instanceId)
+        ? req.params.instanceId[0]
+        : req.params.instanceId;
+      const tasks = tracker.getTasks(instanceId);
+      res.json({ success: true, data: tasks });
+    });
+
     // Hook routes (no auth - local hook scripts)
     this.app.use(
       '/api/hooks',
       createHookRoutes({
+        emitter: this,
+        getIO: () => this.io,
+        sendToRenderer: (channel, ...args) => this.sendToRenderer(channel, ...args),
+      })
+    );
+
+    // Context routes (no auth - local instances share context)
+    this.app.use(
+      '/api/hooks/context',
+      createContextRoutes({
         emitter: this,
         getIO: () => this.io,
         sendToRenderer: (channel, ...args) => this.sendToRenderer(channel, ...args),
@@ -612,7 +650,7 @@ export class WebServer extends EventEmitter {
         processManager.sendInput(instanceId, input);
       });
 
-      // Handle instance resize with validation
+      // Handle instance resize with validation and dimension synchronization
       socket.on('instance:resize', (instanceId, cols, rows) => {
         // Validate resize parameters
         if (typeof instanceId !== 'string' || instanceId.length === 0 || instanceId.length > 128) {
@@ -624,8 +662,32 @@ export class WebServer extends EventEmitter {
         if (cols < 1 || cols > 1000 || rows < 1 || rows > 1000) {
           return;
         }
-        const processManager = getProcessManager();
-        processManager.resizeInstance(instanceId, cols, rows);
+
+        // Update dimension tracking
+        const clientId = `web:${socket.id}`;
+        const dimManager = getTerminalDimensionManager();
+        const result = dimManager.updateClientDimensions(instanceId, clientId, cols, rows);
+
+        if (result.changed) {
+          // Resize PTY to minimum dimensions
+          const processManager = getProcessManager();
+          processManager.resizeInstance(instanceId, result.min.cols, result.min.rows);
+
+          // Broadcast synchronized dimensions to all web clients
+          if (this.io) {
+            this.io.emit('instance:dimensionSync', instanceId, result.min.cols, result.min.rows);
+          }
+
+          // Also send to Electron renderer via IPC
+          if (this.mainWindow) {
+            this.mainWindow.webContents.send(
+              IPC_CHANNELS.INSTANCE_DIMENSION_SYNC,
+              instanceId,
+              result.min.cols,
+              result.min.rows
+            );
+          }
+        }
       });
 
       // Handle instance subscription (for focused real-time updates)
@@ -635,6 +697,22 @@ export class WebServer extends EventEmitter {
           return;
         }
         await socket.join(`instance:${instanceId}`);
+
+        // Track subscription for cleanup on disconnect
+        let subscriptions = this.socketSubscriptions.get(socket.id);
+        if (!subscriptions) {
+          subscriptions = new Set();
+          this.socketSubscriptions.set(socket.id, subscriptions);
+        }
+        subscriptions.add(instanceId);
+
+        // Send current minimum dimensions to the new client (if available)
+        const dimManager = getTerminalDimensionManager();
+        const minDims = dimManager.getMinDimensions(instanceId);
+        if (minDims) {
+          socket.emit('instance:dimensionSync', instanceId, minDims.cols, minDims.rows);
+        }
+
         // Confirm subscription to client
         if (typeof callback === 'function') {
           callback({ success: true });
@@ -647,6 +725,38 @@ export class WebServer extends EventEmitter {
           return;
         }
         await socket.leave(`instance:${instanceId}`);
+
+        // Remove from subscription tracking
+        const subscriptions = this.socketSubscriptions.get(socket.id);
+        if (subscriptions) {
+          subscriptions.delete(instanceId);
+        }
+
+        // Remove from dimension tracking and recalculate
+        const clientId = `web:${socket.id}`;
+        const dimManager = getTerminalDimensionManager();
+        const result = dimManager.removeClient(instanceId, clientId);
+
+        // If minimum changed and there are still clients, resize PTY and broadcast
+        if (result.changed && result.min) {
+          const processManager = getProcessManager();
+          processManager.resizeInstance(instanceId, result.min.cols, result.min.rows);
+
+          if (this.io) {
+            this.io.emit('instance:dimensionSync', instanceId, result.min.cols, result.min.rows);
+          }
+
+          // Also send to Electron renderer
+          if (this.mainWindow) {
+            this.mainWindow.webContents.send(
+              IPC_CHANNELS.INSTANCE_DIMENSION_SYNC,
+              instanceId,
+              result.min.cols,
+              result.min.rows
+            );
+          }
+        }
+
         if (typeof callback === 'function') {
           callback({ success: true });
         }
@@ -662,11 +772,23 @@ export class WebServer extends EventEmitter {
       socket.on('devtools:registerView', (data: { viewId: string; instanceId: string }) => {
         if (!data?.viewId || !data?.instanceId) return;
         this.registerProxyView(data.viewId, data.instanceId);
+        // Track which socket registered this view for cleanup on disconnect
+        let socketViews = this.socketViewMap.get(socket.id);
+        if (!socketViews) {
+          socketViews = new Set();
+          this.socketViewMap.set(socket.id, socketViews);
+        }
+        socketViews.add(data.viewId);
       });
 
       socket.on('devtools:unregisterView', (data: { viewId: string }) => {
         if (!data?.viewId) return;
         this.unregisterProxyView(data.viewId);
+        // Remove from socket tracking
+        const socketViews = this.socketViewMap.get(socket.id);
+        if (socketViews) {
+          socketViews.delete(data.viewId);
+        }
       });
 
       socket.on(
@@ -714,6 +836,53 @@ export class WebServer extends EventEmitter {
       socket.on('disconnect', () => {
         console.log(`[WebServer] Socket disconnected: ${socket.id}`);
         this.authenticatedSockets.delete(socket.id);
+
+        // Clean up DevTools data for views registered by this socket
+        const socketViews = this.socketViewMap.get(socket.id);
+        if (socketViews) {
+          for (const viewId of socketViews) {
+            this.unregisterProxyView(viewId);
+          }
+          this.socketViewMap.delete(socket.id);
+        }
+
+        // Clean up dimension tracking for all subscribed instances
+        const subscriptions = this.socketSubscriptions.get(socket.id);
+        if (subscriptions) {
+          const clientId = `web:${socket.id}`;
+          const dimManager = getTerminalDimensionManager();
+          const processManager = getProcessManager();
+
+          for (const instanceId of subscriptions) {
+            const result = dimManager.removeClient(instanceId, clientId);
+
+            // If minimum changed and there are still clients, resize PTY and broadcast
+            if (result.changed && result.min) {
+              processManager.resizeInstance(instanceId, result.min.cols, result.min.rows);
+
+              if (this.io) {
+                this.io.emit(
+                  'instance:dimensionSync',
+                  instanceId,
+                  result.min.cols,
+                  result.min.rows
+                );
+              }
+
+              // Also send to Electron renderer
+              if (this.mainWindow) {
+                this.mainWindow.webContents.send(
+                  IPC_CHANNELS.INSTANCE_DIMENSION_SYNC,
+                  instanceId,
+                  result.min.cols,
+                  result.min.rows
+                );
+              }
+            }
+          }
+
+          this.socketSubscriptions.delete(socket.id);
+        }
       });
     });
   }
@@ -803,6 +972,33 @@ export class WebServer extends EventEmitter {
   }
 
   /**
+   * Broadcast task created event to web clients
+   */
+  public broadcastTaskCreated(instanceId: string, task: TrackedTask): void {
+    if (this.io) {
+      this.io.emit('task:created', { instanceId, task });
+    }
+  }
+
+  /**
+   * Broadcast task updated event to web clients
+   */
+  public broadcastTaskUpdated(instanceId: string, task: TrackedTask): void {
+    if (this.io) {
+      this.io.emit('task:updated', { instanceId, task });
+    }
+  }
+
+  /**
+   * Broadcast task list event to web clients
+   */
+  public broadcastTaskList(instanceId: string, tasks: TrackedTask[]): void {
+    if (this.io) {
+      this.io.emit('task:list', { instanceId, tasks });
+    }
+  }
+
+  /**
    * Broadcast instance hook status update to web clients
    */
   public broadcastInstanceHookStatus(
@@ -825,6 +1021,50 @@ export class WebServer extends EventEmitter {
   }): void {
     if (this.io) {
       this.io.emit('hook:activity', data);
+    }
+  }
+
+  /**
+   * Broadcast context instance update to web clients
+   */
+  public broadcastContextInstanceUpdate(
+    projectId: string,
+    context: import('@shared/types/sharedContext').SharedInstanceContext
+  ): void {
+    if (this.io) {
+      this.io.emit('context:instanceUpdated', { projectId, context });
+    }
+  }
+
+  /**
+   * Broadcast context knowledge update to web clients
+   */
+  public broadcastContextKnowledgeUpdate(
+    projectId: string,
+    knowledge: import('@shared/types/sharedContext').ProjectSharedKnowledge
+  ): void {
+    if (this.io) {
+      this.io.emit('context:knowledgeUpdated', { projectId, knowledge });
+    }
+  }
+
+  /**
+   * Broadcast generic context update event to web clients
+   */
+  public broadcastContextUpdate(
+    event: import('@shared/types/sharedContext').ContextUpdateEvent
+  ): void {
+    if (this.io) {
+      this.io.emit('context:updated', event);
+    }
+  }
+
+  /**
+   * Broadcast terminal dimension sync to all web clients
+   */
+  public broadcastDimensionSync(instanceId: string, cols: number, rows: number): void {
+    if (this.io) {
+      this.io.emit('instance:dimensionSync', instanceId, cols, rows);
     }
   }
 
@@ -874,15 +1114,25 @@ export class WebServer extends EventEmitter {
    */
   public addDevToolsConsoleEntry(viewId: string, entry: Omit<ServerConsoleEntry, 'id'>): void {
     const entries = this.devToolsConsoleEntries.get(viewId) || [];
+
+    // Truncate message if too large to prevent memory spikes
+    let message = entry.message;
+    if (message.length > DEVTOOLS_MAX_MESSAGE_SIZE) {
+      message =
+        message.substring(0, DEVTOOLS_MAX_MESSAGE_SIZE - DEVTOOLS_TRUNCATION_SUFFIX.length) +
+        DEVTOOLS_TRUNCATION_SUFFIX;
+    }
+
     const newEntry: ServerConsoleEntry = {
       ...entry,
+      message,
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     };
     entries.push(newEntry);
 
-    // Keep max 1000 entries
-    if (entries.length > 1000) {
-      entries.splice(0, entries.length - 1000);
+    // Keep max entries per view
+    if (entries.length > DEVTOOLS_MAX_ENTRIES_PER_VIEW) {
+      entries.splice(0, entries.length - DEVTOOLS_MAX_ENTRIES_PER_VIEW);
     }
 
     this.devToolsConsoleEntries.set(viewId, entries);
@@ -1106,8 +1356,9 @@ export class WebServer extends EventEmitter {
         resolve();
       }
 
-      // Clear authenticated sockets
+      // Clear authenticated sockets and subscriptions
       this.authenticatedSockets.clear();
+      this.socketSubscriptions.clear();
 
       // Unsubscribe from cluster state changes
       if (this.clusterStateHandler) {

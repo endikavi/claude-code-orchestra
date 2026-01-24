@@ -62,6 +62,7 @@ export interface PermissionCheckResponse {
   decision: PermissionDecision;
   reason?: string;
   ruleId?: string; // ID of rule that matched
+  additionalContext?: string; // Context to inject for the model (e.g., reminders)
 }
 
 // Permission log entry

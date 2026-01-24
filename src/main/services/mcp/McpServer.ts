@@ -11,6 +11,7 @@ import { DataStore } from '../DataStore';
 import { GitStatusManager } from '../GitStatusManager';
 import { registerProjectTools } from './tools/ProjectTools';
 import { registerProxyTools } from './tools/ProxyTools';
+import { registerContextTools } from './tools/ContextTools';
 
 /**
  * MCP Server Implementation
@@ -47,6 +48,9 @@ export class McpServer {
 
     // Register proxy/preview tools
     registerProxyTools(this.tools, {});
+
+    // Register shared context tools
+    registerContextTools(this.tools);
 
     console.log(`[MCP] Initialized ${this.tools.size} tools`);
   }
@@ -197,7 +201,6 @@ export class McpServer {
     }
 
     try {
-      console.log(`[MCP] Executing tool: ${toolName}`, args);
       const result = await tool.handler(args, context);
 
       return {

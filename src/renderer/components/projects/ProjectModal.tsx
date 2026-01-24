@@ -43,6 +43,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const [color, setColor] = useState(existingProject?.color || PROJECT_COLORS[0]);
   const [skipPermissions, setSkipPermissions] = useState(existingProject?.skipPermissions || false);
   const [enableMcp, setEnableMcp] = useState(existingProject?.enableMcp || false);
+  const [autoReview, setAutoReview] = useState(existingProject?.autoReview ?? true); // Default enabled
   const [preferredShell, setPreferredShell] = useState(existingProject?.preferredShell || '');
   const [availableShells, setAvailableShells] = useState<AvailableShell[]>([]);
   const [isLoadingShells, setIsLoadingShells] = useState(true);
@@ -169,6 +170,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           color,
           skipPermissions,
           enableMcp,
+          autoReview,
           preferredShell: preferredShell || undefined,
           clusterPermissions,
         });
@@ -191,6 +193,11 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           // Remove hooks from project
           await window.electronAPI.hook.removeProject(projectPath);
         }
+
+        // Set up AGENT.md for orchestration if MCP is enabled (idempotent - won't overwrite existing)
+        if (enableMcp) {
+          await window.electronAPI.orchestration.setupAgentMd(projectPath);
+        }
       } else {
         await createProject({
           name: name.trim(),
@@ -199,6 +206,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           color,
           skipPermissions,
           enableMcp,
+          autoReview,
           preferredShell: preferredShell || undefined,
           clusterPermissions,
         });
@@ -216,6 +224,11 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
             },
             selectedHookTemplate
           );
+        }
+
+        // Set up AGENT.md for orchestration if MCP is enabled
+        if (enableMcp) {
+          await window.electronAPI.orchestration.setupAgentMd(projectPath);
         }
       }
       onClose();
@@ -387,6 +400,29 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                 {t(
                   'project.enableMcpDescription',
                   'Allows Claude to use orchestration tools, access git status, and interact with Orchestra via MCP protocol'
+                )}
+              </p>
+            </div>
+          </label>
+        </div>
+
+        {/* Auto Review on Task Completion */}
+        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoReview}
+              onChange={(e) => setAutoReview(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-green-500 focus:ring-green-500 focus:ring-offset-claude-beige dark:focus:ring-offset-gray-800"
+            />
+            <div>
+              <span className="text-sm font-medium text-green-500 dark:text-green-400">
+                {t('project.autoReview', 'Auto-Review on Task Completion')}
+              </span>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                {t(
+                  'project.autoReviewDescription',
+                  'Automatically run typecheck and lint:fix when Claude completes a task. Uses economical Haiku model.'
                 )}
               </p>
             </div>

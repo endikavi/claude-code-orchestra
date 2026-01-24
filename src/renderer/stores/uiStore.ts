@@ -1,8 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import i18n from 'i18next';
-import type { Language } from '@shared/types';
-import type { UISettings, ViewMode, Theme, CollapsedSections } from '@shared/types/uiSettings';
+import type { Language, SharedContextSettings } from '@shared/types';
+import { DEFAULT_SHARED_CONTEXT_SETTINGS } from '@shared/types/sharedContext';
+import type {
+  UISettings,
+  ViewMode,
+  Theme,
+  CollapsedSections,
+  TerminalFont,
+} from '@shared/types/uiSettings';
 
 interface UIState extends UISettings {
   _hasHydrated: boolean;
@@ -42,6 +49,13 @@ interface UIState extends UISettings {
   // Section collapse actions
   toggleSectionCollapsed: (sectionId: string) => void;
   setSectionCollapsed: (sectionId: string, collapsed: boolean) => void;
+
+  // Terminal settings
+  setTerminalFont: (font: TerminalFont) => void;
+
+  // Shared context settings
+  sharedContext: SharedContextSettings;
+  setSharedContext: (settings: Partial<SharedContextSettings>) => void;
 }
 
 // Check if running in Electron with uiSettings API
@@ -105,6 +119,8 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
       projectOrder: [],
       collapsedSections: { local: false, clusters: {} },
+      terminalFont: 'system',
+      sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
       sidebarMobileOpen: false,
       showProjectModal: false,
       showInstanceModal: false,
@@ -128,6 +144,8 @@ export const useUIStore = create<UIState>()(
               sidebarCollapsed: settings.sidebarCollapsed,
               projectOrder: settings.projectOrder || [],
               collapsedSections: settings.collapsedSections || { local: false, clusters: {} },
+              terminalFont: settings.terminalFont || 'system',
+              sharedContext: settings.sharedContext || DEFAULT_SHARED_CONTEXT_SETTINGS,
               _hasHydrated: true,
             });
             // Apply theme and language after loading
@@ -290,6 +308,20 @@ export const useUIStore = create<UIState>()(
         set({ collapsedSections: newSections });
         saveToMain({ collapsedSections: newSections });
       },
+
+      // Terminal settings
+      setTerminalFont: (font) => {
+        set({ terminalFont: font });
+        saveToMain({ terminalFont: font });
+      },
+
+      // Shared context settings
+      setSharedContext: (settings) => {
+        const current = get().sharedContext;
+        const updated = { ...current, ...settings };
+        set({ sharedContext: updated });
+        saveToMain({ sharedContext: updated });
+      },
     }),
     {
       name: 'claude-code-orchestra-ui',
@@ -302,6 +334,8 @@ export const useUIStore = create<UIState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         projectOrder: state.projectOrder,
         collapsedSections: state.collapsedSections,
+        terminalFont: state.terminalFont,
+        sharedContext: state.sharedContext,
       }),
       onRehydrateStorage: () => (state) => {
         if (state && !isElectron()) {

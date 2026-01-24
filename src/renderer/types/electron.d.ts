@@ -10,6 +10,10 @@ import type {
   McpServer,
   InstanceStatus,
   StreamMessage,
+  SharedInstanceContext,
+  ProjectSharedKnowledge,
+  ProjectContextSummary,
+  ContextUpdateEvent,
 } from '@shared/types';
 
 declare global {
@@ -41,6 +45,9 @@ declare global {
         onRawOutput: (callback: (instanceId: string, data: string) => void) => () => void;
         onSessionId: (callback: (instanceId: string, sessionId: string) => void) => () => void;
         onTerminalTitle: (callback: (instanceId: string, title: string) => void) => () => void;
+        onDimensionSync: (
+          callback: (instanceId: string, cols: number, rows: number) => void
+        ) => () => void;
         onSync: (callback: (instances: ClaudeInstance[]) => void) => () => void;
         setTitle: (id: string, title: string) => Promise<void>;
         resume: (config: {
@@ -68,6 +75,26 @@ declare global {
             event: Electron.IpcRendererEvent,
             data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
           ) => void
+        ) => () => void;
+      };
+      context: {
+        getInstances: (projectId: string) => Promise<SharedInstanceContext[]>;
+        getInstance: (instanceId: string) => Promise<SharedInstanceContext | null>;
+        getProjectKnowledge: (projectId: string) => Promise<ProjectSharedKnowledge | null>;
+        getSummary: (projectId: string) => Promise<ProjectContextSummary>;
+        getStats: () => Promise<{
+          activeInstances: number;
+          projectsWithKnowledge: number;
+          totalConventions: number;
+          totalImportantFiles: number;
+          totalWarnings: number;
+        }>;
+        onUpdated: (callback: (event: ContextUpdateEvent) => void) => () => void;
+        onInstanceUpdated: (
+          callback: (projectId: string, context: SharedInstanceContext) => void
+        ) => () => void;
+        onKnowledgeUpdated: (
+          callback: (projectId: string, knowledge: ProjectSharedKnowledge) => void
         ) => () => void;
       };
     };

@@ -67,7 +67,7 @@ const HOOK_TEMPLATES: Record<HookTemplateType, HookTemplate> = {
       Stop: [],
       SessionStart: [],
     },
-    skills: ['dashboard-status', 'fetch-context', 'collaborative-awareness'],
+    skills: ['dashboard-status', 'fetch-context', 'collaborative-awareness', 'shared-context'],
     settings: {
       enableNotifications: true,
       enableToolTracking: true,
@@ -105,7 +105,13 @@ const HOOK_TEMPLATES: Record<HookTemplateType, HookTemplate> = {
       SessionStart: [],
       SessionEnd: [],
     },
-    skills: ['dashboard-status', 'fetch-context', 'collaborative-awareness'],
+    skills: [
+      'dashboard-status',
+      'fetch-context',
+      'collaborative-awareness',
+      'shared-context',
+      'auto-lint-subagent',
+    ],
     settings: {
       enableNotifications: true,
       enableToolTracking: true,
@@ -332,13 +338,18 @@ try {
 
         if ($response.decision -eq "allow") {
             # Complete hook output format per Claude Code specification
+            $hookOutput = @{
+                permissionDecision = "allow"
+                permissionDecisionReason = $response.reason
+            }
+            # Add additionalContext if present (e.g., lint reminders from auto-lint-subagent skill)
+            if ($response.additionalContext) {
+                $hookOutput.additionalContext = $response.additionalContext
+            }
             $output = @{
                 continue = $true
                 suppressOutput = $false
-                hookSpecificOutput = @{
-                    permissionDecision = "allow"
-                    permissionDecisionReason = $response.reason
-                }
+                hookSpecificOutput = $hookOutput
             } | ConvertTo-Json -Depth 10 -Compress
             Write-Output $output
             exit 0
@@ -415,10 +426,16 @@ RESPONSE=$(curl -s -X POST "${apiUrl}" \\
 if [ -n "$RESPONSE" ]; then
     DECISION=$(echo "$RESPONSE" | jq -r '.decision // empty' 2>/dev/null)
     REASON=$(echo "$RESPONSE" | jq -r '.reason // empty' 2>/dev/null)
+    ADDITIONAL_CONTEXT=$(echo "$RESPONSE" | jq -r '.additionalContext // empty' 2>/dev/null)
 
     if [ "$DECISION" = "allow" ]; then
         # Complete hook output format per Claude Code specification
-        jq -n --arg reason "$REASON" '{continue:true,suppressOutput:false,hookSpecificOutput:{permissionDecision:"allow",permissionDecisionReason:$reason}}'
+        # Include additionalContext if present (e.g., lint reminders from auto-lint-subagent skill)
+        if [ -n "$ADDITIONAL_CONTEXT" ]; then
+            jq -n --arg reason "$REASON" --arg ctx "$ADDITIONAL_CONTEXT" '{continue:true,suppressOutput:false,hookSpecificOutput:{permissionDecision:"allow",permissionDecisionReason:$reason,additionalContext:$ctx}}'
+        else
+            jq -n --arg reason "$REASON" '{continue:true,suppressOutput:false,hookSpecificOutput:{permissionDecision:"allow",permissionDecisionReason:$reason}}'
+        fi
         exit 0
     elif [ "$DECISION" = "deny" ]; then
         # Output deny with complete format before exiting with code 2

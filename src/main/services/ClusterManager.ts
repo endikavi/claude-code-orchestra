@@ -11,6 +11,7 @@ type BrowserWindowType = import('electron').BrowserWindow;
 import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
 import { getClusterPermissionValidator } from './ClusterPermissionValidator';
+import { getTerminalDimensionManager } from './TerminalDimensionManager';
 import type {
   ClusterConfig,
   ClusterNode,
@@ -444,15 +445,7 @@ export class ClusterManager extends EventEmitter {
       const auth = socket.handshake.auth as { nodeId?: string; sharedSecret?: string };
       const { nodeId, sharedSecret } = auth;
 
-      console.log('[ClusterManager] Auth attempt from node:', nodeId);
-      console.log('[ClusterManager] Received secret length:', sharedSecret?.length || 0);
-      console.log(
-        '[ClusterManager] Received secret (first 8 chars):',
-        sharedSecret?.substring(0, 8) || 'none'
-      );
-
       if (!nodeId || !sharedSecret) {
-        console.log('[ClusterManager] Rejected: Missing nodeId or sharedSecret');
         next(new Error('Authentication required'));
         return;
       }
@@ -461,35 +454,24 @@ export class ClusterManager extends EventEmitter {
       this.loadConfig();
       const config = this.getConfig();
 
-      console.log('[ClusterManager] Expected secret length:', config.sharedSecret?.length || 0);
-      console.log(
-        '[ClusterManager] Expected secret (first 8 chars):',
-        config.sharedSecret?.substring(0, 8) || 'none'
-      );
-
       if (config.role !== 'primary') {
-        console.log('[ClusterManager] Rejected: This node is not primary, role is:', config.role);
         next(new Error('This node is not a primary node'));
         return;
       }
 
       // Use timing-safe comparison to prevent timing attacks
       if (!config.sharedSecret || !safeCompare(sharedSecret, config.sharedSecret)) {
-        console.log('[ClusterManager] Rejected: Secret mismatch');
-        console.log('[ClusterManager] Secrets match check:', sharedSecret === config.sharedSecret);
         next(new Error('Invalid shared secret'));
         return;
       }
-
-      console.log('[ClusterManager] Auth successful for node:', nodeId);
       // Store node info on socket
       (socket as ServerSocket & { nodeId?: string }).nodeId = nodeId;
       next();
     });
 
     this.io.on('connection', (socket) => {
-      const nodeId = (socket as ServerSocket & { nodeId?: string }).nodeId;
-      console.log(`[ClusterManager] Node connected: ${nodeId}`);
+      // nodeId is stored on socket during auth middleware
+      const _nodeId = (socket as ServerSocket & { nodeId?: string }).nodeId;
 
       // Handle node registration
       socket.on('node:register', (request: NodeRegistrationRequest) => {
@@ -610,10 +592,6 @@ export class ClusterManager extends EventEmitter {
       socket.on('instance:createRequest', (request: RemoteInstanceRequest) => {
         const connectedNodeId = this.clusterSockets.get(socket.id);
         if (connectedNodeId) {
-          console.log(
-            `[ClusterManager] Received createRequest from ${connectedNodeId} for node ${request.nodeId}`
-          );
-
           // Route to the correct node
           if (request.nodeId === this.localNodeId) {
             // Create locally on primary
@@ -643,16 +621,31 @@ export class ClusterManager extends EventEmitter {
       socket.on('instance:resizeRequest', (instanceId, nodeId, cols, rows) => {
         const connectedNodeId = this.clusterSockets.get(socket.id);
         if (connectedNodeId) {
-          console.log(
-            `[ClusterManager] Received resizeRequest from ${connectedNodeId} for node ${nodeId}`
-          );
+          // Track dimensions from this cluster client
+          const clientId = `cluster:${connectedNodeId}`;
+          const dimManager = getTerminalDimensionManager();
+          const result = dimManager.updateClientDimensions(instanceId, clientId, cols, rows);
 
           if (nodeId === this.localNodeId) {
-            // Resize locally on primary
-            getProcessManager().resizeInstance(instanceId, cols, rows);
+            // Resize locally on primary using synchronized dimensions
+            if (result.changed) {
+              getProcessManager().resizeInstance(instanceId, result.min.cols, result.min.rows);
+              // Broadcast synchronized dimensions to all cluster nodes
+              this.io?.emit('instance:dimensionSync', instanceId, result.min.cols, result.min.rows);
+            }
           } else {
-            // Forward to target secondary node
-            this.sendClusterCommand(nodeId, 'instance:resize', instanceId, cols, rows);
+            // Forward to target secondary node with synchronized dimensions
+            if (result.changed) {
+              this.sendClusterCommand(
+                nodeId,
+                'instance:resize',
+                instanceId,
+                result.min.cols,
+                result.min.rows
+              );
+              // Broadcast synchronized dimensions to all cluster nodes
+              this.io?.emit('instance:dimensionSync', instanceId, result.min.cols, result.min.rows);
+            }
           }
         }
       });
@@ -661,10 +654,6 @@ export class ClusterManager extends EventEmitter {
       socket.on('shell:createRequest', (nodeId: string, projectId: string) => {
         const connectedNodeId = this.clusterSockets.get(socket.id);
         if (connectedNodeId) {
-          console.log(
-            `[ClusterManager] Received shell:createRequest from ${connectedNodeId} for node ${nodeId}`
-          );
-
           if (nodeId === this.localNodeId) {
             // Create shell locally on primary
             const processManager = getProcessManager();
@@ -680,10 +669,6 @@ export class ClusterManager extends EventEmitter {
       socket.on('permissions:updated', (event: ClusterPermissionChangeEvent) => {
         const connectedNodeId = this.clusterSockets.get(socket.id);
         if (connectedNodeId) {
-          console.log(
-            `[ClusterManager] Received permissions:updated from ${connectedNodeId}:`,
-            event.type
-          );
           // Broadcast to all nodes including the sender
           this.io?.emit('permissions:changed', event);
           // Update local renderer
@@ -730,11 +715,26 @@ export class ClusterManager extends EventEmitter {
       // Handle disconnect
       socket.on('disconnect', () => {
         const disconnectedNodeId = this.clusterSockets.get(socket.id);
-        console.log(`[ClusterManager] Node disconnected: ${disconnectedNodeId}`);
 
         if (disconnectedNodeId) {
           this.handleNodeDisconnection(disconnectedNodeId);
           this.clusterSockets.delete(socket.id);
+
+          // Clean up dimension tracking for this node
+          const clientId = `cluster:${disconnectedNodeId}`;
+          const dimManager = getTerminalDimensionManager();
+          const processManager = getProcessManager();
+
+          // Remove from all instances and recalculate dimensions
+          for (const instanceId of dimManager.getTrackedInstances()) {
+            const result = dimManager.removeClient(instanceId, clientId);
+            if (result.changed && result.min) {
+              // Resize PTY to new minimum
+              processManager.resizeInstance(instanceId, result.min.cols, result.min.rows);
+              // Broadcast new dimensions to remaining nodes
+              this.io?.emit('instance:dimensionSync', instanceId, result.min.cols, result.min.rows);
+            }
+          }
 
           // Notify other nodes
           socket.broadcast.emit('node:left', disconnectedNodeId);
@@ -945,17 +945,12 @@ export class ClusterManager extends EventEmitter {
     nodeId: string,
     state: { projects: Project[]; instances: ClaudeInstance[] }
   ): void {
-    console.log(
-      `[ClusterManager] handleNodeStateUpdate from ${nodeId}: ${state.projects.length} projects, ${state.instances.length} instances`
-    );
     const node = this.nodes.get(nodeId);
     if (node) {
       node.projects = state.projects;
       node.instances = state.instances;
       node.lastSeen = Date.now();
       this.broadcastClusterState();
-    } else {
-      console.log(`[ClusterManager] Node ${nodeId} not found in nodes map`);
     }
   }
 
@@ -1021,11 +1016,6 @@ export class ClusterManager extends EventEmitter {
     try {
       const url = `http://${config.primaryHost}:${config.primaryPort}`;
       console.log(`[ClusterManager] Connecting to primary at ${url}`);
-      console.log(`[ClusterManager] Using nodeId: ${this.localNodeId}`);
-      console.log(`[ClusterManager] Using secret length: ${config.sharedSecret?.length || 0}`);
-      console.log(
-        `[ClusterManager] Using secret (first 8 chars): ${config.sharedSecret?.substring(0, 8) || 'none'}`
-      );
 
       this.clientSocket = io(url, {
         transports: ['websocket', 'polling'],
@@ -1148,9 +1138,14 @@ export class ClusterManager extends EventEmitter {
       processManager.resizeInstance(instanceId, cols, rows);
     });
 
+    // Handle terminal dimension synchronization from primary
+    this.clientSocket.on('instance:dimensionSync', (instanceId, cols, rows) => {
+      // Forward to local renderer to sync terminal dimensions
+      this.sendToRenderer(IPC_CHANNELS.INSTANCE_DIMENSION_SYNC, instanceId, cols, rows);
+    });
+
     // Handle shell creation command from primary
     this.clientSocket.on('shell:create', (projectId, _requestId) => {
-      console.log('[ClusterManager] Received shell:create command for project', projectId);
       const processManager = getProcessManager();
       processManager.createShellInstance(projectId);
       // Notify primary of state change
@@ -1202,7 +1197,6 @@ export class ClusterManager extends EventEmitter {
 
     // Handle permission change notifications from primary
     this.clientSocket.on('permissions:changed', (event: ClusterPermissionChangeEvent) => {
-      console.log('[ClusterManager] Received permissions:changed:', event.type);
       // Forward to renderer
       this.sendToRenderer('cluster:permissionsChanged', event);
       this.emit('permissionsChanged', event);
@@ -1210,7 +1204,6 @@ export class ClusterManager extends EventEmitter {
 
     // Handle permission denied notifications
     this.clientSocket.on('permissions:denied', (action: string, reason: string) => {
-      console.log(`[ClusterManager] Permission denied: ${action} - ${reason}`);
       this.sendToRenderer('cluster:permissionDenied', { action, reason });
     });
 
@@ -1301,16 +1294,12 @@ export class ClusterManager extends EventEmitter {
    */
   public sendStateUpdate(): void {
     if (!this.clientSocket?.connected) {
-      console.log('[ClusterManager] sendStateUpdate: not connected to primary');
       return;
     }
 
     const processManager = getProcessManager();
     const projects = this.dataStore.getAllProjects();
     const instances = processManager.getAllInstances();
-    console.log(
-      `[ClusterManager] sendStateUpdate: ${projects.length} projects, ${instances.length} instances`
-    );
     this.clientSocket.emit('state:update', {
       projects,
       instances,
@@ -1324,13 +1313,6 @@ export class ClusterManager extends EventEmitter {
   public notifyProjectChange(): void {
     const config = this.getConfig();
 
-    console.log(
-      '[ClusterManager] notifyProjectChange called, enabled:',
-      config.enabled,
-      'role:',
-      config.role
-    );
-
     // If cluster is not enabled, nothing to do
     if (!config.enabled) {
       return;
@@ -1340,20 +1322,13 @@ export class ClusterManager extends EventEmitter {
     const localNode = this.nodes.get(this.localNodeId);
     if (localNode) {
       localNode.projects = this.dataStore.getAllProjects();
-      console.log('[ClusterManager] Updated local node projects:', localNode.projects.length);
     }
 
     if (config.role === 'primary' && this.serverRunning) {
       // If primary, broadcast updated state to all connected nodes
-      console.log(
-        '[ClusterManager] Broadcasting as primary to',
-        this.clusterSockets.size,
-        'connected nodes'
-      );
       this.broadcastClusterState();
     } else if (config.role === 'secondary' && this.clientSocket?.connected) {
       // If secondary, send state update to primary
-      console.log('[ClusterManager] Sending state update as secondary');
       this.sendStateUpdate();
     }
   }
@@ -1449,16 +1424,8 @@ export class ClusterManager extends EventEmitter {
   private broadcastClusterStateImmediate(): void {
     const state = this.getClusterState();
 
-    console.log('[ClusterManager] broadcastClusterState - nodes:', state.nodes.length);
-    state.nodes.forEach((n) => {
-      console.log(
-        `  - Node ${n.name} (${n.id}): ${n.projects.length} projects, ${n.instances.length} instances`
-      );
-    });
-
     // Emit to all connected Socket.io clients (when acting as primary)
     if (this.io && this.serverRunning) {
-      console.log('[ClusterManager] Emitting cluster:state to Socket.io clients');
       this.io.emit('cluster:state', state);
     }
 
@@ -1545,10 +1512,6 @@ export class ClusterManager extends EventEmitter {
     // If we're secondary and request is for another node, forward to primary
     if (config.role === 'secondary' && this.clientSocket?.connected) {
       // Send request to primary to route to correct node
-      console.log(
-        '[ClusterManager] Sending instance:createRequest to primary for node',
-        request.nodeId
-      );
       this.clientSocket.emit('instance:createRequest', request);
       return null; // Instance will be created asynchronously
     }
@@ -1572,14 +1535,12 @@ export class ClusterManager extends EventEmitter {
 
     // If we're primary, send command to secondary node
     if (config.role === 'primary' && this.serverRunning) {
-      console.log('[ClusterManager] Sending shell:create to node', nodeId);
       this.sendClusterCommand(nodeId, 'shell:create', projectId, Date.now().toString());
       return;
     }
 
     // If we're secondary, forward request to primary
     if (config.role === 'secondary' && this.clientSocket?.connected) {
-      console.log('[ClusterManager] Sending shell:createRequest to primary for node', nodeId);
       this.clientSocket.emit('shell:createRequest', nodeId, projectId);
       return;
     }
@@ -1711,13 +1672,71 @@ export class ClusterManager extends EventEmitter {
   }
 
   /**
+   * Forward context event to cluster (primary or other nodes)
+   */
+  public forwardContextEvent(event: string, projectId: string, data: unknown): void {
+    const config = this.getConfig();
+
+    // If cluster is not enabled, nothing to do
+    if (!config.enabled) {
+      return;
+    }
+
+    // Secondary nodes forward to primary
+    if (config.role === 'secondary' && this.clientSocket?.connected) {
+      switch (event) {
+        case 'contextInstanceUpdated':
+          this.clientSocket.emit('context:instanceUpdated', {
+            projectId,
+            context: data as import('@shared/types/sharedContext').SharedInstanceContext,
+          });
+          break;
+        case 'contextKnowledgeUpdated':
+          this.clientSocket.emit('context:knowledgeUpdated', {
+            projectId,
+            knowledge: data as import('@shared/types/sharedContext').ProjectSharedKnowledge,
+          });
+          break;
+        case 'contextUpdated':
+          this.clientSocket.emit(
+            'context:updated',
+            data as import('@shared/types/sharedContext').ContextUpdateEvent
+          );
+          break;
+      }
+    }
+
+    // Primary nodes broadcast to all connected clients
+    if (config.role === 'primary' && this.serverRunning && this.io) {
+      switch (event) {
+        case 'contextInstanceUpdated':
+          this.io.emit('context:instanceUpdated', {
+            projectId,
+            context: data as import('@shared/types/sharedContext').SharedInstanceContext,
+          });
+          break;
+        case 'contextKnowledgeUpdated':
+          this.io.emit('context:knowledgeUpdated', {
+            projectId,
+            knowledge: data as import('@shared/types/sharedContext').ProjectSharedKnowledge,
+          });
+          break;
+        case 'contextUpdated':
+          this.io.emit(
+            'context:updated',
+            data as import('@shared/types/sharedContext').ContextUpdateEvent
+          );
+          break;
+      }
+    }
+  }
+
+  /**
    * Notify cluster of permission changes
    * Broadcasts permission change event to all connected nodes
    */
   public notifyPermissionChange(event: ClusterPermissionChangeEvent): void {
     const config = this.getConfig();
-
-    console.log('[ClusterManager] notifyPermissionChange:', event.type);
 
     // If cluster is not enabled, nothing to do
     if (!config.enabled) {

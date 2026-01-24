@@ -55,11 +55,29 @@
     "tabs": {
       "general": "General",
       "notifications": "Notificaciones",
+      "context": "Contexto",
       "remoteAccess": "Acceso Remoto",
       "proxy": "Proxy",
       "pool": "Pool",
       "security": "Seguridad",
       "cluster": "Clúster"
+    },
+    "context": {
+      "title": "Contexto Compartido",
+      "description": "Configura cómo las instancias de Claude comparten contexto entre sí dentro del mismo proyecto.",
+      "enabled": "Habilitar Contexto Compartido",
+      "enabledDesc": "Permite a las instancias compartir en qué están trabajando y conocimiento del proyecto.",
+      "autoPublish": "Auto-publicar Contexto",
+      "autoPublishDesc": "Detectar y compartir contexto automáticamente basado en el uso de herramientas (Read, Write, Bash).",
+      "injectOnStart": "Inyectar Contexto al Iniciar",
+      "injectOnStartDesc": "Inyectar automáticamente un resumen del contexto cuando se inicia una nueva instancia.",
+      "showPanel": "Mostrar Panel de Contexto",
+      "showPanelDesc": "Mostrar el panel de contexto compartido en la barra lateral.",
+      "retentionDays": "Retención de Conocimiento",
+      "retentionDaysDesc": "Número de días para retener el conocimiento del proyecto en la base de datos.",
+      "days": "días",
+      "infoTitle": "Cómo Funciona el Contexto Compartido",
+      "infoDesc": "Cuando está habilitado, las instancias de Claude pueden ver en qué están trabajando otras instancias, compartir patrones y convenciones descubiertas, y contribuir a una base de conocimiento compartida sobre el proyecto. Esto ayuda a múltiples agentes a coordinar su trabajo de manera más efectiva."
     }
   },
   "security": {
@@ -147,6 +165,8 @@
     "skipPermissionsDescription": "Las instancias se ejecutarán con --dangerously-skip-permissions. Usar con precaución - Claude ejecutará herramientas sin pedir confirmación.",
     "enableMcp": "Habilitar Servidor MCP",
     "enableMcpDescription": "Permite a Claude usar herramientas de orquestación, acceder al estado de git e interactuar con Orchestra via protocolo MCP",
+    "autoReview": "Auto-Revisión al Completar Tarea",
+    "autoReviewDescription": "Ejecutar typecheck y lint:fix automáticamente cuando Claude completa una tarea. Usa el modelo económico Haiku.",
     "loadSessionHistory": "Cargar Historial de Sesiones",
     "loadSessionHistoryDescription": "Importar sesiones anteriores de Claude Code CLI de este proyecto",
     "saveChanges": "Guardar Cambios",
@@ -513,6 +533,24 @@
       "Plan": "Planificar",
       "Bash": "Bash",
       "general-purpose": "General"
+    }
+  },
+  "tasks": {
+    "title": "Seguimiento de Tareas",
+    "description": "Descripción",
+    "empty": "Sin tareas",
+    "emptyHint": "Las tareas aparecerán cuando Claude use TaskCreate",
+    "blockedBy": "Bloqueada por {{count}}",
+    "blocks": "Bloquea {{count}}",
+    "status": {
+      "pending": "Pendiente",
+      "inProgress": "En Progreso",
+      "completed": "Completada"
+    },
+    "sections": {
+      "inProgress": "En Progreso",
+      "pending": "Pendientes",
+      "completed": "Completadas"
     }
   }
 }

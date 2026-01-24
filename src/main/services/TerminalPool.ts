@@ -35,8 +35,17 @@ export class TerminalPool extends EventEmitter {
   private fallbackCount: number = 0;
   private totalTimeSavedMs: number = 0;
 
+  // Spawn failure tracking for exponential backoff
+  private consecutiveSpawnFailures: number = 0;
+  private spawnBackoffTimer: NodeJS.Timeout | null = null;
+
   // Estimated spawn time for calculating time saved
   private static readonly ESTIMATED_SPAWN_TIME_MS = 300;
+
+  // Exponential backoff constants
+  private static readonly INITIAL_BACKOFF_MS = 1000; // Start with 1 second
+  private static readonly MAX_BACKOFF_MS = 60000; // Max 1 minute
+  private static readonly MAX_CONSECUTIVE_FAILURES = 5; // Pause spawning after this many failures
 
   private constructor() {
     super();
@@ -130,6 +139,9 @@ export class TerminalPool extends EventEmitter {
         this.acquireCount++;
         this.totalTimeSavedMs += TerminalPool.ESTIMATED_SPAWN_TIME_MS;
 
+        // Reset spawn failure counter - successful acquire proves terminals work
+        this.resetSpawnFailures();
+
         console.log(`[TerminalPool] Acquired terminal ${id}, ${this.getIdleCount()} remaining`);
 
         // Schedule replenishment
@@ -208,6 +220,14 @@ export class TerminalPool extends EventEmitter {
   private spawnTerminal(): Promise<void> {
     if (this.shuttingDown) return Promise.resolve();
 
+    // Check if we're in backoff due to consecutive failures
+    if (this.consecutiveSpawnFailures >= TerminalPool.MAX_CONSECUTIVE_FAILURES) {
+      console.log(
+        `[TerminalPool] Spawning paused due to ${this.consecutiveSpawnFailures} consecutive failures`
+      );
+      return Promise.resolve();
+    }
+
     const totalCount = this.pool.size;
     if (totalCount >= this.config.maxPoolSize) {
       console.log('[TerminalPool] At max capacity, not spawning');
@@ -259,6 +279,9 @@ export class TerminalPool extends EventEmitter {
 
       this.pool.set(id, terminal);
 
+      // Reset failure counter on successful spawn
+      this.consecutiveSpawnFailures = 0;
+
       // Set idle timeout if configured
       if (this.config.idleTimeoutMs > 0) {
         this.setIdleTimeout(id);
@@ -267,17 +290,82 @@ export class TerminalPool extends EventEmitter {
       console.log(`[TerminalPool] Spawned terminal ${id}, pool size: ${this.pool.size}`);
       this.emit('spawned', id);
     } catch (error) {
-      console.error(`[TerminalPool] Failed to spawn terminal:`, error);
-      this.emit('spawnError', error);
+      this.handleSpawnFailure(error);
     }
     return Promise.resolve();
+  }
+
+  /**
+   * Handle spawn failure with exponential backoff
+   */
+  private handleSpawnFailure(error: unknown): void {
+    this.consecutiveSpawnFailures++;
+    console.error(
+      `[TerminalPool] Failed to spawn terminal (failure ${this.consecutiveSpawnFailures}/${TerminalPool.MAX_CONSECUTIVE_FAILURES}):`,
+      error
+    );
+    this.emit('spawnError', error);
+
+    // Calculate backoff delay with exponential increase and jitter
+    const baseDelay = Math.min(
+      TerminalPool.INITIAL_BACKOFF_MS * Math.pow(2, this.consecutiveSpawnFailures - 1),
+      TerminalPool.MAX_BACKOFF_MS
+    );
+    // Add random jitter (0-25% of base delay)
+    const jitter = Math.random() * baseDelay * 0.25;
+    const backoffDelay = baseDelay + jitter;
+
+    console.log(`[TerminalPool] Backing off for ${Math.round(backoffDelay)}ms before retry`);
+
+    // Clear any existing backoff timer
+    if (this.spawnBackoffTimer) {
+      clearTimeout(this.spawnBackoffTimer);
+    }
+
+    // Schedule retry after backoff (only if not at max failures)
+    if (this.consecutiveSpawnFailures < TerminalPool.MAX_CONSECUTIVE_FAILURES) {
+      this.spawnBackoffTimer = setTimeout(() => {
+        this.spawnBackoffTimer = null;
+        if (!this.shuttingDown) {
+          this.scheduleReplenish();
+        }
+      }, backoffDelay);
+    } else {
+      console.error(
+        `[TerminalPool] Max consecutive failures reached. Spawning disabled until successful acquire or manual reset.`
+      );
+      this.emit('spawnDisabled', this.consecutiveSpawnFailures);
+    }
+  }
+
+  /**
+   * Reset spawn failure counter - called when pool successfully acquires a terminal
+   * This allows retrying spawns after max failures if existing terminals still work
+   */
+  public resetSpawnFailures(): void {
+    if (this.consecutiveSpawnFailures > 0) {
+      console.log(
+        `[TerminalPool] Resetting spawn failure counter from ${this.consecutiveSpawnFailures}`
+      );
+      this.consecutiveSpawnFailures = 0;
+      if (this.spawnBackoffTimer) {
+        clearTimeout(this.spawnBackoffTimer);
+        this.spawnBackoffTimer = null;
+      }
+    }
   }
 
   /**
    * Set idle timeout for a terminal
    */
   private setIdleTimeout(id: string): void {
+    // Don't set idle timeout during shutdown
+    if (this.shuttingDown) return;
+
     const timer = setTimeout(() => {
+      // Guard against timer firing after shutdown
+      if (this.shuttingDown) return;
+
       const terminal = this.pool.get(id);
       if (terminal && terminal.status === 'idle') {
         console.log(`[TerminalPool] Terminal ${id} idle timeout, disposing`);
@@ -292,6 +380,9 @@ export class TerminalPool extends EventEmitter {
    * Schedule pool replenishment
    */
   private scheduleReplenish(delay?: number): void {
+    // Don't schedule during shutdown
+    if (this.shuttingDown) return;
+
     if (this.replenishTimer) {
       clearTimeout(this.replenishTimer);
     }
@@ -502,6 +593,12 @@ export class TerminalPool extends EventEmitter {
     if (this.replenishTimer) {
       clearTimeout(this.replenishTimer);
       this.replenishTimer = null;
+    }
+
+    // Clear spawn backoff timer
+    if (this.spawnBackoffTimer) {
+      clearTimeout(this.spawnBackoffTimer);
+      this.spawnBackoffTimer = null;
     }
 
     // Clear all idle timers

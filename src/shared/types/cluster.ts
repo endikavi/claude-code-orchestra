@@ -11,6 +11,11 @@ import type {
 import type { ClusterNodePrivacy, ClusterPermissionChangeEvent } from './clusterPermissions';
 import type { HookStatusUpdate } from './remote';
 import type { SubagentInstance } from './orchestration';
+import type {
+  SharedInstanceContext,
+  ProjectSharedKnowledge,
+  ContextUpdateEvent,
+} from './sharedContext';
 import { DEFAULT_NODE_PRIVACY } from './clusterPermissions';
 export * from './clusterPermissions';
 
@@ -177,6 +182,14 @@ export interface ClusterClientToServerEvents {
   }) => void;
   'subagent:started': (data: { instanceId: string; subagent: SubagentInstance }) => void;
   'subagent:completed': (data: { instanceId: string; subagent: SubagentInstance }) => void;
+
+  // Context sharing events (from remote node back to primary)
+  'context:instanceUpdated': (data: { projectId: string; context: SharedInstanceContext }) => void;
+  'context:knowledgeUpdated': (data: {
+    projectId: string;
+    knowledge: ProjectSharedKnowledge;
+  }) => void;
+  'context:updated': (event: ContextUpdateEvent) => void;
 }
 
 /** Events sent from primary to nodes */
@@ -196,6 +209,7 @@ export interface ClusterServerToClientEvents {
   'instance:kill': (instanceId: string) => void;
   'instance:input': (instanceId: string, input: string) => void;
   'instance:resize': (instanceId: string, cols: number, rows: number) => void;
+  'instance:dimensionSync': (instanceId: string, cols: number, rows: number) => void;
 
   // Shell commands to nodes
   'shell:create': (projectId: string, requestId: string) => void;
@@ -227,6 +241,14 @@ export interface ClusterServerToClientEvents {
     nodeId: string,
     data: { instanceId: string; subagent: SubagentInstance }
   ) => void;
+
+  // Forwarded context sharing events (from other nodes)
+  'context:instanceUpdated': (data: { projectId: string; context: SharedInstanceContext }) => void;
+  'context:knowledgeUpdated': (data: {
+    projectId: string;
+    knowledge: ProjectSharedKnowledge;
+  }) => void;
+  'context:updated': (event: ContextUpdateEvent) => void;
 }
 
 // ==================== Authentication Types ====================

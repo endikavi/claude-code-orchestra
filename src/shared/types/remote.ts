@@ -5,6 +5,10 @@ import type {
   StreamMessage,
   InstanceStatus,
   SubagentInstance,
+  TrackedTask,
+  SharedInstanceContext,
+  ProjectSharedKnowledge,
+  ContextUpdateEvent,
 } from './index';
 
 // Remote access configuration
@@ -51,6 +55,7 @@ export interface ServerToClientEvents {
   'instance:sessionId': (instanceId: string, sessionId: string) => void;
   'instance:terminalTitle': (instanceId: string, title: string) => void;
   'instance:hookStatus': (instanceId: string, data: HookStatusUpdate) => void;
+  'instance:dimensionSync': (instanceId: string, cols: number, rows: number) => void;
   'hook:activity': (data: {
     instanceId: string;
     toolName?: string;
@@ -62,6 +67,10 @@ export interface ServerToClientEvents {
   // Subagent events (native Claude Task tool tracking)
   'subagent:started': (data: { instanceId: string; subagent: SubagentInstance }) => void;
   'subagent:completed': (data: { instanceId: string; subagent: SubagentInstance }) => void;
+  // Task events (Claude Code TaskCreate/TaskUpdate/TaskList tools)
+  'task:created': (data: { instanceId: string; task: TrackedTask }) => void;
+  'task:updated': (data: { instanceId: string; task: TrackedTask }) => void;
+  'task:list': (data: { instanceId: string; tasks: TrackedTask[] }) => void;
   // Proxy events (for web preview tunneling)
   'proxy:open': (data: {
     port: number;
@@ -76,6 +85,14 @@ export interface ServerToClientEvents {
     instanceId?: string;
     command: { type: string; [key: string]: unknown };
   }) => void;
+  // Shared context events
+  'context:instanceUpdated': (data: { projectId: string; context: SharedInstanceContext }) => void;
+  'context:knowledgeUpdated': (data: {
+    projectId: string;
+    knowledge: ProjectSharedKnowledge;
+  }) => void;
+  'context:updated': (event: ContextUpdateEvent) => void;
+  'context:sessionStarted': (data: { instanceId: string; projectId: string }) => void;
 }
 
 // Subscription callback response

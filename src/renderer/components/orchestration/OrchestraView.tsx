@@ -1,9 +1,11 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOrchestrationStore } from '../../stores/orchestrationStore';
+import { useTaskStore } from '../../stores/taskStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { SubagentCard } from './SubagentCard';
+import { TasksPanel } from '../tasks';
 import type { SubagentInstance } from '@shared/types';
 
 interface ProjectGroup {
@@ -28,6 +30,7 @@ export function OrchestraView() {
   const { instances, selectInstance, selectShell } = useInstanceStore();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(['all']));
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
+  const [showTasksPanel, setShowTasksPanel] = useState(true);
   const {
     isLoading,
     subagentsByInstance,
@@ -36,6 +39,11 @@ export function OrchestraView() {
     getTotalRunningSubagents,
     getTotalCompletedSubagents,
   } = useOrchestrationStore();
+
+  // Task store for showing task count
+  const { getTotalTasks, getTotalInProgress: getTotalTasksInProgress } = useTaskStore();
+  const totalTasks = getTotalTasks();
+  const tasksInProgress = getTotalTasksInProgress();
 
   // Navigate to instance tab
   const navigateToInstance = useCallback(
@@ -196,62 +204,113 @@ export function OrchestraView() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {t('orchestration.orchestraView')}
-          </h2>
+    <div className="relative flex h-full overflow-hidden">
+      {/* Main Content - Projects & Instances */}
+      <div className="flex flex-col h-full overflow-hidden w-full">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+              {t('orchestration.orchestraView')}
+            </h2>
 
-          {/* Stats Pills */}
-          <div className="flex items-center gap-2">
-            {totalRunning > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 rounded-full">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            {/* Stats Pills - hide text on mobile */}
+            <div className="flex items-center gap-2">
+              {totalRunning > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 rounded-full">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  <span className="hidden sm:inline">
+                    {totalRunning} {t('orchestration.running')}
+                  </span>
+                  <span className="sm:hidden">{totalRunning}</span>
                 </span>
-                {totalRunning} {t('orchestration.running')}
+              )}
+              <span className="hidden sm:inline-flex px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded-full">
+                {totalSubagents} {t('orchestration.totalSubagents')}
               </span>
-            )}
-            <span className="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded-full">
-              {totalSubagents} {t('orchestration.totalSubagents')}
-            </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {/* Expand/Collapse - hidden on mobile */}
+            <button
+              onClick={expandAllProjects}
+              className="hidden sm:block px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+            >
+              {t('orchestration.expandAll')}
+            </button>
+            <button
+              onClick={collapseAllProjects}
+              className="hidden sm:block px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+            >
+              {t('orchestration.collapseAll')}
+            </button>
+            {/* Toggle Tasks Panel */}
+            <button
+              onClick={() => setShowTasksPanel(!showTasksPanel)}
+              className={`p-2 sm:px-3 sm:py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                showTasksPanel
+                  ? 'bg-claude-orange/10 text-claude-orange'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              title={t('tasks.title')}
+            >
+              <svg
+                className="h-5 w-5 sm:h-4 sm:w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                />
+              </svg>
+              {totalTasks > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold bg-claude-orange text-white rounded-full">
+                  {tasksInProgress > 0 ? tasksInProgress : totalTasks}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={expandAllProjects}
-            className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
-          >
-            {t('orchestration.expandAll')}
-          </button>
-          <button
-            onClick={collapseAllProjects}
-            className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
-          >
-            {t('orchestration.collapseAll')}
-          </button>
+        {/* Content - Project Groups */}
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+          {projectGroups.map((group) => (
+            <ProjectGroupCard
+              key={group.projectId}
+              group={group}
+              isExpanded={expandedProjects.has(group.projectId)}
+              expandedInstances={expandedInstances}
+              onToggleProject={() => toggleProject(group.projectId)}
+              onToggleInstance={toggleInstance}
+              onNavigateToInstance={navigateToInstance}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Content - Project Groups */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
-        {projectGroups.map((group) => (
-          <ProjectGroupCard
-            key={group.projectId}
-            group={group}
-            isExpanded={expandedProjects.has(group.projectId)}
-            expandedInstances={expandedInstances}
-            onToggleProject={() => toggleProject(group.projectId)}
-            onToggleInstance={toggleInstance}
-            onNavigateToInstance={navigateToInstance}
+      {/* Tasks Panel - Side Panel on desktop, Full overlay on mobile */}
+      {showTasksPanel && (
+        <>
+          {/* Backdrop for mobile */}
+          <div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setShowTasksPanel(false)}
           />
-        ))}
-      </div>
+          {/* Panel */}
+          <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto md:w-80 md:shrink-0 md:border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 md:bg-gray-50 md:dark:bg-gray-900/50">
+            <TasksPanel onClose={() => setShowTasksPanel(false)} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

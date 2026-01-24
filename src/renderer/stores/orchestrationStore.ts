@@ -157,13 +157,8 @@ export const useOrchestrationStore = create<OrchestrationState>((set, get) => ({
 export function setupOrchestrationEventListeners(): () => void {
   const store = useOrchestrationStore.getState();
 
-  // eslint-disable-next-line no-console
-  console.log('[OrchestrationStore] Setting up event listeners');
-
   // Check if electronAPI and subagent are available (not available in web-only mode)
   if (!window.electronAPI?.subagent) {
-    // eslint-disable-next-line no-console
-    console.log('[OrchestrationStore] electronAPI.subagent not available, skipping setup');
     return () => {
       // No-op cleanup
     };
@@ -171,32 +166,18 @@ export function setupOrchestrationEventListeners(): () => void {
 
   // Native subagent event listeners
   const unsubSubagentStarted = window.electronAPI.subagent.onStarted((instanceId, subagent) => {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[OrchestrationStore] Received subagent:started for instance ${instanceId}`,
-      subagent
-    );
     store.handleSubagentStarted(instanceId, subagent);
   });
 
   const unsubSubagentCompleted = window.electronAPI.subagent.onCompleted((instanceId, subagent) => {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[OrchestrationStore] Received subagent:completed for instance ${instanceId}`,
-      subagent
-    );
     store.handleSubagentCompleted(instanceId, subagent);
   });
 
   // Load initial data
-  // eslint-disable-next-line no-console
-  console.log('[OrchestrationStore] Loading initial subagent data');
   void store.loadAllSubagents();
 
   // Return cleanup function
   return () => {
-    // eslint-disable-next-line no-console
-    console.log('[OrchestrationStore] Cleaning up event listeners');
     unsubSubagentStarted();
     unsubSubagentCompleted();
   };

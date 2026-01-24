@@ -7,7 +7,10 @@ import { getPermissionManager } from '../PermissionManager';
 import { getMetricsService } from '../MetricsService';
 import { getFileLockManager } from '../FileLockManager';
 import { getSubagentTracker } from '../SubagentTracker';
+import { getTaskTracker } from '../TaskTracker';
 import { DataStore } from '../DataStore';
+import { getSharedContextStore } from '../SharedContextStore';
+import { getAutoReviewService } from '../AutoReviewService';
 import { IPC_CHANNELS } from '../../ipc/channels';
 import type {
   ToolUseEvent,
@@ -24,6 +27,9 @@ export interface HookRoutesDeps {
   getIO: () => SocketIOServer<ClientToServerEvents, ServerToClientEvents> | null;
   sendToRenderer: (channel: string, ...args: unknown[]) => void;
 }
+
+// Track which instances have received context injection (inject on first tool per session)
+const contextInjectedInstances = new Set<string>();
 
 /**
  * Extract file paths from tool input for activity tracking
@@ -99,8 +105,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         timestamp: number;
       };
 
-      console.log(`[HookRoutes] Hook notification from ${instanceId}`);
-
       // Get project ID from instance
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;
@@ -143,10 +147,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         timestamp: number;
       };
 
-      console.log(
-        `[HookRoutes] Hook post-tool from ${instanceId}: ${data?.tool_name || 'unknown'}`
-      );
-
       // Detect Task tool completion (subagent finished)
       if (data?.tool_name === 'Task') {
         const subagentTracker = getSubagentTracker();
@@ -179,10 +179,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         }
 
         if (completedSubagent) {
-          console.log(
-            `[HookRoutes] Task tool completed! Subagent ${completedSubagent.id} for instance ${instanceId}`
-          );
-
           // Emit event to renderer
           deps.sendToRenderer(IPC_CHANNELS.SUBAGENT_COMPLETED, instanceId, completedSubagent);
 
@@ -194,8 +190,25 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         }
       }
 
+      // Get project info early for auto-review
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;
+
+      // Detect TaskUpdate completion - trigger auto-review if task was completed
+      if (data?.tool_name === 'TaskUpdate') {
+        // Check if the task was marked as completed
+        const taskUpdateInput = data.tool_input as { status?: string; taskId?: string };
+        if (taskUpdateInput?.status === 'completed' && projectId) {
+          // Queue auto-review via AutoReviewService
+          const autoReviewService = getAutoReviewService();
+          autoReviewService.queueReview({
+            instanceId,
+            projectId,
+            taskId: taskUpdateInput.taskId || 'unknown',
+            timestamp: Date.now(),
+          });
+        }
+      }
 
       // Record tool use metric (with null safety for data)
       const metricsService = getMetricsService();
@@ -355,8 +368,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
     try {
       const { instanceId, toolName, toolInput, timestamp } = req.body as PermissionCheckRequest;
 
-      console.log(`[HookRoutes] Permission check from ${instanceId}: ${toolName}`);
-
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId || 'unknown';
 
@@ -370,10 +381,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
 
         // Generate a unique ID for this subagent
         const subagentId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-        console.log(
-          `[HookRoutes] Task tool detected via permission check! Starting subagent ${subagentId} for instance ${instanceId}`
-        );
 
         const subagentTracker = getSubagentTracker();
         const subagent = subagentTracker.startSubagent(instanceId, {
@@ -390,6 +397,71 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         const io = deps.getIO();
         if (io) {
           io.emit('subagent:started', { instanceId, subagent });
+        }
+      }
+
+      // Detect TaskCreate tool usage (Claude Code task tracking)
+      if (toolName === 'TaskCreate' && toolInput) {
+        const taskCreateInput = toolInput as {
+          subject?: string;
+          description?: string;
+          activeForm?: string;
+        };
+
+        const taskTracker = getTaskTracker();
+        const task = taskTracker.createTask(instanceId, {
+          id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          subject: taskCreateInput.subject || 'Unknown task',
+          description: taskCreateInput.description || '',
+          activeForm: taskCreateInput.activeForm,
+        });
+
+        // Emit event to renderer
+        deps.sendToRenderer(IPC_CHANNELS.TASK_CREATED, instanceId, task);
+
+        // Also broadcast to Socket.IO clients
+        const io = deps.getIO();
+        if (io) {
+          io.emit('task:created', { instanceId, task });
+        }
+      }
+
+      // Detect TaskUpdate tool usage
+      if (toolName === 'TaskUpdate' && toolInput) {
+        const taskUpdateInput = toolInput as {
+          taskId?: string;
+          status?: 'pending' | 'in_progress' | 'completed';
+          subject?: string;
+          description?: string;
+          activeForm?: string;
+          owner?: string;
+          addBlocks?: string[];
+          addBlockedBy?: string[];
+        };
+
+        if (taskUpdateInput.taskId) {
+          const taskTracker = getTaskTracker();
+          const task = taskTracker.updateTask(instanceId, {
+            id: taskUpdateInput.taskId,
+            status: taskUpdateInput.status,
+            subject: taskUpdateInput.subject,
+            description: taskUpdateInput.description,
+            activeForm: taskUpdateInput.activeForm,
+            owner: taskUpdateInput.owner,
+            addBlocks: taskUpdateInput.addBlocks,
+            addBlockedBy: taskUpdateInput.addBlockedBy,
+          });
+
+          if (task) {
+            // Emit event to renderer
+            deps.sendToRenderer(IPC_CHANNELS.TASK_UPDATED, instanceId, task);
+
+            // Also broadcast to Socket.IO clients
+            const io = deps.getIO();
+            if (io) {
+              io.emit('task:updated', { instanceId, task });
+            }
+          }
         }
       }
 
@@ -413,10 +485,74 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         timestamp: timestamp || Date.now(),
       });
 
+      // Note: Auto-review is now handled by AutoReviewService when TaskUpdate completes
+      // The service automatically spawns a review subagent - no text reminder needed
+
+      let additionalContext: string | undefined;
+
+      // Inject shared context on first tool call of the session
+      if (!contextInjectedInstances.has(instanceId) && projectId && projectId !== 'unknown') {
+        const contextStore = getSharedContextStore();
+        const summary = contextStore.getContextSummary(projectId);
+        // Filter out self from instances
+        const peers = summary.instances.filter((i) => i.instanceId !== instanceId);
+
+        if (peers.length > 0 || summary.knowledge) {
+          const parts: string[] = ['[Shared Context from Orchestra Dashboard]'];
+
+          if (peers.length > 0) {
+            parts.push(`\nActive peers in this project (${peers.length}):`);
+            for (const peer of peers.slice(0, 5)) {
+              const status = peer.workStatus || 'idle';
+              const task = peer.currentTask ? ` - working on: ${peer.currentTask}` : '';
+              const files = peer.currentFiles?.length
+                ? ` - files: ${peer.currentFiles.slice(0, 3).join(', ')}`
+                : '';
+              parts.push(`  * ${peer.instanceId.slice(0, 8)}: ${status}${task}${files}`);
+            }
+          }
+
+          if (summary.knowledge) {
+            const pk = summary.knowledge;
+            if (pk.architectureSummary) {
+              parts.push(`\nProject architecture: ${pk.architectureSummary}`);
+            }
+            if (pk.techStack && pk.techStack.length > 0) {
+              parts.push(`Tech stack: ${pk.techStack.join(', ')}`);
+            }
+            if (pk.conventions && pk.conventions.length > 0) {
+              parts.push(`\nConventions to follow:`);
+              for (const conv of pk.conventions.slice(0, 3)) {
+                parts.push(`  - ${conv.type}: ${conv.description}`);
+              }
+            }
+            if (pk.warnings && pk.warnings.length > 0) {
+              parts.push(`\nWarnings:`);
+              for (const warn of pk.warnings.slice(0, 3)) {
+                parts.push(`  - [${warn.severity}] ${warn.description}`);
+              }
+            }
+          }
+
+          parts.push(
+            '\nUse MCP tools context_get_peers and context_publish to coordinate with other instances.'
+          );
+
+          const contextInfo = parts.join('\n');
+          additionalContext = additionalContext
+            ? `${additionalContext}\n\n${contextInfo}`
+            : contextInfo;
+        }
+
+        // Mark as injected for this session
+        contextInjectedInstances.add(instanceId);
+      }
+
       const response: PermissionCheckResponse = {
         decision: result.decision,
         reason: result.reason,
         ruleId: result.ruleId,
+        additionalContext,
       };
 
       res.json(response);
@@ -441,7 +577,8 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         timestamp: number;
       };
 
-      console.log(`[HookRoutes] Hook stopped from ${instanceId}`);
+      // Clear context injection tracking for this instance
+      contextInjectedInstances.delete(instanceId);
 
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;
@@ -488,8 +625,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         timestamp: number;
       };
 
-      console.log(`[HookRoutes] Hook session-start from ${instanceId}`);
-
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;
 
@@ -502,7 +637,48 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         timestamp: timestamp || Date.now(),
       });
 
-      res.json({ success: true });
+      // Get shared context summary for this project
+      let contextSummary: string | undefined;
+      if (projectId) {
+        const contextStore = getSharedContextStore();
+        const summary = contextStore.getContextSummary(projectId);
+        // Filter out self from instances
+        const peers = summary.instances.filter((i) => i.instanceId !== instanceId);
+
+        if (peers.length > 0 || summary.knowledge) {
+          const parts: string[] = [];
+
+          if (peers.length > 0) {
+            parts.push(`Active peers in this project: ${peers.length}`);
+            for (const peer of peers.slice(0, 3)) {
+              const status = peer.workStatus || 'idle';
+              const task = peer.currentTask ? `: ${peer.currentTask}` : '';
+              parts.push(`  - Instance ${peer.instanceId.slice(0, 8)}: ${status}${task}`);
+            }
+          }
+
+          if (summary.knowledge) {
+            if (summary.knowledge.architectureSummary) {
+              parts.push(`\nArchitecture: ${summary.knowledge.architectureSummary}`);
+            }
+            if (summary.knowledge.techStack && summary.knowledge.techStack.length > 0) {
+              parts.push(`Tech stack: ${summary.knowledge.techStack.join(', ')}`);
+            }
+          }
+
+          contextSummary = parts.join('\n');
+        }
+      }
+
+      // Broadcast context update via Socket.IO
+      if (projectId) {
+        const io = deps.getIO();
+        if (io) {
+          io.emit('context:sessionStarted', { instanceId, projectId });
+        }
+      }
+
+      res.json({ success: true, contextSummary });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       console.error('[HookRoutes] Hook session-start error:', message);
@@ -518,8 +694,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         data?: { session_id?: string; total_cost_usd?: number } | null;
         timestamp: number;
       };
-
-      console.log(`[HookRoutes] Hook session-end from ${instanceId}`);
 
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;
@@ -550,8 +724,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         data?: { prompt?: string; session_id?: string } | null;
         timestamp: number;
       };
-
-      console.log(`[HookRoutes] Hook prompt-submit from ${instanceId}`);
 
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;
@@ -594,8 +766,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         timestamp: number;
       };
 
-      console.log(`[HookRoutes] Hook pre-tool from ${instanceId}: ${data?.tool_name || 'unknown'}`);
-
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;
 
@@ -619,10 +789,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         // Generate a unique ID for this subagent (use tool_use_id if available)
         const subagentId =
           data.tool_use_id || `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-        console.log(
-          `[HookRoutes] Task tool detected! Starting subagent ${subagentId} for instance ${instanceId}`
-        );
 
         const subagentTracker = getSubagentTracker();
         const subagent = subagentTracker.startSubagent(instanceId, {
@@ -663,8 +829,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
   router.post('/status', (req: Request, res: Response) => {
     try {
       const { instanceId, status, message, progress } = req.body as StatusUpdateEvent;
-
-      console.log(`[HookRoutes] Status update from ${instanceId}: ${status}`);
 
       // Emit status update event for UI
       deps.emitter.emit('hook:status', {
@@ -775,8 +939,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         files: string[];
       };
 
-      console.log(`[HookRoutes] Activity from ${instanceId}: ${action} on ${files.length} files`);
-
       // Store activity (could be extended to track file locks)
       deps.emitter.emit('hook:activity', { instanceId, action, files, timestamp: Date.now() });
 
@@ -797,8 +959,6 @@ export function createHookRoutes(deps: HookRoutesDeps): Router {
         data?: unknown;
         timestamp?: number;
       };
-
-      console.log(`[HookRoutes] Hook generic event from ${instanceId}: ${eventType || 'unknown'}`);
 
       const instance = processManager.getInstance(instanceId);
       const projectId = instance?.projectId;

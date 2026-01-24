@@ -1,6 +1,21 @@
 import { EventEmitter } from 'events';
 import type { StreamMessage, InstanceStatus } from '@shared/types';
 import type { SubagentStartedEvent, SubagentCompletedEvent } from '@shared/types/orchestration';
+import type {
+  TaskStartedEvent,
+  TaskUpdatedEvent,
+  TaskListEvent,
+  TaskListItem,
+  TaskStatus,
+} from '@shared/types/tasks';
+import type { InstanceWorkStatus } from '@shared/types/sharedContext';
+
+// Event emitted when context should be auto-published
+export interface ContextAutoPublishEvent {
+  workStatus?: InstanceWorkStatus;
+  currentFiles?: string[];
+  currentTask?: string;
+}
 
 // Type for tool_use content block
 interface ToolUseBlock {
@@ -89,11 +104,19 @@ export class StreamJSONParser extends EventEmitter {
         this.processAssistantMessage(message);
         // Check for Task tool usage (subagent spawning)
         this.detectSubagentStart(message);
+        // Check for TaskCreate/TaskUpdate/TaskList tools
+        this.detectTaskCreate(message);
+        this.detectTaskUpdate(message);
+        this.detectTaskList(message);
+        // Auto-detect context from tool usage
+        this.detectContextFromTools(message);
         break;
       case 'user':
         this.emit('user', message);
         // Check for tool_result (subagent completion)
         this.detectSubagentCompletion(message);
+        // Check for TaskList tool_result
+        this.detectTaskListResult(message);
         break;
       case 'result':
         this.emit('result', message);
@@ -133,17 +156,7 @@ export class StreamJSONParser extends EventEmitter {
 
     for (const block of message.message.content) {
       const toolBlock = block as ToolUseBlock;
-      // Debug: Log all tool_use blocks to understand the structure
-      if (toolBlock.type === 'tool_use') {
-        console.log(
-          `[StreamJSONParser] tool_use detected: name="${toolBlock.name}", id="${toolBlock.id}"`
-        );
-        if (toolBlock.input) {
-          console.log(`[StreamJSONParser] tool_use input keys:`, Object.keys(toolBlock.input));
-        }
-      }
       if (toolBlock.type === 'tool_use' && toolBlock.name === 'Task') {
-        console.log(`[StreamJSONParser] Task tool detected! Creating subagent event`);
         const event: SubagentStartedEvent = {
           id: toolBlock.id,
           description: toolBlock.input?.description || 'Unknown task',
@@ -186,6 +199,164 @@ export class StreamJSONParser extends EventEmitter {
         this.emit('subagent_completed', event);
       }
     }
+  }
+
+  // ==================== Task Tool Detection (Claude Code v2.1.16+) ====================
+
+  /**
+   * Detect when Claude creates a task using TaskCreate tool
+   */
+  private detectTaskCreate(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    for (const block of message.message.content) {
+      const toolBlock = block as ToolUseBlock;
+      if (toolBlock.type === 'tool_use' && toolBlock.name === 'TaskCreate') {
+        const event: TaskStartedEvent = {
+          id: toolBlock.id,
+          subject: (toolBlock.input?.subject as string) || 'Unknown task',
+          description: (toolBlock.input?.description as string) || '',
+          activeForm: toolBlock.input?.activeForm as string | undefined,
+        };
+        this.emit('task_created', event);
+      }
+    }
+  }
+
+  /**
+   * Detect when Claude updates a task using TaskUpdate tool
+   */
+  private detectTaskUpdate(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    for (const block of message.message.content) {
+      const toolBlock = block as ToolUseBlock;
+      if (toolBlock.type === 'tool_use' && toolBlock.name === 'TaskUpdate') {
+        const taskId = (toolBlock.input?.taskId as string) || '';
+        const event: TaskUpdatedEvent = {
+          id: taskId,
+          status: toolBlock.input?.status as TaskStatus | undefined,
+          subject: toolBlock.input?.subject as string | undefined,
+          description: toolBlock.input?.description as string,
+          activeForm: toolBlock.input?.activeForm as string | undefined,
+          owner: toolBlock.input?.owner as string | undefined,
+          addBlocks: toolBlock.input?.addBlocks as string[] | undefined,
+          addBlockedBy: toolBlock.input?.addBlockedBy as string[] | undefined,
+          metadata: toolBlock.input?.metadata as Record<string, unknown> | undefined,
+        };
+        this.emit('task_updated', event);
+      }
+    }
+  }
+
+  /**
+   * Detect when Claude calls TaskList tool (we'll get the result in tool_result)
+   */
+  private detectTaskList(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    for (const block of message.message.content) {
+      const toolBlock = block as ToolUseBlock;
+      if (toolBlock.type === 'tool_use' && toolBlock.name === 'TaskList') {
+        // Store the tool_use_id so we can match the result later
+        this.pendingTaskListId = toolBlock.id;
+      }
+    }
+  }
+
+  // Track pending TaskList tool_use_id to match with result
+  private pendingTaskListId: string | null = null;
+
+  /**
+   * Detect TaskList tool_result and parse the task list
+   */
+  private detectTaskListResult(message: StreamMessage): void {
+    if (!message.message?.content || !this.pendingTaskListId) return;
+
+    for (const block of message.message.content) {
+      const resultBlock = block as ToolResultBlock;
+      if (
+        resultBlock.type === 'tool_result' &&
+        resultBlock.tool_use_id === this.pendingTaskListId
+      ) {
+        this.pendingTaskListId = null;
+
+        // Parse the task list from the result
+        let resultText: string;
+        if (typeof resultBlock.content === 'string') {
+          resultText = resultBlock.content;
+        } else if (Array.isArray(resultBlock.content)) {
+          resultText = resultBlock.content
+            .filter((item) => item.type === 'text' && item.text)
+            .map((item) => item.text)
+            .join('\n');
+        } else {
+          return;
+        }
+
+        // Try to parse the task list (it may be formatted text or JSON)
+        const tasks = this.parseTaskListResult(resultText);
+        if (tasks.length > 0) {
+          const event: TaskListEvent = { tasks };
+          this.emit('task_list', event);
+        }
+      }
+    }
+  }
+
+  /**
+   * Parse TaskList tool result into structured task list
+   * The result format varies - could be JSON array or formatted text
+   */
+  private parseTaskListResult(resultText: string): TaskListItem[] {
+    const tasks: TaskListItem[] = [];
+
+    // Define expected shape for JSON parsing
+    interface ParsedTaskItem {
+      id?: string;
+      subject?: string;
+      status?: TaskStatus;
+      owner?: string;
+      blockedBy?: string[];
+    }
+
+    // Try parsing as JSON first
+    try {
+      const parsed: unknown = JSON.parse(resultText);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed as ParsedTaskItem[]) {
+          if (item.id && item.subject) {
+            tasks.push({
+              id: item.id,
+              subject: item.subject,
+              status: item.status || 'pending',
+              owner: item.owner,
+              blockedBy: item.blockedBy,
+            });
+          }
+        }
+        return tasks;
+      }
+    } catch {
+      // Not JSON, try parsing text format
+    }
+
+    // Parse text format (lines like "- #1 [pending] Task subject")
+    const lines = resultText.split('\n');
+    for (const line of lines) {
+      // Match patterns like "#1. [pending] Subject" or "- #1 [in_progress] Subject"
+      const match = line.match(/#(\d+)\.?\s*\[(\w+(?:_\w+)?)\]\s*(.+?)(?:\s*\(blocked by:.*\))?$/);
+      if (match) {
+        const [, id, status, subject] = match;
+        tasks.push({
+          id,
+          subject: subject.trim(),
+          status: status as TaskStatus,
+        });
+      }
+    }
+
+    return tasks;
   }
 
   /**
@@ -237,6 +408,93 @@ export class StreamJSONParser extends EventEmitter {
   reset(): void {
     this.buffer = '';
     this.currentStatus = 'starting';
+    this.pendingTaskListId = null;
+  }
+
+  /**
+   * Detect context from tool usage and emit auto-publish event
+   * This allows automatic context sharing without explicit calls
+   */
+  private detectContextFromTools(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    const files: string[] = [];
+    let workStatus: InstanceWorkStatus | undefined;
+
+    for (const block of message.message.content) {
+      const toolBlock = block as ToolUseBlock;
+      if (toolBlock.type !== 'tool_use') continue;
+
+      const toolName = toolBlock.name;
+      const input = toolBlock.input || {};
+
+      // Extract file paths from various tools
+      switch (toolName) {
+        case 'Read':
+        case 'Edit':
+        case 'Write':
+          if (typeof input.file_path === 'string') {
+            files.push(input.file_path);
+          }
+          // Infer work status
+          if (toolName === 'Read') {
+            workStatus = workStatus || 'exploring';
+          } else {
+            workStatus = 'implementing';
+          }
+          break;
+
+        case 'Glob':
+        case 'Grep':
+          if (typeof input.pattern === 'string') {
+            files.push(`pattern:${input.pattern}`);
+          }
+          workStatus = workStatus || 'exploring';
+          break;
+
+        case 'Bash': {
+          const command = input.command;
+          if (typeof command === 'string') {
+            // Detect testing
+            if (/\b(test|jest|vitest|pytest|npm run test|yarn test)\b/i.test(command)) {
+              workStatus = 'testing';
+            }
+            // Detect linting/type checking
+            else if (/\b(lint|typecheck|tsc|eslint)\b/i.test(command)) {
+              workStatus = 'reviewing';
+            }
+          }
+          break;
+        }
+
+        case 'EnterPlanMode':
+          workStatus = 'planning';
+          break;
+
+        case 'AskUserQuestion':
+          workStatus = 'waiting';
+          break;
+
+        case 'NotebookEdit':
+          if (typeof input.notebook_path === 'string') {
+            files.push(input.notebook_path);
+          }
+          workStatus = 'implementing';
+          break;
+      }
+    }
+
+    // Only emit if we detected something
+    if (files.length > 0 || workStatus) {
+      const event: ContextAutoPublishEvent = {};
+      if (files.length > 0) {
+        event.currentFiles = files;
+      }
+      if (workStatus) {
+        event.workStatus = workStatus;
+      }
+      this.emit('context_auto_publish', event);
+    }
   }
 
   /**

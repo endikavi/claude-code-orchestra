@@ -363,6 +363,132 @@ The dashboard automatically sets these environment variables:
 - \`CLAUDE_DASHBOARD_API_URL\` - The dashboard API base URL
 `,
     },
+
+    'shared-context': {
+      id: 'shared-context',
+      name: 'Shared Context',
+      description: 'Share and query context with other Claude instances on the same project',
+      content: `---
+name: shared-context
+description: Coordinate with other Claude instances working on the same project
+---
+
+# Shared Context - Multi-Instance Coordination
+
+This skill enables sharing context with other Claude instances on the same project.
+Use it to avoid conflicts, share discoveries, and coordinate work effectively.
+
+## MCP Tools (Preferred)
+
+### context_get_peers
+See what other instances are working on. Call this before major changes.
+
+### context_publish
+Share your current context:
+- \`workStatus\`: idle | exploring | implementing | testing | reviewing | planning | waiting
+- \`currentTask\`: What you're doing
+- \`currentFiles\`: Files you're modifying
+- \`notesForOthers\`: Important message for other instances
+
+### context_get_project_knowledge
+Get accumulated project knowledge: conventions, warnings, important files.
+
+### context_contribute_knowledge
+Share discoveries about the project:
+- \`convention\`: {type: "naming|style|architecture", description: "..."}
+- \`warning\`: {description: "...", severity: "low|medium|high"}
+- \`importantFile\`: {path: "...", description: "..."}
+
+### context_get_summary
+Get a human-readable overview of current project state.
+
+## HTTP API (Alternative)
+
+\`\`\`bash
+# Check active peers
+curl "http://localhost:${port}/api/hooks/context/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+
+# Publish your context
+curl -X POST "http://localhost:${port}/api/hooks/context/publish" \\
+  -H "Content-Type: application/json" \\
+  -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \\
+  -d '{"workStatus":"implementing","currentTask":"Refactoring auth","currentFiles":["src/auth.ts"]}'
+
+# Get project knowledge
+curl "http://localhost:${port}/api/hooks/context/project?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+
+# Contribute knowledge
+curl -X POST "http://localhost:${port}/api/hooks/context/project/contribute" \\
+  -H "Content-Type: application/json" \\
+  -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \\
+  -d '{"convention":{"type":"naming","description":"Components use PascalCase"}}'
+\`\`\`
+
+## Best Practices
+
+1. **Before major changes**: Call context_get_peers to see if anyone else is working on related files
+2. **When starting a task**: Use context_publish to let others know what you're doing
+3. **When discovering patterns**: Use context_contribute_knowledge to share conventions
+4. **At task start**: Use context_get_project_knowledge to leverage existing discoveries
+5. **For warnings**: Contribute important gotchas that others should know about
+
+## Work Status Values
+
+- \`idle\` - Not actively working
+- \`exploring\` - Reading code, understanding structure
+- \`implementing\` - Writing/modifying code
+- \`testing\` - Running or writing tests
+- \`reviewing\` - Code review or refactoring
+- \`planning\` - Designing approach
+- \`waiting\` - Waiting for input or external resource
+`,
+    },
+
+    'auto-lint-subagent': {
+      id: 'auto-lint-subagent',
+      name: 'Auto Lint Subagent',
+      description:
+        'Automatically spawn a subagent to fix lint/type issues after each task completes',
+      content:
+        '---\n' +
+        'name: auto-lint-subagent\n' +
+        'description: Spawn code-fixing subagent after completing tasks\n' +
+        '---\n\n' +
+        '# Auto Code Fixer Subagent\n\n' +
+        '## Behavior\n\n' +
+        "**IMPORTANTE**: Cada vez que completes una tarea usando TaskUpdate con status='completed',\n" +
+        'DEBES lanzar inmediatamente un subagente en background para verificar y CORREGIR problemas de codigo.\n\n' +
+        '## Procedimiento\n\n' +
+        'Despues de ejecutar TaskUpdate({ taskId: "X", status: "completed" }), inmediatamente ejecutar:\n\n' +
+        'Task({\n' +
+        '  description: "Fix code issues",\n' +
+        '  prompt: `You are an expert code fixer. Your job is to:\n' +
+        '\n' +
+        '1. Run typecheck: npm run typecheck (or yarn/pnpm equivalent)\n' +
+        '2. If there are TypeScript errors, READ the problematic files and FIX them using Edit tool\n' +
+        '3. Run lint: npm run lint (or yarn/pnpm equivalent)\n' +
+        '4. If there are lint errors that --fix cannot solve, READ and FIX them manually\n' +
+        '5. Run npm run lint:fix to auto-fix what can be auto-fixed\n' +
+        '6. Re-run typecheck to verify fixes\n' +
+        '\n' +
+        'You have full access to Read, Edit, and Bash tools. USE THEM to fix issues.\n' +
+        'Do NOT just report errors - ACTUALLY FIX THEM by editing the files.\n' +
+        'Work silently and efficiently. Only report if you cannot fix something.`,\n' +
+        '  subagent_type: "general-purpose",\n' +
+        '  run_in_background: true\n' +
+        '})\n\n' +
+        '## Notas\n\n' +
+        '- El subagente tiene acceso a Read, Edit, Bash, Grep, Glob\n' +
+        '- DEBE corregir los errores, no solo reportarlos\n' +
+        '- Trabaja independientemente - no esperes a que termine\n' +
+        '- Continua con tu siguiente task mientras el subagente arregla errores\n' +
+        '- Si el proyecto usa yarn/pnpm, el subagente adaptara los comandos\n\n' +
+        '## Ejemplo completo\n\n' +
+        'Despues de completar una task:\n' +
+        '1. TaskUpdate({ taskId: "1", status: "completed" })\n' +
+        '2. Inmediatamente spawn el subagente fixer\n' +
+        '3. Continuar con la siguiente task del usuario\n',
+    },
   };
 }
 
@@ -590,6 +716,163 @@ export class SkillManager extends EventEmitter {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: errorMessage };
     }
+  }
+
+  /**
+   * Generate skill content from a custom agent definition
+   */
+  public generateCustomAgentSkill(
+    agentName: string,
+    agent: {
+      description: string;
+      prompt: string;
+      tools?: string[];
+      model?: string;
+      autoTrigger?: {
+        afterTaskComplete?: boolean;
+        afterFileChange?: boolean;
+        afterError?: boolean;
+      };
+    }
+  ): string {
+    const toolsStr = agent.tools?.length ? agent.tools.join(', ') : 'All tools';
+    const modelStr = agent.model || 'sonnet';
+
+    let autoTriggerSection = '';
+    if (agent.autoTrigger) {
+      const triggers: string[] = [];
+      if (agent.autoTrigger.afterTaskComplete) {
+        triggers.push('- After completing any task (TaskUpdate with status="completed")');
+      }
+      if (agent.autoTrigger.afterFileChange) {
+        triggers.push('- After file modifications (Write, Edit tools)');
+      }
+      if (agent.autoTrigger.afterError) {
+        triggers.push('- After encountering errors');
+      }
+      if (triggers.length > 0) {
+        autoTriggerSection =
+          '\n\n## Auto-Trigger Conditions\n\n' +
+          'This agent should be spawned automatically:\n' +
+          triggers.join('\n') +
+          '\n';
+      }
+    }
+
+    return (
+      '---\n' +
+      `name: ${agentName}\n` +
+      `description: ${agent.description}\n` +
+      '---\n\n' +
+      `# ${agentName} Agent\n\n` +
+      `${agent.description}\n\n` +
+      '## How to Use\n\n' +
+      'Spawn this agent using the Task tool:\n\n' +
+      '```\n' +
+      'Task({\n' +
+      `  description: "${agent.description}",\n` +
+      `  prompt: \`${agent.prompt.replace(/`/g, '\\`')}\`,\n` +
+      `  subagent_type: "general-purpose",\n` +
+      `  model: "${modelStr}",\n` +
+      '  run_in_background: true\n' +
+      '})\n' +
+      '```\n\n' +
+      '## Configuration\n\n' +
+      `- **Model**: ${modelStr}\n` +
+      `- **Tools**: ${toolsStr}\n` +
+      autoTriggerSection +
+      '\n## Agent Instructions\n\n' +
+      agent.prompt +
+      '\n'
+    );
+  }
+
+  /**
+   * Install custom agents as skills to a project
+   */
+  public async installCustomAgents(
+    projectPath: string,
+    agents: Record<
+      string,
+      {
+        description: string;
+        prompt: string;
+        tools?: string[];
+        model?: string;
+        autoTrigger?: {
+          afterTaskComplete?: boolean;
+          afterFileChange?: boolean;
+          afterError?: boolean;
+        };
+      }
+    >
+  ): Promise<{ success: boolean; installed: string[]; errors: string[] }> {
+    const installed: string[] = [];
+    const errors: string[] = [];
+
+    try {
+      const skillsDir = path.join(projectPath, '.claude', 'skills');
+      await fs.promises.mkdir(skillsDir, { recursive: true });
+
+      for (const [agentName, agentConfig] of Object.entries(agents)) {
+        try {
+          // Sanitize agent name for filesystem
+          const safeAgentName = agentName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+          const skillDir = path.join(skillsDir, safeAgentName);
+          await fs.promises.mkdir(skillDir, { recursive: true });
+
+          // Generate and write skill content
+          const content = this.generateCustomAgentSkill(agentName, agentConfig);
+          const skillPath = path.join(skillDir, 'SKILL.md');
+          await fs.promises.writeFile(skillPath, content, 'utf-8');
+
+          installed.push(safeAgentName);
+          console.log(`[SkillManager] Installed custom agent skill: ${safeAgentName}`);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Failed to install ${agentName}: ${errorMessage}`);
+        }
+      }
+
+      if (installed.length > 0) {
+        this.emit('customAgents:installed', { projectPath, agents: installed });
+      }
+
+      return { success: errors.length === 0, installed, errors };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: false,
+        installed,
+        errors: [...errors, `Setup failed: ${errorMessage}`],
+      };
+    }
+  }
+
+  /**
+   * Remove custom agent skills from a project
+   */
+  public async removeCustomAgents(
+    projectPath: string,
+    agentNames: string[]
+  ): Promise<{ success: boolean; removed: string[]; errors: string[] }> {
+    const removed: string[] = [];
+    const errors: string[] = [];
+
+    for (const agentName of agentNames) {
+      try {
+        const safeAgentName = agentName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+        const skillDir = path.join(projectPath, '.claude', 'skills', safeAgentName);
+        await fs.promises.rm(skillDir, { recursive: true, force: true });
+        removed.push(safeAgentName);
+        console.log(`[SkillManager] Removed custom agent skill: ${safeAgentName}`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        errors.push(`Failed to remove ${agentName}: ${errorMessage}`);
+      }
+    }
+
+    return { success: errors.length === 0, removed, errors };
   }
 
   /**

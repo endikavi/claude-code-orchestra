@@ -110,6 +110,14 @@ export function connectSocket(): void {
   const token = getToken();
   if (!token) return;
 
+  // If there's a disconnected socket, clean it up completely to prevent duplicate listeners
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+    eventCallbacks.clear();
+  }
+
   socket = io(getBaseUrl(), {
     auth: { token },
     transports: ['websocket', 'polling'],
@@ -193,6 +201,11 @@ export function connectSocket(): void {
     triggerEvent('instance:terminalTitle', instanceId, title);
   });
 
+  // Terminal dimension sync (for multi-client synchronization)
+  socket.on('instance:dimensionSync', (instanceId: string, cols: number, rows: number) => {
+    triggerEvent('instance:dimensionSync', instanceId, cols, rows);
+  });
+
   // Subagent events
   socket.on('subagent:started', (data: { instanceId: string; subagent: SubagentInstance }) => {
     triggerEvent('subagent:started', data.instanceId, data.subagent);
@@ -228,9 +241,11 @@ export function connectSocket(): void {
 
 export function disconnectSocket(): void {
   if (socket) {
+    socket.removeAllListeners();
     socket.disconnect();
     socket = null;
   }
+  eventCallbacks.clear();
 }
 
 // Event system for instance events
@@ -515,6 +530,12 @@ export const webAPI = {
 
     onTerminalTitle: (callback: (instanceId: string, title: string) => void): (() => void) => {
       return addEventListener('instance:terminalTitle', callback);
+    },
+
+    onDimensionSync: (
+      callback: (instanceId: string, cols: number, rows: number) => void
+    ): (() => void) => {
+      return addEventListener('instance:dimensionSync', callback);
     },
 
     // Web clients receive sync via socket 'sync:state' event, this is a no-op for compatibility

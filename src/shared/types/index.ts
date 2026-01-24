@@ -61,13 +61,32 @@ export interface Project {
   skipPermissions?: boolean; // Launch instances with --dangerously-skip-permissions
   preferredShell?: string; // Preferred shell path for terminal instances
   enableMcp?: boolean; // Enable MCP server integration for Claude instances
+  autoReview?: boolean; // Auto-spawn review subagent on task completion (default: true)
   clusterPermissions?: ProjectClusterPermissions; // Cluster sharing and permission settings
+  agents?: CustomAgentsConfig; // Custom agents available for this project (--agents)
   createdAt: number;
   updatedAt: number;
 }
 
 // Supported UI languages
 export type Language = 'es' | 'en';
+
+// Custom agent definition for --agents parameter
+export interface CustomAgent {
+  description: string; // Short description of what the agent does
+  prompt: string; // System prompt/instructions for the agent
+  tools?: string[]; // Allowed tools: Read, Write, Edit, Bash, Grep, Glob, etc.
+  model?: ClaudeModel; // Model to use: sonnet, opus, haiku
+  autoTrigger?: {
+    // Optional: auto-trigger conditions
+    afterTaskComplete?: boolean; // Trigger after TaskUpdate with status='completed'
+    afterFileChange?: boolean; // Trigger after Write/Edit tools
+    afterError?: boolean; // Trigger after errors
+  };
+}
+
+// Map of agent name to agent definition
+export type CustomAgentsConfig = Record<string, CustomAgent>;
 
 // Claude instance interface
 export interface ClaudeInstance {
@@ -82,6 +101,7 @@ export interface ClaudeInstance {
   pid?: number;
   error?: string;
   terminalTitle?: string; // Dynamic title set by Claude CLI via ANSI escape
+  agents?: CustomAgentsConfig; // Custom agents injected via --agents parameter
 }
 
 // Stream JSON message types from Claude CLI
@@ -294,6 +314,12 @@ export * from './orchestration';
 
 // Re-export proxy types
 export * from './proxy';
+
+// Re-export tasks types
+export * from './tasks';
+
+// Re-export shared context types
+export * from './sharedContext';
 
 // Git status types
 export interface GitStatus {

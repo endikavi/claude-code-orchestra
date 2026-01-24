@@ -3,10 +3,12 @@ import * as pty from 'node-pty';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { StreamJSONParser } from './StreamJSONParser';
+import { StreamJSONParser, type ContextAutoPublishEvent } from './StreamJSONParser';
 import { DataStore } from './DataStore';
 import { getWebServer } from './WebServer';
 import { getSubagentTracker } from './SubagentTracker';
+import { getTaskTracker } from './TaskTracker';
+import { SharedContextStore } from './SharedContextStore';
 import { getUserDataPath } from '../utils/paths';
 import type {
   ClaudeInstance as ClaudeInstanceType,
@@ -16,6 +18,7 @@ import type {
   StreamMessage,
 } from '@shared/types';
 import type { SubagentStartedEvent, SubagentCompletedEvent } from '@shared/types/orchestration';
+import type { TaskStartedEvent, TaskUpdatedEvent, TaskListEvent } from '@shared/types/tasks';
 import type { PooledTerminal } from '@shared/types/pool';
 import { randomUUID } from 'crypto';
 
@@ -295,6 +298,8 @@ function findClaudePath(): string {
   return cachedClaudePath;
 }
 
+import type { CustomAgentsConfig } from '@shared/types';
+
 export interface ClaudeInstanceConfig {
   projectId: string;
   projectPath: string;
@@ -306,6 +311,8 @@ export interface ClaudeInstanceConfig {
   planMode?: boolean; // For --plan flag
   enableMcp?: boolean; // Enable MCP server integration
   pooledTerminal?: PooledTerminal; // Pre-spawned terminal from pool (local-only)
+  agents?: CustomAgentsConfig; // Custom agents to inject as skills (--agents parameter)
+  agentFile?: string; // Path to agent file for --agent parameter (e.g., AGENT.md)
 }
 
 export class ClaudeInstance extends EventEmitter {
@@ -319,6 +326,8 @@ export class ClaudeInstance extends EventEmitter {
   public readonly resumeSessionId?: string;
   public readonly planMode: boolean;
   public readonly enableMcp: boolean;
+  public readonly agents?: CustomAgentsConfig;
+  public readonly agentFile?: string;
 
   private ptyProcess: pty.IPty | null = null;
   private mcpToken?: string; // Token for MCP authentication
@@ -330,6 +339,7 @@ export class ClaudeInstance extends EventEmitter {
   private _hasExited: boolean = false; // Flag to prevent race conditions on resize
   private idleTimer: NodeJS.Timeout | null = null;
   private pooledTerminal?: PooledTerminal; // Pre-spawned terminal from pool
+  private pendingTimers: Set<NodeJS.Timeout> = new Set(); // Track pending timeouts for cleanup
 
   // Time in ms without output before considering Claude is waiting for input
   private static readonly IDLE_TIMEOUT = 2000;
@@ -347,10 +357,21 @@ export class ClaudeInstance extends EventEmitter {
     this.planMode = config.planMode ?? false;
     this.enableMcp = config.enableMcp ?? false;
     this.pooledTerminal = config.pooledTerminal;
+    this.agents = config.agents;
+    this.agentFile = config.agentFile;
     this.createdAt = Date.now();
 
     this.parser = new StreamJSONParser();
     this.setupParserListeners();
+
+    // Initialize context for this instance
+    const contextStore = SharedContextStore.getInstance();
+    contextStore.setInstanceContext(this.id, this.projectId, {
+      workStatus: 'idle',
+    });
+    contextStore.updateInstanceMetadata(this.id, {
+      model: this.model,
+    });
   }
 
   private setupParserListeners(): void {
@@ -390,24 +411,59 @@ export class ClaudeInstance extends EventEmitter {
 
     // Subagent tracking (native Claude Task tool)
     this.parser.on('subagent_started', (data: SubagentStartedEvent) => {
-      console.log(`[ClaudeInstance ${this.id}] subagent_started event received:`, data);
       const tracker = getSubagentTracker();
       const subagent = tracker.startSubagent(this.id, data);
-      console.log(
-        `[ClaudeInstance ${this.id}] Emitting subagent:started for subagent ${subagent.id}`
-      );
       this.emit('subagent:started', { instanceId: this.id, subagent });
     });
 
     this.parser.on('subagent_completed', (data: SubagentCompletedEvent) => {
-      console.log(`[ClaudeInstance ${this.id}] subagent_completed event received:`, data);
       const tracker = getSubagentTracker();
       const subagent = tracker.completeSubagent(this.id, data);
       if (subagent) {
-        console.log(
-          `[ClaudeInstance ${this.id}] Emitting subagent:completed for subagent ${subagent.id}`
-        );
         this.emit('subagent:completed', { instanceId: this.id, subagent });
+      }
+    });
+
+    // Task tracking (Claude Code TaskCreate/TaskUpdate/TaskList tools)
+    this.parser.on('task_created', (data: TaskStartedEvent) => {
+      const tracker = getTaskTracker();
+      const task = tracker.createTask(this.id, data);
+      this.emit('task:created', { instanceId: this.id, task });
+    });
+
+    this.parser.on('task_updated', (data: TaskUpdatedEvent) => {
+      const tracker = getTaskTracker();
+      const task = tracker.updateTask(this.id, data);
+      if (task) {
+        this.emit('task:updated', { instanceId: this.id, task });
+      }
+    });
+
+    this.parser.on('task_list', (data: TaskListEvent) => {
+      const tracker = getTaskTracker();
+      const tasks = tracker.syncTaskList(this.id, data);
+      this.emit('task:list', { instanceId: this.id, tasks });
+    });
+
+    // Auto-publish context based on tool usage
+    this.parser.on('context_auto_publish', (data: ContextAutoPublishEvent) => {
+      const contextStore = SharedContextStore.getInstance();
+
+      // Update instance context with detected info
+      if (data.workStatus) {
+        contextStore.updateWorkStatus(this.id, data.workStatus);
+      }
+      if (data.currentFiles && data.currentFiles.length > 0) {
+        contextStore.addCurrentFiles(this.id, data.currentFiles);
+      }
+
+      // Also set full context if we have workStatus
+      if (data.workStatus || data.currentFiles) {
+        contextStore.setInstanceContext(this.id, this.projectId, {
+          workStatus: data.workStatus,
+          currentFiles: data.currentFiles,
+          currentTask: data.currentTask,
+        });
       }
     });
   }
@@ -485,14 +541,9 @@ export class ClaudeInstance extends EventEmitter {
    * Generates a token and registers it with the MCP server
    */
   private setupMcpConfiguration(): void {
-    console.log(`[ClaudeInstance] setupMcpConfiguration called, enableMcp=${this.enableMcp}`);
-
     if (!this.enableMcp) {
-      console.log(`[ClaudeInstance] MCP disabled for this instance, skipping setup`);
       return;
     }
-
-    console.log(`[ClaudeInstance] Setting up MCP for instance ${this.id}`);
     const dataStore = DataStore.getInstance();
     const remoteConfig = dataStore.getRemoteConfig();
     const apiUrl = `http://localhost:${remoteConfig.port}`;
@@ -666,20 +717,62 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
+   * Install custom agents as skills to the project
+   * These agents can be spawned using the Task tool
+   */
+  private installCustomAgents(): void {
+    if (!this.agents) return;
+
+    try {
+      // Import SkillManager dynamically to avoid circular dependency
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getSkillManager } = require('./SkillManager');
+      const skillManager = getSkillManager();
+
+      console.log(
+        `[ClaudeInstance] Installing ${Object.keys(this.agents).length} custom agents as skills`
+      );
+
+      // Install synchronously since we need this done before Claude starts
+      const skillsDir = path.join(this.projectPath, '.claude', 'skills');
+      if (!fs.existsSync(skillsDir)) {
+        fs.mkdirSync(skillsDir, { recursive: true });
+      }
+
+      for (const [agentName, agentConfig] of Object.entries(this.agents)) {
+        try {
+          const safeAgentName = agentName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+          const skillDir = path.join(skillsDir, safeAgentName);
+          if (!fs.existsSync(skillDir)) {
+            fs.mkdirSync(skillDir, { recursive: true });
+          }
+
+          const content = skillManager.generateCustomAgentSkill(agentName, agentConfig);
+          const skillPath = path.join(skillDir, 'SKILL.md');
+          fs.writeFileSync(skillPath, content, 'utf-8');
+
+          console.log(`[ClaudeInstance] Installed custom agent: ${safeAgentName}`);
+        } catch (error) {
+          console.error(`[ClaudeInstance] Failed to install agent ${agentName}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('[ClaudeInstance] Failed to install custom agents:', error);
+    }
+  }
+
+  /**
    * Start the Claude CLI process
    */
   start(): void {
-    // Log instance details for debugging
-    console.log(`[ClaudeInstance] Starting instance ${this.id}`);
-    console.log(`[ClaudeInstance]   mode: ${this.mode}`);
-    console.log(`[ClaudeInstance]   pooled: ${this.pooledTerminal ? 'yes' : 'no'}`);
-    console.log(
-      `[ClaudeInstance]   prompt: ${this.prompt ? this.prompt.substring(0, 100) + '...' : '(none)'}`
-    );
-
     // Setup MCP configuration if enabled (must complete before starting Claude)
     if (this.enableMcp) {
       this.setupMcpConfiguration();
+    }
+
+    // Install custom agents as skills if provided (--agents parameter)
+    if (this.agents && Object.keys(this.agents).length > 0) {
+      this.installCustomAgents();
     }
 
     // Setup SessionStart hook to capture CLAUDE_SESSION_ID
@@ -693,9 +786,6 @@ export class ClaudeInstance extends EventEmitter {
       this.startWithPooledTerminal(claudePath, args);
       return;
     }
-
-    // Log the detected path for debugging
-    console.log(`[ClaudeInstance] Using Claude CLI at: ${claudePath}`);
 
     // On Windows, if we found a .cmd file, use cmd.exe to run it
     // Otherwise spawn directly
@@ -756,69 +846,20 @@ export class ClaudeInstance extends EventEmitter {
       this._status = 'starting';
       this.emit('status', this._status);
 
-      this.ptyProcess.onData((data: string) => {
-        // Emit raw data for terminal view
-        this.emit('rawOutput', data);
-
-        // Always parse JSON to capture session_id and structured messages
-        // This is needed for both stream-json and interactive modes since we
-        // always use --output-format stream-json to capture the session_id
-        this.parser.process(data);
-
-        // For interactive mode, also handle status transitions based on activity
-        if (this.mode !== 'stream-json') {
-          // Update status to 'running' when we receive data
-          if (this._status === 'starting' || this._status === 'waiting_input') {
-            this._status = 'running';
-            this.emit('status', this._status);
-          }
-
-          // Reset idle timer - will transition to waiting_input after timeout
-          this.resetIdleTimer();
-        }
-      });
-
-      this.ptyProcess.onExit(({ exitCode }) => {
-        // Set exit flag immediately to prevent resize race conditions
-        this._hasExited = true;
-
-        // Clean up idle timer
-        this.clearIdleTimer();
-
-        // Clean up MCP resources
-        this.cleanupMcpResources();
-
-        // Note: We don't clear subagents on exit - they remain for UI display
-        // They will be cleared when the instance is explicitly killed or removed
-
-        this.parser.flush();
-
-        if (exitCode === 0) {
-          this._status = 'completed';
-        } else if (this._status !== 'killed') {
-          this._status = 'error';
-          this._error = `Process exited with code ${exitCode}`;
-        }
-
-        this.emit('status', this._status);
-        this.emit('exit', exitCode);
-        this.ptyProcess = null;
-      });
+      // Setup event handlers (extracted to avoid duplication)
+      this.setupDataHandler(this.ptyProcess);
+      this.setupExitHandler(this.ptyProcess);
 
       // For stream-json mode, send the initial prompt via stdin after a delay
       // This allows Claude to initialize before receiving input
       if (this.mode === 'stream-json' && this.prompt) {
-        console.log(
-          `[ClaudeInstance] Will send prompt after delay: ${this.prompt.substring(0, 100)}...`
-        );
-        setTimeout(() => {
-          if (this.ptyProcess) {
-            console.log(`[ClaudeInstance] Sending prompt to instance ${this.id}`);
+        const promptTimer = setTimeout(() => {
+          this.pendingTimers.delete(promptTimer);
+          if (this.ptyProcess && !this._hasExited) {
             this.sendInput(this.prompt + '\r');
-          } else {
-            console.log(`[ClaudeInstance] ptyProcess is null, cannot send prompt`);
           }
         }, 1500); // Increased delay to ensure Claude is ready
+        this.pendingTimers.add(promptTimer);
       }
     } catch (error) {
       this._status = 'error';
@@ -884,79 +925,32 @@ export class ClaudeInstance extends EventEmitter {
       throw new Error('startWithPooledTerminal called without pooledTerminal');
     }
 
-    console.log(`[ClaudeInstance] Using pooled terminal ${this.pooledTerminal.id}`);
     const shellType = this.detectShellType(this.pooledTerminal.shell);
-    console.log(`[ClaudeInstance] Detected shell type: ${shellType}`);
 
     try {
-      console.log(`[ClaudeInstance] Entering try block for pooled terminal setup`);
-
       // Take ownership of the PTY from the pool
-      console.log(`[ClaudeInstance] Taking ownership of PTY...`);
-      console.log(`[ClaudeInstance] pooledTerminal.pty exists: ${!!this.pooledTerminal.pty}`);
-      console.log(`[ClaudeInstance] pooledTerminal.pty.pid: ${this.pooledTerminal.pty?.pid}`);
       this.ptyProcess = this.pooledTerminal.pty;
-      console.log(`[ClaudeInstance] PTY assigned: ${!!this.ptyProcess}`);
-      console.log(`[ClaudeInstance] PTY pid after assignment: ${this.ptyProcess?.pid}`);
 
       this._status = 'starting';
       this.emit('status', this._status);
 
-      // Setup event handlers (same as direct spawn)
-      console.log(`[ClaudeInstance] Setting up event handlers...`);
-      console.log(`[ClaudeInstance] ptyProcess type: ${typeof this.ptyProcess}`);
-      console.log(`[ClaudeInstance] ptyProcess.onData type: ${typeof this.ptyProcess?.onData}`);
+      // Setup event handlers (extracted to avoid duplication)
+      this.setupDataHandler(this.ptyProcess);
+      this.setupExitHandler(this.ptyProcess);
 
-      this.ptyProcess.onData((data: string) => {
-        this.emit('rawOutput', data);
-        this.parser.process(data);
-
-        if (this.mode !== 'stream-json') {
-          if (this._status === 'starting' || this._status === 'waiting_input') {
-            this._status = 'running';
-            this.emit('status', this._status);
-          }
-          this.resetIdleTimer();
-        }
-      });
-
-      this.ptyProcess.onExit(({ exitCode }) => {
-        this._hasExited = true;
-        this.clearIdleTimer();
-        this.cleanupMcpResources();
-        this.parser.flush();
-
-        if (exitCode === 0) {
-          this._status = 'completed';
-        } else if (this._status !== 'killed') {
-          this._status = 'error';
-          this._error = `Process exited with code ${exitCode}`;
-        }
-
-        this.emit('status', this._status);
-        this.emit('exit', exitCode);
-        this.ptyProcess = null;
-      });
-
-      console.log(`[ClaudeInstance] Converting paths for shell type: ${shellType}`);
       // For Git Bash on Windows, convert paths to Unix-style
       let projectPathForShell = this.projectPath;
       let claudePathForShell = claudePath;
       if (shellType === 'gitbash') {
         projectPathForShell = this.toGitBashPath(this.projectPath);
         claudePathForShell = this.toGitBashPath(claudePath);
-        console.log(`[ClaudeInstance] Converted project path: ${projectPathForShell}`);
-        console.log(`[ClaudeInstance] Converted claude path: ${claudePathForShell}`);
       }
 
       // Escape path for shell (handle spaces and special characters)
       const escapedProjectPath = this.escapeShellPath(projectPathForShell, shellType);
       const escapedClaudePath = this.escapeShellPath(claudePathForShell, shellType);
-      console.log(`[ClaudeInstance] Escaped project path: ${escapedProjectPath}`);
-      console.log(`[ClaudeInstance] Escaped claude path: ${escapedClaudePath}`);
 
       // Build a single combined command: env vars + cd + clear + claude
-      console.log(`[ClaudeInstance] Getting API URL from DataStore...`);
       const apiUrl = `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`;
 
       const fullCommand = this.buildFullCommand(
@@ -967,32 +961,26 @@ export class ClaudeInstance extends EventEmitter {
         shellType
       );
 
-      console.log(`[ClaudeInstance] Full command: ${fullCommand}`);
-      console.log(`[ClaudeInstance] PTY process exists: ${!!this.ptyProcess}`);
-
       const pty = this.ptyProcess;
       if (!pty) {
-        console.error(`[ClaudeInstance] PTY process is null!`);
         return;
       }
 
       // Send the single combined command
-      console.log(`[ClaudeInstance] Sending command to PTY...`);
       pty.write(fullCommand + '\r');
 
       // Send prompt if provided (after a delay for Claude to start)
       if (this.mode === 'stream-json' && this.prompt) {
-        setTimeout(() => {
-          console.log(`[ClaudeInstance] Sending prompt`);
-          pty.write(this.prompt + '\r');
+        const promptTimer = setTimeout(() => {
+          this.pendingTimers.delete(promptTimer);
+          if (!this._hasExited && this.ptyProcess) {
+            pty.write(this.prompt + '\r');
+          }
         }, 2000);
+        this.pendingTimers.add(promptTimer);
       }
     } catch (error) {
-      console.error(`[ClaudeInstance] ERROR in startWithPooledTerminal:`, error);
-      console.error(
-        `[ClaudeInstance] Error stack:`,
-        error instanceof Error ? error.stack : 'no stack'
-      );
+      console.error(`[ClaudeInstance] Failed to start with pooled terminal:`, error);
       this._status = 'error';
       this._error = error instanceof Error ? error.message : 'Failed to start with pooled terminal';
       this.emit('status', this._status);
@@ -1110,6 +1098,11 @@ export class ClaudeInstance extends EventEmitter {
         args.push('--dangerously-skip-permissions');
       }
 
+      // Add agent file if specified (for orchestration instructions)
+      if (this.agentFile) {
+        args.push('--agent', this.agentFile);
+      }
+
       return args;
     }
 
@@ -1142,6 +1135,11 @@ export class ClaudeInstance extends EventEmitter {
       args.push('--permission-mode', 'plan');
     }
 
+    // Add agent file if specified (for orchestration instructions)
+    if (this.agentFile) {
+      args.push('--agent', this.agentFile);
+    }
+
     return args;
   }
 
@@ -1155,6 +1153,10 @@ export class ClaudeInstance extends EventEmitter {
     }
 
     this.idleTimer = setTimeout(() => {
+      // Guard against race condition: timer may fire after instance exits
+      if (this._hasExited) {
+        return;
+      }
       // Only transition to waiting_input in interactive mode when running
       if (this._status === 'running' && this.mode !== 'stream-json') {
         this._status = 'waiting_input';
@@ -1171,6 +1173,88 @@ export class ClaudeInstance extends EventEmitter {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
+  }
+
+  /**
+   * Clear all pending timers (prompt delays, etc.)
+   */
+  private clearPendingTimers(): void {
+    for (const timer of this.pendingTimers) {
+      clearTimeout(timer);
+    }
+    this.pendingTimers.clear();
+  }
+
+  /**
+   * Clean up parser event listeners to prevent memory leaks
+   */
+  private cleanupParserListeners(): void {
+    this.parser.removeAllListeners();
+  }
+
+  /**
+   * Setup the onData handler for the PTY process
+   * Extracted to avoid code duplication between start() and startWithPooledTerminal()
+   */
+  private setupDataHandler(ptyProcess: pty.IPty): void {
+    ptyProcess.onData((data: string) => {
+      // Emit raw data for terminal view
+      this.emit('rawOutput', data);
+
+      // Always parse JSON to capture session_id and structured messages
+      // This is needed for both stream-json and interactive modes since we
+      // always use --output-format stream-json to capture the session_id
+      this.parser.process(data);
+
+      // For interactive mode, also handle status transitions based on activity
+      if (this.mode !== 'stream-json') {
+        // Update status to 'running' when we receive data
+        if (this._status === 'starting' || this._status === 'waiting_input') {
+          this._status = 'running';
+          this.emit('status', this._status);
+        }
+
+        // Reset idle timer - will transition to waiting_input after timeout
+        this.resetIdleTimer();
+      }
+    });
+  }
+
+  /**
+   * Setup the onExit handler for the PTY process
+   * Extracted to avoid code duplication between start() and startWithPooledTerminal()
+   */
+  private setupExitHandler(ptyProcess: pty.IPty): void {
+    ptyProcess.onExit(({ exitCode }) => {
+      // Set exit flag immediately to prevent resize race conditions
+      this._hasExited = true;
+
+      // Clean up idle timer
+      this.clearIdleTimer();
+
+      // Clean up MCP resources
+      this.cleanupMcpResources();
+
+      // Note: We don't clear subagents on exit - they remain for UI display
+      // They will be cleared when the instance is explicitly killed or removed
+
+      this.parser.flush();
+
+      if (exitCode === 0) {
+        this._status = 'completed';
+      } else if (this._status !== 'killed') {
+        this._status = 'error';
+        this._error = `Process exited with code ${exitCode}`;
+      }
+
+      this.emit('status', this._status);
+      this.emit('exit', exitCode);
+      this.ptyProcess = null;
+
+      // Clear context for this instance
+      const contextStore = SharedContextStore.getInstance();
+      contextStore.clearInstanceContext(this.id);
+    });
   }
 
   /**
@@ -1206,15 +1290,26 @@ export class ClaudeInstance extends EventEmitter {
    * On Windows, uses taskkill /T to kill the entire process tree (including child processes like servers)
    */
   kill(): void {
-    // Clean up idle timer
+    // Set exit flag immediately to prevent any pending operations
+    this._hasExited = true;
+
+    // Clean up all timers
     this.clearIdleTimer();
+    this.clearPendingTimers();
+
+    // Clean up parser listeners to prevent memory leaks
+    this.cleanupParserListeners();
 
     // Clean up MCP resources
     this.cleanupMcpResources();
 
     // Clean up subagent tracking
-    const tracker = getSubagentTracker();
-    tracker.clearSubagents(this.id);
+    const subagentTracker = getSubagentTracker();
+    subagentTracker.clearSubagents(this.id);
+
+    // Clean up task tracking
+    const taskTracker = getTaskTracker();
+    taskTracker.clearTasks(this.id);
 
     if (this.ptyProcess) {
       this._status = 'killed';
@@ -1270,11 +1365,13 @@ export class ClaudeInstance extends EventEmitter {
     const shellExitTimeout = options?.shellExitTimeout ?? 500;
     const forceKillTimeout = options?.forceKillTimeout ?? 1000;
 
-    // Clean up idle timer first
+    // Clean up all timers first
     this.clearIdleTimer();
+    this.clearPendingTimers();
 
     // If already exited or no process, just clean up and return
     if (this._hasExited || !this.ptyProcess) {
+      this.cleanupParserListeners();
       this.cleanupMcpResources();
       const tracker = getSubagentTracker();
       tracker.clearSubagents(this.id);
@@ -1285,64 +1382,53 @@ export class ClaudeInstance extends EventEmitter {
     this._status = 'terminating';
     this.emit('status', this._status);
 
-    console.log(`[ClaudeInstance ${this.id}] Starting graceful kill sequence`);
-
     try {
       // Step 1: Send Ctrl+C to interrupt any running command (like a server)
       // This is needed before /exit because Claude can't process /exit while tool is running
-      console.log(`[ClaudeInstance ${this.id}] Sending Ctrl+C to interrupt`);
       this.ptyProcess.write('\x03'); // Ctrl+C
 
       // Brief wait to allow interrupt to process
       const exitedAfterInterrupt = await this.waitForExit(interruptTimeout);
       if (exitedAfterInterrupt) {
-        console.log(`[ClaudeInstance ${this.id}] Process exited after interrupt`);
         return;
       }
 
       // Step 2: Send /exit to Claude Code
       if (!this._hasExited && this.ptyProcess) {
-        console.log(`[ClaudeInstance ${this.id}] Sending /exit to Claude`);
         this.ptyProcess.write('/exit\r');
 
         const exitedAfterClaudeExit = await this.waitForExit(claudeExitTimeout);
         if (exitedAfterClaudeExit) {
-          console.log(`[ClaudeInstance ${this.id}] Claude exited cleanly after /exit`);
           return;
         }
       }
 
       // Step 3: If still alive, send exit to shell
       if (!this._hasExited && this.ptyProcess) {
-        console.log(`[ClaudeInstance ${this.id}] Claude didn't exit, sending exit to shell`);
         this.ptyProcess.write('exit\r');
 
         const exitedAfterShellExit = await this.waitForExit(shellExitTimeout);
         if (exitedAfterShellExit) {
-          console.log(`[ClaudeInstance ${this.id}] Shell exited cleanly after exit command`);
           return;
         }
       }
 
       // Step 4: If still alive, send another Ctrl+C (in case shell has job control prompt)
       if (!this._hasExited && this.ptyProcess) {
-        console.log(`[ClaudeInstance ${this.id}] Shell didn't exit, sending another Ctrl+C`);
         this.ptyProcess.write('\x03'); // Ctrl+C
 
         const exitedAfterCtrlC = await this.waitForExit(forceKillTimeout);
         if (exitedAfterCtrlC) {
-          console.log(`[ClaudeInstance ${this.id}] Process exited after Ctrl+C`);
           return;
         }
       }
 
       // Step 5: Force kill as last resort
       if (!this._hasExited && this.ptyProcess) {
-        console.log(`[ClaudeInstance ${this.id}] Force killing process`);
         this.kill();
       }
     } catch (error) {
-      console.error(`[ClaudeInstance ${this.id}] Error during graceful kill:`, error);
+      console.error(`[ClaudeInstance] Error during graceful kill:`, error);
       // Fall back to force kill on any error
       this.kill();
     }

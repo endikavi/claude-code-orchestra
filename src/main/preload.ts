@@ -44,6 +44,7 @@ import type {
   MetricsPeriod,
   GitStatus,
   SubagentInstance,
+  TrackedTask,
   ProxyConfig,
   AllowedPort,
 } from '@shared/types';
@@ -62,6 +63,13 @@ import type {
 } from '@shared/types/cluster';
 import type { UISettings } from '@shared/types/uiSettings';
 import type { TerminalPoolConfig, TerminalPoolStats } from '@shared/types/pool';
+import type {
+  SharedInstanceContext,
+  ProjectSharedKnowledge,
+  ProjectContextSummary,
+  ContextUpdateEvent,
+} from '@shared/types/sharedContext';
+import type { IpcRendererEvent } from 'electron';
 
 // Expose protected methods to renderer
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -159,6 +167,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         callback(instanceId, title);
       ipcRenderer.on(IPC_CHANNELS.INSTANCE_TERMINAL_TITLE, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.INSTANCE_TERMINAL_TITLE, listener);
+    },
+
+    onDimensionSync: (callback: (instanceId: string, cols: number, rows: number) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        instanceId: string,
+        cols: number,
+        rows: number
+      ) => callback(instanceId, cols, rows);
+      ipcRenderer.on(IPC_CHANNELS.INSTANCE_DIMENSION_SYNC, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.INSTANCE_DIMENSION_SYNC, listener);
     },
 
     setTitle: (id: string, title: string): Promise<void> =>
@@ -644,6 +663,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // Orchestration operations
+  orchestration: {
+    setupAgentMd: (
+      projectPath: string
+    ): Promise<{ success: boolean; path?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATION_SETUP_AGENT_MD, projectPath),
+  },
+
   // Skill operations
   skill: {
     getAvailable: (): Promise<Array<{ id: string; name: string; description: string }>> =>
@@ -760,6 +787,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // Task operations (Claude Code TaskCreate/TaskUpdate/TaskList tools)
+  task: {
+    getByInstance: (instanceId: string): Promise<TrackedTask[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TASK_GET_BY_INSTANCE, instanceId),
+
+    getAll: (): Promise<TrackedTask[]> => ipcRenderer.invoke(IPC_CHANNELS.TASK_GET_ALL),
+
+    // Event listeners
+    onCreated: (callback: (instanceId: string, task: TrackedTask) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, instanceId: string, task: TrackedTask) =>
+        callback(instanceId, task);
+      ipcRenderer.on(IPC_CHANNELS.TASK_CREATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TASK_CREATED, listener);
+    },
+
+    onUpdated: (callback: (instanceId: string, task: TrackedTask) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, instanceId: string, task: TrackedTask) =>
+        callback(instanceId, task);
+      ipcRenderer.on(IPC_CHANNELS.TASK_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TASK_UPDATED, listener);
+    },
+
+    onList: (callback: (instanceId: string, tasks: TrackedTask[]) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        instanceId: string,
+        tasks: TrackedTask[]
+      ) => callback(instanceId, tasks);
+      ipcRenderer.on(IPC_CHANNELS.TASK_LIST, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TASK_LIST, listener);
+    },
+  },
+
   // Proxy operations (web preview tunneling)
   proxy: {
     getConfig: (): Promise<{ success: boolean; data?: ProxyConfig; error?: string }> =>
@@ -863,6 +923,53 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resetStats: (): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.POOL_RESET_STATS),
   },
+
+  // Shared Context operations
+  context: {
+    getInstances: (projectId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_INSTANCES, projectId),
+
+    getInstance: (instanceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_INSTANCE, instanceId),
+
+    getProjectKnowledge: (projectId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_PROJECT_KNOWLEDGE, projectId),
+
+    getSummary: (projectId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_SUMMARY, projectId),
+
+    getStats: () => ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_STATS),
+
+    onUpdated: (callback: (event: ContextUpdateEvent) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, data: ContextUpdateEvent) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.CONTEXT_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTEXT_UPDATED, listener);
+    },
+
+    onInstanceUpdated: (
+      callback: (projectId: string, context: SharedInstanceContext) => void
+    ): (() => void) => {
+      const listener = (
+        _event: IpcRendererEvent,
+        projectId: string,
+        context: SharedInstanceContext
+      ) => callback(projectId, context);
+      ipcRenderer.on(IPC_CHANNELS.CONTEXT_INSTANCE_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTEXT_INSTANCE_UPDATED, listener);
+    },
+
+    onKnowledgeUpdated: (
+      callback: (projectId: string, knowledge: ProjectSharedKnowledge) => void
+    ): (() => void) => {
+      const listener = (
+        _event: IpcRendererEvent,
+        projectId: string,
+        knowledge: ProjectSharedKnowledge
+      ) => callback(projectId, knowledge);
+      ipcRenderer.on(IPC_CHANNELS.CONTEXT_KNOWLEDGE_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTEXT_KNOWLEDGE_UPDATED, listener);
+    },
+  },
 });
 
 // Type declarations for renderer
@@ -902,6 +1009,9 @@ declare global {
         onRawOutput: (callback: (instanceId: string, data: string) => void) => () => void;
         onSessionId: (callback: (instanceId: string, sessionId: string) => void) => () => void;
         onTerminalTitle: (callback: (instanceId: string, title: string) => void) => () => void;
+        onDimensionSync: (
+          callback: (instanceId: string, cols: number, rows: number) => void
+        ) => () => void;
         onSync: (callback: (instances: ClaudeInstance[]) => void) => () => void;
         setTitle: (id: string, title: string) => Promise<void>;
       };
@@ -1109,6 +1219,11 @@ declare global {
           ) => void
         ) => () => void;
       };
+      orchestration: {
+        setupAgentMd: (
+          projectPath: string
+        ) => Promise<{ success: boolean; path?: string; error?: string }>;
+      };
       skill: {
         getAvailable: () => Promise<Array<{ id: string; name: string; description: string }>>;
         install: (
@@ -1160,6 +1275,13 @@ declare global {
         onCompleted: (
           callback: (instanceId: string, subagent: SubagentInstance) => void
         ) => () => void;
+      };
+      task: {
+        getByInstance: (instanceId: string) => Promise<TrackedTask[]>;
+        getAll: () => Promise<TrackedTask[]>;
+        onCreated: (callback: (instanceId: string, task: TrackedTask) => void) => () => void;
+        onUpdated: (callback: (instanceId: string, task: TrackedTask) => void) => () => void;
+        onList: (callback: (instanceId: string, tasks: TrackedTask[]) => void) => () => void;
       };
       proxy: {
         getConfig: () => Promise<{ success: boolean; data?: ProxyConfig; error?: string }>;
@@ -1214,6 +1336,26 @@ declare global {
         updateConfig: (config: Partial<TerminalPoolConfig>) => Promise<TerminalPoolConfig>;
         getStats: () => Promise<TerminalPoolStats>;
         resetStats: () => Promise<{ success: boolean }>;
+      };
+      context: {
+        getInstances: (projectId: string) => Promise<SharedInstanceContext[]>;
+        getInstance: (instanceId: string) => Promise<SharedInstanceContext | null>;
+        getProjectKnowledge: (projectId: string) => Promise<ProjectSharedKnowledge | null>;
+        getSummary: (projectId: string) => Promise<ProjectContextSummary>;
+        getStats: () => Promise<{
+          activeInstances: number;
+          projectsWithKnowledge: number;
+          totalConventions: number;
+          totalImportantFiles: number;
+          totalWarnings: number;
+        }>;
+        onUpdated: (callback: (event: ContextUpdateEvent) => void) => () => void;
+        onInstanceUpdated: (
+          callback: (projectId: string, context: SharedInstanceContext) => void
+        ) => () => void;
+        onKnowledgeUpdated: (
+          callback: (projectId: string, knowledge: ProjectSharedKnowledge) => void
+        ) => () => void;
       };
     };
   }

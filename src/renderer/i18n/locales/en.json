@@ -55,11 +55,29 @@
     "tabs": {
       "general": "General",
       "notifications": "Notifications",
+      "context": "Context",
       "remoteAccess": "Remote Access",
       "proxy": "Proxy",
       "pool": "Pool",
       "security": "Security",
       "cluster": "Cluster"
+    },
+    "context": {
+      "title": "Shared Context",
+      "description": "Configure how Claude instances share context with each other within the same project.",
+      "enabled": "Enable Shared Context",
+      "enabledDesc": "Allow instances to share what they are working on and project knowledge.",
+      "autoPublish": "Auto-publish Context",
+      "autoPublishDesc": "Automatically detect and share context based on tool usage (Read, Write, Bash).",
+      "injectOnStart": "Inject Context on Start",
+      "injectOnStartDesc": "Automatically inject context summary when a new instance starts.",
+      "showPanel": "Show Context Panel",
+      "showPanelDesc": "Display the shared context panel in the UI sidebar.",
+      "retentionDays": "Knowledge Retention",
+      "retentionDaysDesc": "Number of days to retain project knowledge in the database.",
+      "days": "days",
+      "infoTitle": "How Shared Context Works",
+      "infoDesc": "When enabled, Claude instances can see what other instances are working on, share discovered patterns and conventions, and contribute to a shared knowledge base about the project. This helps multiple agents coordinate their work more effectively."
     }
   },
   "security": {
@@ -147,6 +165,8 @@
     "skipPermissionsDescription": "Instances will run with --dangerously-skip-permissions. Use with caution - Claude will execute tools without asking for confirmation.",
     "enableMcp": "Enable MCP Server",
     "enableMcpDescription": "Allows Claude to use orchestration tools, access git status, and interact with Orchestra via MCP protocol",
+    "autoReview": "Auto-Review on Task Completion",
+    "autoReviewDescription": "Automatically run typecheck and lint:fix when Claude completes a task. Uses economical Haiku model.",
     "loadSessionHistory": "Load Session History",
     "loadSessionHistoryDescription": "Import previous Claude Code CLI sessions from this project",
     "saveChanges": "Save Changes",
@@ -513,6 +533,24 @@
       "Plan": "Plan",
       "Bash": "Bash",
       "general-purpose": "General"
+    }
+  },
+  "tasks": {
+    "title": "Task Tracker",
+    "description": "Description",
+    "empty": "No tasks",
+    "emptyHint": "Tasks will appear when Claude uses TaskCreate",
+    "blockedBy": "Blocked by {{count}}",
+    "blocks": "Blocks {{count}}",
+    "status": {
+      "pending": "Pending",
+      "inProgress": "In Progress",
+      "completed": "Completed"
+    },
+    "sections": {
+      "inProgress": "In Progress",
+      "pending": "Pending",
+      "completed": "Completed"
     }
   }
 }

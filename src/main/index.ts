@@ -6,6 +6,8 @@ import { DataStore } from './services/DataStore';
 import { getWebServer } from './services/WebServer';
 import { getClusterManager } from './services/ClusterManager';
 import { getTerminalPool } from './services/TerminalPool';
+import { initializeContextBroadcasting } from './services/SharedContextStore';
+import { getAutoReviewService } from './services/AutoReviewService';
 
 // GPU cache configuration for xterm.js WebGL performance
 // By default, we enable GPU caches for better terminal rendering performance
@@ -124,6 +126,9 @@ app
       console.error('[Main] Failed to initialize terminal pool:', error);
       // Non-fatal - instances will fall back to direct spawn
     }
+
+    // Initialize shared context broadcasting for cluster support
+    initializeContextBroadcasting();
   })
   .catch((error) => {
     console.error('[Main] Failed to initialize app:', error);
@@ -132,6 +137,9 @@ app
 app.on('window-all-closed', () => {
   // Kill all running instances
   void getProcessManager().killAll();
+
+  // Stop auto-review service
+  getAutoReviewService().shutdown();
 
   // Stop cluster
   const clusterManager = getClusterManager();

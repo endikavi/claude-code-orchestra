@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal, ITheme } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '../../stores/instanceStore';
@@ -9,6 +10,7 @@ import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ContextMenu } from '../common/ContextMenu';
 import { sharedResizeObserver } from '../../utils/sharedResizeObserver';
+import { getTerminalFontFamily } from '../../utils/terminalFonts';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -165,6 +167,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     }))
   );
   const theme = useUIStore((state) => state.theme);
+  const terminalFont = useUIStore((state) => state.terminalFont);
 
   const output = getInstanceOutput(instanceId);
 
@@ -250,6 +253,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     // Capture current values to avoid stale closure issues
     const currentInstanceId = instanceId;
     const currentTheme = theme;
+    const currentTerminalFont = terminalFont;
     const currentOutput = output;
     const currentHandleSendInput = handleSendInput;
     const currentUpdateTitle = updateTerminalTitle;
@@ -276,9 +280,9 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
 
       const terminal = new Terminal({
         theme: currentTheme === 'dark' ? darkTerminalTheme : lightTerminalTheme,
-        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+        fontFamily: getTerminalFontFamily(currentTerminalFont),
         fontSize: 14,
-        lineHeight: 1.2,
+        lineHeight: 1,
         cursorBlink: true,
         cursorStyle: 'bar',
         scrollback: 5000, // Reduced from 10000 for better memory usage
@@ -295,6 +299,11 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
 
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(webLinksAddon);
+
+      // Load Unicode11 addon for proper emoji and wide character width calculation
+      const unicode11Addon = new Unicode11Addon();
+      terminal.loadAddon(unicode11Addon);
+      terminal.unicode.activeVersion = '11';
 
       xtermRef.current = terminal;
       fitAddonRef.current = fitAddon;
@@ -550,6 +559,28 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
       xtermRef.current.options.theme = theme === 'dark' ? darkTerminalTheme : lightTerminalTheme;
     }
   }, [theme]);
+
+  // Listen for dimension sync events (multi-client synchronization)
+  // When multiple clients are connected to the same instance, the server calculates
+  // the minimum dimensions and broadcasts to all clients to prevent rendering issues
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.instance.onDimensionSync?.((id, cols, rows) => {
+      if (id === instanceId && xtermRef.current) {
+        const term = xtermRef.current;
+        // Only resize if dimensions are different
+        if (term.cols !== cols || term.rows !== rows) {
+          console.debug(
+            `[TerminalView] Dimension sync for ${instanceId}: ${cols}x${rows} (current: ${term.cols}x${term.rows})`
+          );
+          term.resize(cols, rows);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [instanceId]);
 
   // Auto-focus terminal when instance becomes ready (running/waiting_input)
   useEffect(() => {

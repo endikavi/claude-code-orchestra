@@ -415,12 +415,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const newOutputs = new Map(currentState.outputs);
     const newInstanceConversations = new Map(currentState.instanceConversations);
 
-    // Debug logging
-    // eslint-disable-next-line no-console
-    console.log(
-      `[instanceStore] syncInstances called with ${instances.length} server instances, current local: ${currentState.instances.length}`
-    );
-
     // Filter out instances that are being removed (prevents ghost tabs)
     const filteredServerInstances = instances.filter(
       (i) => !currentState.removingInstanceIds.has(i.id)
@@ -458,10 +452,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       // because sync arrives before server knows about it
       const isRecentlyCreated = Date.now() - (localInst.createdAt || 0) < recentCreationThreshold;
       if (isRecentlyCreated) {
-        // eslint-disable-next-line no-console
-        console.log(
-          `[instanceStore] Preserving recently created instance ${localInst.id} not yet in server`
-        );
         return true;
       }
 

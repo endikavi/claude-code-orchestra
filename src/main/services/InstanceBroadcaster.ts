@@ -1,7 +1,17 @@
 import { IPC_CHANNELS } from '../ipc/channels';
-import type { StreamMessage, InstanceStatus, ShellInstanceStatus } from '@shared/types';
+import type {
+  StreamMessage,
+  InstanceStatus,
+  ShellInstanceStatus,
+  TrackedTask,
+} from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
 import type { HookStatusUpdate } from '@shared/types/remote';
+import type {
+  SharedInstanceContext,
+  ProjectSharedKnowledge,
+  ContextUpdateEvent,
+} from '@shared/types/sharedContext';
 
 // BrowserWindow type for optional Electron dependency
 type BrowserWindowType = import('electron').BrowserWindow;
@@ -50,8 +60,14 @@ export type InstanceEventType =
   | 'terminalTitle'
   | 'subagentStarted'
   | 'subagentCompleted'
+  | 'taskCreated'
+  | 'taskUpdated'
+  | 'taskList'
   | 'hookStatus'
-  | 'hookActivity';
+  | 'hookActivity'
+  | 'contextInstanceUpdated'
+  | 'contextKnowledgeUpdated'
+  | 'contextUpdated';
 
 /**
  * Handles broadcasting instance events to all destinations:
@@ -98,8 +114,14 @@ export class InstanceBroadcaster {
       terminalTitle: IPC_CHANNELS.INSTANCE_TERMINAL_TITLE,
       subagentStarted: IPC_CHANNELS.SUBAGENT_STARTED,
       subagentCompleted: IPC_CHANNELS.SUBAGENT_COMPLETED,
+      taskCreated: IPC_CHANNELS.TASK_CREATED,
+      taskUpdated: IPC_CHANNELS.TASK_UPDATED,
+      taskList: IPC_CHANNELS.TASK_LIST,
       hookStatus: IPC_CHANNELS.INSTANCE_HOOK_STATUS,
       hookActivity: IPC_CHANNELS.HOOK_ACTIVITY,
+      contextInstanceUpdated: IPC_CHANNELS.CONTEXT_INSTANCE_UPDATED,
+      contextKnowledgeUpdated: IPC_CHANNELS.CONTEXT_KNOWLEDGE_UPDATED,
+      contextUpdated: IPC_CHANNELS.CONTEXT_UPDATED,
     };
     return channelMap[event] || null;
   }
@@ -210,6 +232,15 @@ export class InstanceBroadcaster {
           case 'subagentCompleted':
             webServer.broadcastSubagentCompleted(instanceId, data as SubagentInstance);
             break;
+          case 'taskCreated':
+            webServer.broadcastTaskCreated(instanceId, data as TrackedTask);
+            break;
+          case 'taskUpdated':
+            webServer.broadcastTaskUpdated(instanceId, data as TrackedTask);
+            break;
+          case 'taskList':
+            webServer.broadcastTaskList(instanceId, data as TrackedTask[]);
+            break;
           case 'hookStatus':
             webServer.broadcastInstanceHookStatus(instanceId, data as HookStatusUpdate);
             break;
@@ -280,6 +311,91 @@ export class InstanceBroadcaster {
       })
       .catch(() => {
         // WebServer not available, ignore
+      });
+  }
+
+  /**
+   * Broadcast context instance update to all destinations
+   */
+  broadcastContextInstanceUpdate(projectId: string, context: SharedInstanceContext): void {
+    // Send to renderer
+    this.sendToRenderer(IPC_CHANNELS.CONTEXT_INSTANCE_UPDATED, projectId, context);
+
+    // Send to web server
+    getWebServerModule()
+      .then(({ getWebServer }) => {
+        const webServer = getWebServer();
+        if (webServer.running) {
+          webServer.broadcastContextInstanceUpdate(projectId, context);
+        }
+      })
+      .catch(() => {});
+
+    // Send to cluster
+    this.sendContextToCluster('contextInstanceUpdated', projectId, context);
+  }
+
+  /**
+   * Broadcast context knowledge update to all destinations
+   */
+  broadcastContextKnowledgeUpdate(projectId: string, knowledge: ProjectSharedKnowledge): void {
+    // Send to renderer
+    this.sendToRenderer(IPC_CHANNELS.CONTEXT_KNOWLEDGE_UPDATED, projectId, knowledge);
+
+    // Send to web server
+    getWebServerModule()
+      .then(({ getWebServer }) => {
+        const webServer = getWebServer();
+        if (webServer.running) {
+          webServer.broadcastContextKnowledgeUpdate(projectId, knowledge);
+        }
+      })
+      .catch(() => {});
+
+    // Send to cluster
+    this.sendContextToCluster('contextKnowledgeUpdated', projectId, knowledge);
+  }
+
+  /**
+   * Broadcast generic context update event
+   */
+  broadcastContextUpdate(event: ContextUpdateEvent): void {
+    // Send to renderer
+    this.sendToRenderer(IPC_CHANNELS.CONTEXT_UPDATED, event);
+
+    // Send to web server
+    getWebServerModule()
+      .then(({ getWebServer }) => {
+        const webServer = getWebServer();
+        if (webServer.running) {
+          webServer.broadcastContextUpdate(event);
+        }
+      })
+      .catch(() => {});
+
+    // Send to cluster
+    this.sendContextToCluster('contextUpdated', event.projectId, event);
+  }
+
+  /**
+   * Send context event to cluster
+   */
+  private sendContextToCluster(event: string, projectId: string, data: unknown): void {
+    getClusterManagerModule()
+      .then(({ getClusterManager }) => {
+        const clusterManager = getClusterManager();
+        const config = clusterManager.getConfig();
+
+        // Forward context events if connected to cluster
+        if (!clusterManager.isConnected()) {
+          return;
+        }
+
+        // Context events are always shared within the cluster
+        clusterManager.forwardContextEvent(event, projectId, data);
+      })
+      .catch(() => {
+        // ClusterManager not available, ignore
       });
   }
 

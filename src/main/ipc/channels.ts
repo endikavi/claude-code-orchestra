@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
   INSTANCE_RAW_OUTPUT: 'instance:rawOutput',
   INSTANCE_SESSION_ID: 'instance:sessionId',
   INSTANCE_TERMINAL_TITLE: 'instance:terminalTitle',
+  INSTANCE_DIMENSION_SYNC: 'instance:dimensionSync', // Terminal dimension sync for multi-client
   INSTANCE_RESUME: 'instance:resume',
   INSTANCE_SYNC: 'instance:sync', // Sync all instances to renderer (for remote updates)
   INSTANCE_HOOK_STATUS: 'instance:hookStatus', // Hook status updates from dashboard integration
@@ -164,6 +165,9 @@ export const IPC_CHANNELS = {
   HOOK_GET_PROJECT_SETTINGS: 'hook:getProjectSettings',
   HOOK_HAS_CONFIGURED: 'hook:hasConfigured',
 
+  // Orchestration operations
+  ORCHESTRATION_SETUP_AGENT_MD: 'orchestration:setupAgentMd',
+
   // Hook events (main -> renderer)
   HOOK_ACTIVITY: 'hook:activity', // Real-time activity tracking from hooks
 
@@ -206,6 +210,15 @@ export const IPC_CHANNELS = {
   SUBAGENT_STARTED: 'subagent:started',
   SUBAGENT_COMPLETED: 'subagent:completed',
 
+  // Task operations (Claude Code TaskCreate/TaskUpdate/TaskList tools)
+  TASK_GET_BY_INSTANCE: 'task:getByInstance',
+  TASK_GET_ALL: 'task:getAll',
+
+  // Task events (main -> renderer)
+  TASK_CREATED: 'task:created',
+  TASK_UPDATED: 'task:updated',
+  TASK_LIST: 'task:list',
+
   // Proxy operations (web preview tunneling)
   PROXY_GET_CONFIG: 'proxy:getConfig',
   PROXY_UPDATE_CONFIG: 'proxy:updateConfig',
@@ -232,6 +245,18 @@ export const IPC_CHANNELS = {
   POOL_UPDATE_CONFIG: 'pool:updateConfig',
   POOL_GET_STATS: 'pool:getStats',
   POOL_RESET_STATS: 'pool:resetStats',
+
+  // Shared Context operations
+  CONTEXT_GET_INSTANCES: 'context:getInstances',
+  CONTEXT_GET_INSTANCE: 'context:getInstance',
+  CONTEXT_GET_PROJECT_KNOWLEDGE: 'context:getProjectKnowledge',
+  CONTEXT_GET_SUMMARY: 'context:getSummary',
+  CONTEXT_GET_STATS: 'context:getStats',
+
+  // Shared Context events (main -> renderer)
+  CONTEXT_INSTANCE_UPDATED: 'context:instanceUpdated',
+  CONTEXT_KNOWLEDGE_UPDATED: 'context:knowledgeUpdated',
+  CONTEXT_UPDATED: 'context:updated',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

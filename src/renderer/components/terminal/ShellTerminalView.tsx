@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal, ITheme } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { useTranslation } from 'react-i18next';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ContextMenu } from '../common/ContextMenu';
+import { getTerminalFontFamily } from '../../utils/terminalFonts';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -76,6 +78,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const { sendShellInput, getShellOutput } = useInstanceStore();
   const theme = useUIStore((state) => state.theme);
+  const terminalFont = useUIStore((state) => state.terminalFont);
 
   const output = getShellOutput(shellId);
 
@@ -137,6 +140,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
     // Capture current values to avoid stale closure issues
     const currentShellId = shellId;
     const currentTheme = theme;
+    const currentTerminalFont = terminalFont;
     const currentOutput = output;
     const currentSendShellInput = sendShellInput;
 
@@ -160,9 +164,9 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
 
       const terminal = new Terminal({
         theme: currentTheme === 'dark' ? darkTerminalTheme : lightTerminalTheme,
-        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+        fontFamily: getTerminalFontFamily(currentTerminalFont),
         fontSize: 14,
-        lineHeight: 1.2,
+        lineHeight: 1,
         cursorBlink: true,
         cursorStyle: 'bar',
         scrollback: 5000, // Reduced from 10000 for better memory usage
@@ -179,6 +183,11 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
 
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(webLinksAddon);
+
+      // Load Unicode11 addon for proper emoji and wide character width calculation
+      const unicode11Addon = new Unicode11Addon();
+      terminal.loadAddon(unicode11Addon);
+      terminal.unicode.activeVersion = '11';
 
       xtermRef.current = terminal;
       fitAddonRef.current = fitAddon;

@@ -11,6 +11,7 @@ import { useClusterStore } from './stores/clusterStore';
 import { useProxyStore } from './stores/proxyStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { setupOrchestrationEventListeners } from './stores/orchestrationStore';
+import { setupTaskEventListeners } from './stores/taskStore';
 
 function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -35,28 +36,39 @@ function App() {
 
   useEffect(() => {
     // Initialize UI settings from main process (Electron only)
-    void initializeFromMain();
+    initializeFromMain().catch((err) =>
+      console.error('[App] Failed to initialize from main:', err)
+    );
 
     // Load projects and instances on mount
-    void loadProjects();
-    void loadInstances();
+    loadProjects().catch((err) => console.error('[App] Failed to load projects:', err));
+    loadInstances().catch((err) => console.error('[App] Failed to load instances:', err));
 
     // Setup listeners for projects and instances
     const cleanupProjects = setupProjectListeners();
     const cleanupInstances = setupInstanceListeners();
 
     // Initialize cluster (load config, status, and setup listeners)
-    void loadClusterConfig().then(() => {
-      void loadClusterStatus();
-      void loadGlobalProjects();
-    });
+    loadClusterConfig()
+      .then(() => {
+        loadClusterStatus().catch((err) =>
+          console.error('[App] Failed to load cluster status:', err)
+        );
+        loadGlobalProjects().catch((err) =>
+          console.error('[App] Failed to load global projects:', err)
+        );
+      })
+      .catch((err) => console.error('[App] Failed to load cluster config:', err));
     const cleanupCluster = setupClusterListeners();
 
     // Setup orchestration (subagent tracking) event listeners globally
     const cleanupOrchestration = setupOrchestrationEventListeners();
 
+    // Setup task tracking event listeners globally
+    const cleanupTasks = setupTaskEventListeners();
+
     // Initialize proxy store (load config and setup listeners)
-    void loadProxyConfig();
+    loadProxyConfig().catch((err) => console.error('[App] Failed to load proxy config:', err));
     const cleanupProxy = setupProxyListeners();
 
     return () => {
@@ -64,6 +76,7 @@ function App() {
       cleanupInstances();
       cleanupCluster();
       cleanupOrchestration();
+      cleanupTasks();
       cleanupProxy();
     };
   }, [
