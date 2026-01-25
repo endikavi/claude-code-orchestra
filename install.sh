@@ -76,6 +76,7 @@ install_orchestra() {
   local url="https://github.com/$REPO/releases/download/$version/$filename"
 
   info "Downloading $filename..."
+  info "URL: $url"
 
   if [ "$os" = "linux" ]; then
     curl -fsSL "$url" -o "$INSTALL_DIR/orchestra"
