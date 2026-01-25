@@ -70,9 +70,6 @@ export class HistoryWatcher extends EventEmitter {
     this.historyPath = getSessionHistoryPath(this.projectPath, sessionId);
     this.lastPosition = 0;
     this.lastSize = 0;
-
-    console.log(`[HistoryWatcher] Session ID set: ${sessionId}`);
-    console.log(`[HistoryWatcher] History path: ${this.historyPath}`);
   }
 
   /**
@@ -80,20 +77,11 @@ export class HistoryWatcher extends EventEmitter {
    */
   start(): void {
     if (this.isWatching) {
-      console.log('[HistoryWatcher] Already watching');
       return;
     }
 
     if (!this.sessionId || !this.historyPath) {
-      console.log('[HistoryWatcher] No session ID set, waiting...');
       return;
-    }
-
-    console.log(`[HistoryWatcher] Starting watch on ${this.historyPath}`);
-
-    // Check if history file exists
-    if (!fs.existsSync(this.historyPath)) {
-      console.log('[HistoryWatcher] History file does not exist yet, will poll until it appears');
     }
 
     this.isWatching = true;
@@ -176,7 +164,6 @@ export class HistoryWatcher extends EventEmitter {
     for (const [id, timestamp] of this.pendingToolUseIds) {
       if (now - timestamp > PENDING_TOOL_USE_MAX_AGE_MS) {
         this.pendingToolUseIds.delete(id);
-        console.log(`[HistoryWatcher] Cleaned up stale tool use ID: ${id}`);
       }
     }
   }
@@ -291,7 +278,6 @@ export class HistoryWatcher extends EventEmitter {
         // Track this tool_use_id with timestamp for TTL cleanup
         this.pendingToolUseIds.set(toolBlock.id, Date.now());
 
-        console.log(`[HistoryWatcher] Subagent started: ${toolBlock.id} (${event.subagentType})`);
         this.emit('subagent_started', event);
       }
     }
@@ -329,7 +315,6 @@ export class HistoryWatcher extends EventEmitter {
             isError: resultBlock.is_error || false,
           };
 
-          console.log(`[HistoryWatcher] Subagent completed: ${resultBlock.tool_use_id}`);
           this.emit('subagent_completed', event);
         }
       }
@@ -352,7 +337,6 @@ export class HistoryWatcher extends EventEmitter {
           activeForm: toolBlock.input?.activeForm,
         };
 
-        console.log(`[HistoryWatcher] Task created: ${event.subject}`);
         this.emit('task_created', event);
       }
     }
@@ -380,7 +364,6 @@ export class HistoryWatcher extends EventEmitter {
           metadata: toolBlock.input?.metadata,
         };
 
-        console.log(`[HistoryWatcher] Task updated: ${taskId} -> ${event.status || 'modified'}`);
         this.emit('task_updated', event);
       }
     }
@@ -391,13 +374,6 @@ export class HistoryWatcher extends EventEmitter {
    */
   private detectAgentProgress(message: HistoryMessage): void {
     if (message.data?.type === 'agent_progress' && message.data.agentId) {
-      // Agent progress events can indicate subagent status changes
-      // We can use this to track running subagents even if we missed the tool_use
-      console.log(
-        `[HistoryWatcher] Agent progress: ${message.data.agentId} - ${message.data.status}`
-      );
-
-      // Emit a progress event that can be used for UI updates
       this.emit('agent_progress', {
         agentId: message.data.agentId,
         status: message.data.status,
@@ -475,8 +451,6 @@ export class HistoryWatcher extends EventEmitter {
    */
   private watchSubagentFile(filePath: string): void {
     if (this.subagentFileWatchers.has(filePath)) return;
-
-    console.log(`[HistoryWatcher] Watching subagent file: ${filePath}`);
 
     // Initialize position to current file size
     try {
@@ -601,7 +575,6 @@ export function createHistoryWatcher(
   sessionId?: string
 ): HistoryWatcher | null {
   if (!isLocalProject(projectPath)) {
-    console.log('[HistoryWatcher] Project is not local, skipping history watcher');
     return null;
   }
 

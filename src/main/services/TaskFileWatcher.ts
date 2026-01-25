@@ -67,7 +67,7 @@ export class TaskFileWatcher extends EventEmitter {
   private isWatching: boolean = false;
   private knownTasks: Map<string, ClaudeTaskFile> = new Map();
   private lastModifiedTimes: Map<string, number> = new Map();
-  private taskCreatedTimes: Map<string, number> = new Map(); // Track createdAt timestamps
+  private taskCreatedTimes: Map<string, number> = new Map();
   private instanceId: string;
 
   constructor(instanceId: string, taskListId?: string) {
@@ -92,9 +92,6 @@ export class TaskFileWatcher extends EventEmitter {
     this.knownTasks.clear();
     this.lastModifiedTimes.clear();
     this.taskCreatedTimes.clear();
-
-    console.log(`[TaskFileWatcher] Task list ID set: ${taskListId}`);
-    console.log(`[TaskFileWatcher] Task list dir: ${this.taskListDir}`);
   }
 
   /**
@@ -102,16 +99,12 @@ export class TaskFileWatcher extends EventEmitter {
    */
   start(): void {
     if (this.isWatching) {
-      console.log('[TaskFileWatcher] Already watching');
       return;
     }
 
     if (!this.taskListId || !this.taskListDir) {
-      console.log('[TaskFileWatcher] No task list ID set, waiting...');
       return;
     }
-
-    console.log(`[TaskFileWatcher] Starting watch on ${this.taskListDir}`);
 
     this.isWatching = true;
     this.startPolling();
@@ -241,7 +234,6 @@ export class TaskFileWatcher extends EventEmitter {
       const trackedTask = this.toTrackedTask(taskData, createdAt);
 
       if (isNew) {
-        console.log(`[TaskFileWatcher] New task detected: ${taskId} - ${taskData.subject}`);
         this.emit('task_created', { task: trackedTask, instanceId: this.instanceId });
       } else if (previousTask) {
         // Check if anything changed
@@ -254,7 +246,6 @@ export class TaskFileWatcher extends EventEmitter {
           !arraysEqual(previousTask.blocks, taskData.blocks) ||
           !arraysEqual(previousTask.blockedBy, taskData.blockedBy)
         ) {
-          console.log(`[TaskFileWatcher] Task updated: ${taskId} -> ${taskData.status}`);
           this.emit('task_updated', { task: trackedTask, instanceId: this.instanceId });
         }
       }

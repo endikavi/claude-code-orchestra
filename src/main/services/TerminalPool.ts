@@ -52,7 +52,6 @@ export class TerminalPool extends EventEmitter {
     // Load config from DataStore or use defaults
     const dataStore = DataStore.getInstance();
     this.config = dataStore.getTerminalPoolConfig();
-    console.log('[TerminalPool] Created with config:', this.config);
   }
 
   /**
@@ -84,17 +83,13 @@ export class TerminalPool extends EventEmitter {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      console.log('[TerminalPool] Already initialized, skipping');
       return;
     }
 
     if (!this.config.enabled) {
-      console.log('[TerminalPool] Pool disabled, skipping initialization');
       this.initialized = true;
       return;
     }
-
-    console.log(`[TerminalPool] Initializing pool with minSize=${this.config.minPoolSize}`);
 
     // Pre-spawn terminals
     const spawnPromises: Promise<void>[] = [];
@@ -104,8 +99,6 @@ export class TerminalPool extends EventEmitter {
 
     await Promise.allSettled(spawnPromises);
     this.initialized = true;
-
-    console.log(`[TerminalPool] Initialized with ${this.getIdleCount()} terminals`);
     this.emit('initialized', this.getStats());
   }
 
@@ -142,8 +135,6 @@ export class TerminalPool extends EventEmitter {
         // Reset spawn failure counter - successful acquire proves terminals work
         this.resetSpawnFailures();
 
-        console.log(`[TerminalPool] Acquired terminal ${id}, ${this.getIdleCount()} remaining`);
-
         // Schedule replenishment
         this.scheduleReplenish();
 
@@ -154,7 +145,6 @@ export class TerminalPool extends EventEmitter {
 
     // Pool exhausted - caller should fall back to direct spawn
     this.fallbackCount++;
-    console.log('[TerminalPool] Pool exhausted, fallback required');
 
     // Aggressive replenish when pool is empty
     this.scheduleReplenish(0);
@@ -170,7 +160,6 @@ export class TerminalPool extends EventEmitter {
   release(id: string): void {
     const terminal = this.pool.get(id);
     if (!terminal) {
-      console.log(`[TerminalPool] Terminal ${id} not found in pool`);
       return;
     }
 
@@ -184,8 +173,6 @@ export class TerminalPool extends EventEmitter {
   private dispose(id: string): void {
     const terminal = this.pool.get(id);
     if (!terminal) return;
-
-    console.log(`[TerminalPool] Disposing terminal ${id}`);
 
     terminal.status = 'disposing';
 
@@ -222,15 +209,11 @@ export class TerminalPool extends EventEmitter {
 
     // Check if we're in backoff due to consecutive failures
     if (this.consecutiveSpawnFailures >= TerminalPool.MAX_CONSECUTIVE_FAILURES) {
-      console.log(
-        `[TerminalPool] Spawning paused due to ${this.consecutiveSpawnFailures} consecutive failures`
-      );
       return Promise.resolve();
     }
 
     const totalCount = this.pool.size;
     if (totalCount >= this.config.maxPoolSize) {
-      console.log('[TerminalPool] At max capacity, not spawning');
       return Promise.resolve();
     }
 
@@ -238,8 +221,6 @@ export class TerminalPool extends EventEmitter {
     const id = randomUUID();
 
     try {
-      console.log(`[TerminalPool] Spawning terminal ${id} with shell ${shell}`);
-
       const ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
         cols: 120,
@@ -264,7 +245,6 @@ export class TerminalPool extends EventEmitter {
 
       // Handle unexpected exit
       ptyProcess.onExit(() => {
-        console.log(`[TerminalPool] Terminal ${id} exited unexpectedly`);
         this.pool.delete(id);
         const timer = this.idleTimers.get(id);
         if (timer) {
@@ -287,7 +267,6 @@ export class TerminalPool extends EventEmitter {
         this.setIdleTimeout(id);
       }
 
-      console.log(`[TerminalPool] Spawned terminal ${id}, pool size: ${this.pool.size}`);
       this.emit('spawned', id);
     } catch (error) {
       this.handleSpawnFailure(error);
@@ -314,8 +293,6 @@ export class TerminalPool extends EventEmitter {
     // Add random jitter (0-25% of base delay)
     const jitter = Math.random() * baseDelay * 0.25;
     const backoffDelay = baseDelay + jitter;
-
-    console.log(`[TerminalPool] Backing off for ${Math.round(backoffDelay)}ms before retry`);
 
     // Clear any existing backoff timer
     if (this.spawnBackoffTimer) {
@@ -344,9 +321,6 @@ export class TerminalPool extends EventEmitter {
    */
   public resetSpawnFailures(): void {
     if (this.consecutiveSpawnFailures > 0) {
-      console.log(
-        `[TerminalPool] Resetting spawn failure counter from ${this.consecutiveSpawnFailures}`
-      );
       this.consecutiveSpawnFailures = 0;
       if (this.spawnBackoffTimer) {
         clearTimeout(this.spawnBackoffTimer);
@@ -368,7 +342,6 @@ export class TerminalPool extends EventEmitter {
 
       const terminal = this.pool.get(id);
       if (terminal && terminal.status === 'idle') {
-        console.log(`[TerminalPool] Terminal ${id} idle timeout, disposing`);
         this.dispose(id);
       }
     }, this.config.idleTimeoutMs);
@@ -406,8 +379,6 @@ export class TerminalPool extends EventEmitter {
 
     if (neededCount <= 0) return;
 
-    console.log(`[TerminalPool] Replenishing ${neededCount} terminals`);
-
     const spawnPromises: Promise<void>[] = [];
     for (let i = 0; i < neededCount; i++) {
       spawnPromises.push(this.spawnTerminal());
@@ -429,7 +400,6 @@ export class TerminalPool extends EventEmitter {
       // Use CMD for pooled terminals on Windows
       // It's simpler and doesn't have path translation issues
       // Claude Code will handle Git Bash internally
-      console.log(`[TerminalPool] Using CMD on Windows`);
 
       // Still detect Git Bash path for the environment variable
       const gitBashPaths = [
@@ -440,7 +410,6 @@ export class TerminalPool extends EventEmitter {
 
       for (const bashPath of gitBashPaths) {
         if (fs.existsSync(bashPath)) {
-          console.log(`[TerminalPool] Found Git Bash at: ${bashPath} (for env var)`);
           this.gitBashPath = bashPath;
           break;
         }
@@ -518,7 +487,6 @@ export class TerminalPool extends EventEmitter {
       }
     }
 
-    console.log('[TerminalPool] Config updated:', this.config);
     this.emit('configUpdated', this.config);
     return this.config;
   }

@@ -117,7 +117,29 @@ Orchestra includes a standalone web client that connects via WebSocket, enabling
 
 **For users (installing from AppImage/deb):**
 - Claude CLI installed and available in PATH
-- FUSE for AppImage (most distros include this by default)
+- FUSE for AppImage:
+  ```bash
+  # Ubuntu 22.04+
+  sudo apt install libfuse2
+
+  # Fedora
+  sudo dnf install fuse
+
+  # Arch Linux
+  sudo pacman -S fuse2
+  ```
+- If you get a SUID sandbox error, either run with `--no-sandbox`:
+  ```bash
+  orchestra --no-sandbox
+  ```
+  Or enable unprivileged user namespaces (recommended):
+  ```bash
+  # Temporary
+  sudo sysctl -w kernel.unprivileged_userns_clone=1
+
+  # Permanent
+  echo 'kernel.unprivileged_userns_clone=1' | sudo tee /etc/sysctl.d/userns.conf
+  ```
 
 **For developers (building from source):**
 
