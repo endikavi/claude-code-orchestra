@@ -62,10 +62,14 @@ install_orchestra() {
   local filename=""
   case "$os" in
     linux)
-      filename="Orchestra-${version#v}-${arch}.AppImage"
+      filename="Orchestra-${version#v}.AppImage"
       ;;
     macos)
-      filename="Orchestra-${version#v}-${arch}.dmg"
+      if [ "$arch" = "arm64" ]; then
+        filename="Orchestra-${version#v}-arm64.dmg"
+      else
+        filename="Orchestra-${version#v}.dmg"
+      fi
       ;;
   esac
 
