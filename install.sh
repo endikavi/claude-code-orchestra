@@ -42,10 +42,10 @@ get_install_dir() {
   fi
 }
 
-# Get latest version from GitHub API
+# Get latest version from GitHub API (includes pre-releases)
 get_latest_version() {
-  curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
-    grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/'
+  curl -fsSL "https://api.github.com/repos/$REPO/releases" |
+    grep '"tag_name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/'
 }
 
 # Download and install
