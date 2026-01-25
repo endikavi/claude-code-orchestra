@@ -109,7 +109,7 @@ export class ProcessManager extends EventEmitter {
    *                Terminal pool is ONLY used for local requests for security
    */
   createInstance(
-    config: Omit<ClaudeInstanceConfig, 'projectPath' | 'skipPermissions'>,
+    config: Omit<ClaudeInstanceConfig, 'projectPath'> & { skipPermissions?: boolean },
     isLocal: boolean = true
   ): ClaudeInstanceType {
     // Get project from database
@@ -139,13 +139,20 @@ export class ProcessManager extends EventEmitter {
       }
     }
 
+    // skipPermissions: use instance config if provided, otherwise fall back to project setting
+    // But only if project allows skipPermissions - instance cannot enable it if project doesn't allow
+    const effectiveSkipPermissions = project.skipPermissions
+      ? (config.skipPermissions ?? project.skipPermissions)
+      : false;
+
     const instance = new ClaudeInstance({
       projectId: config.projectId,
       projectPath: project.path,
       model: config.model,
       mode: config.mode,
       prompt: config.prompt,
-      skipPermissions: project.skipPermissions,
+      skipPermissions: effectiveSkipPermissions,
+      verbose: config.verbose,
       enableMcp: project.enableMcp,
       resumeSessionId: config.resumeSessionId,
       planMode: config.planMode,

@@ -307,6 +307,7 @@ export interface ClaudeInstanceConfig {
   mode: InstanceMode;
   prompt?: string; // Initial prompt for stream-json/print mode
   skipPermissions?: boolean;
+  verbose?: boolean; // Enable verbose output (default: false)
   resumeSessionId?: string; // For --resume flag
   planMode?: boolean; // For --plan flag
   enableMcp?: boolean; // Enable MCP server integration
@@ -323,6 +324,7 @@ export class ClaudeInstance extends EventEmitter {
   public readonly prompt?: string;
   public readonly createdAt: number;
   public readonly skipPermissions: boolean;
+  public readonly verbose: boolean;
   public readonly resumeSessionId?: string;
   public readonly planMode: boolean;
   public readonly enableMcp: boolean;
@@ -353,6 +355,7 @@ export class ClaudeInstance extends EventEmitter {
     this.mode = config.mode;
     this.prompt = config.prompt;
     this.skipPermissions = config.skipPermissions ?? false;
+    this.verbose = config.verbose ?? false;
     this.resumeSessionId = config.resumeSessionId;
     this.planMode = config.planMode ?? false;
     this.enableMcp = config.enableMcp ?? false;
@@ -820,6 +823,8 @@ export class ClaudeInstance extends EventEmitter {
         ...(process.env as Record<string, string>),
         FORCE_COLOR: '1',
         TERM: 'xterm-256color',
+        // Enable the new task tracking system in Claude Code
+        CLAUDE_CODE_ENABLE_TASKS: 'true',
         // Dashboard integration environment variables
         // These are used by hook scripts to communicate with the dashboard
         CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
@@ -1088,7 +1093,12 @@ export class ClaudeInstance extends EventEmitter {
       args.push('--resume', this.resumeSessionId);
 
       // Always use stream-json to capture structured data
-      args.push('--output-format', 'stream-json', '--verbose');
+      args.push('--output-format', 'stream-json');
+
+      // Add verbose flag if enabled
+      if (this.verbose) {
+        args.push('--verbose');
+      }
 
       // Add model
       args.push('--model', this.model);
@@ -1120,7 +1130,12 @@ export class ClaudeInstance extends EventEmitter {
     // Always use stream-json output format to capture session_id and structured data
     // This is required for both 'stream-json' and 'interactive' modes
     // The rawOutput event provides terminal-compatible output for display
-    args.push('--output-format', 'stream-json', '--verbose');
+    args.push('--output-format', 'stream-json');
+
+    // Add verbose flag if enabled
+    if (this.verbose) {
+      args.push('--verbose');
+    }
 
     // Add model
     args.push('--model', this.model);

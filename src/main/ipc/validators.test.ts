@@ -183,6 +183,8 @@ describe('validators.instanceCreate', () => {
     expect(result.model).toBe('sonnet');
     expect(result.mode).toBe('stream-json');
     expect(result.planMode).toBe(false);
+    expect(result.verbose).toBe(false);
+    expect(result.skipPermissions).toBe(false);
   });
 
   it('should accept planMode when true', () => {
@@ -194,6 +196,48 @@ describe('validators.instanceCreate', () => {
     };
     const result = validators.instanceCreate(data);
     expect(result.planMode).toBe(true);
+  });
+
+  it('should accept verbose when true', () => {
+    const data = {
+      projectId: 'proj123',
+      model: 'sonnet',
+      mode: 'interactive',
+      verbose: true,
+    };
+    const result = validators.instanceCreate(data);
+    expect(result.verbose).toBe(true);
+  });
+
+  it('should default verbose to false when not provided', () => {
+    const data = {
+      projectId: 'proj123',
+      model: 'sonnet',
+      mode: 'interactive',
+    };
+    const result = validators.instanceCreate(data);
+    expect(result.verbose).toBe(false);
+  });
+
+  it('should accept skipPermissions when true', () => {
+    const data = {
+      projectId: 'proj123',
+      model: 'sonnet',
+      mode: 'interactive',
+      skipPermissions: true,
+    };
+    const result = validators.instanceCreate(data);
+    expect(result.skipPermissions).toBe(true);
+  });
+
+  it('should default skipPermissions to false when not provided', () => {
+    const data = {
+      projectId: 'proj123',
+      model: 'sonnet',
+      mode: 'interactive',
+    };
+    const result = validators.instanceCreate(data);
+    expect(result.skipPermissions).toBe(false);
   });
 
   it('should validate all models', () => {

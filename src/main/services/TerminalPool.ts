@@ -475,6 +475,9 @@ export class TerminalPool extends EventEmitter {
     // Pass all environment variables from the parent process
     const env: Record<string, string> = { ...(process.env as Record<string, string>) };
 
+    // Enable the new task tracking system in Claude Code
+    env['CLAUDE_CODE_ENABLE_TASKS'] = 'true';
+
     // On Windows, ensure CLAUDE_CODE_GIT_BASH_PATH is set for Claude Code
     if (process.platform === 'win32' && this.gitBashPath) {
       env['CLAUDE_CODE_GIT_BASH_PATH'] = this.gitBashPath;

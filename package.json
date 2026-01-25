@@ -103,6 +103,7 @@
     "concurrently": "^9.1.2",
     "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
+    "electron-icon-builder": "^2.0.1",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.37.3",
@@ -145,10 +146,12 @@
     ],
     "win": {
       "target": "nsis",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "icon": "resources/icons/win/icon.ico"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "resources/icons/mac/icon.icns"
     },
     "linux": {
       "target": [
@@ -156,7 +159,7 @@
         "deb"
       ],
       "category": "Development",
-      "icon": "resources/icon.png",
+      "icon": "resources/icons/png/1024x1024.png",
       "maintainer": "Orchestra Team"
     }
   },

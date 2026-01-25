@@ -81,6 +81,9 @@ interface InstanceState {
   error: string | null;
   // Track instances being removed to prevent re-adding via sync
   removingInstanceIds: Set<string>;
+  // Buffer for status updates that arrive before instance is added to store
+  // This prevents race condition where status event arrives before REST response is processed
+  pendingStatuses: Map<string, InstanceStatus>;
 
   // Shell state
   shellInstances: ShellInstance[];
@@ -98,6 +101,8 @@ interface InstanceState {
     mode: InstanceMode;
     prompt?: string;
     planMode?: boolean;
+    verbose?: boolean;
+    skipPermissions?: boolean;
   }) => Promise<ClaudeInstance>;
   resumeConversation: (conversation: Conversation) => Promise<ClaudeInstance>;
   killInstance: (id: string) => void;
@@ -175,6 +180,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   isLoading: false,
   error: null,
   removingInstanceIds: new Set(),
+  pendingStatuses: new Map(),
 
   // Shell initial state
   shellInstances: [],
@@ -221,10 +227,22 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       set((state) => {
         // Check if instance already exists (can happen with web client sync)
         const exists = state.instances.some((i) => i.id === instance.id);
+
+        // Check for pending status that arrived before instance was added
+        const pendingStatus = state.pendingStatuses.get(instance.id);
+        const instanceWithStatus = pendingStatus
+          ? { ...instance, status: pendingStatus }
+          : instance;
+
+        // Clear the pending status
+        const pendingStatuses = new Map(state.pendingStatuses);
+        pendingStatuses.delete(instance.id);
+
         return {
-          instances: exists ? state.instances : [...state.instances, instance],
+          instances: exists ? state.instances : [...state.instances, instanceWithStatus],
           outputs,
           instanceConversations,
+          pendingStatuses,
           selectedInstanceId: instance.id,
           selectedShellId: null, // Clear shell selection when creating instance
           lastSelectionTime: Date.now(),
@@ -285,10 +303,22 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       set((state) => {
         // Check if instance already exists (can happen with sync race condition)
         const exists = state.instances.some((i) => i.id === instance.id);
+
+        // Check for pending status that arrived before instance was added
+        const pendingStatus = state.pendingStatuses.get(instance.id);
+        const instanceWithStatus = pendingStatus
+          ? { ...instance, status: pendingStatus }
+          : instance;
+
+        // Clear the pending status
+        const pendingStatuses = new Map(state.pendingStatuses);
+        pendingStatuses.delete(instance.id);
+
         return {
-          instances: exists ? state.instances : [...state.instances, instance],
+          instances: exists ? state.instances : [...state.instances, instanceWithStatus],
           outputs,
           instanceConversations,
+          pendingStatuses,
           selectedInstanceId: instance.id,
           selectedShellId: null, // Clear shell selection when resuming conversation
           lastSelectionTime: Date.now(),
@@ -458,9 +488,21 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return false;
     });
 
+    // Apply pending statuses to server instances before merging
+    // This handles the race condition where status events arrive before sync
+    const pendingStatuses = new Map(currentState.pendingStatuses);
+    const serverInstancesWithPendingStatus = filteredServerInstances.map((inst) => {
+      const pendingStatus = pendingStatuses.get(inst.id);
+      if (pendingStatus) {
+        pendingStatuses.delete(inst.id);
+        return { ...inst, status: pendingStatus };
+      }
+      return inst;
+    });
+
     // Merge: server instances (excluding removed) + preserved local instances
     const mergedInstances = [
-      ...filteredServerInstances, // All instances from server (excluding those being removed)
+      ...serverInstancesWithPendingStatus, // All instances from server (excluding those being removed)
       ...preservedLocalInstances, // Local terminal instances not in server + recently created
     ];
 
@@ -513,6 +555,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       instances: mergedInstances,
       outputs: newOutputs,
       instanceConversations: newInstanceConversations,
+      pendingStatuses,
       selectedInstanceId: selectedStillExists ? currentSelectedId : null,
     });
   },
@@ -521,9 +564,21 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Ignore updates for instances being removed (prevents ghost updates)
     if (get().removingInstanceIds.has(id)) return;
 
-    set((state) => ({
-      instances: state.instances.map((inst) => (inst.id === id ? { ...inst, status } : inst)),
-    }));
+    const state = get();
+    const instanceExists = state.instances.some((inst) => inst.id === id);
+
+    if (instanceExists) {
+      // Instance exists, update it directly
+      set((state) => ({
+        instances: state.instances.map((inst) => (inst.id === id ? { ...inst, status } : inst)),
+      }));
+    } else {
+      // Instance not in store yet - buffer the status for when it's added
+      // This handles race condition where status event arrives before REST response
+      const pendingStatuses = new Map(state.pendingStatuses);
+      pendingStatuses.set(id, status);
+      set({ pendingStatuses });
+    }
   },
 
   updateTerminalTitle: (id, title) => {

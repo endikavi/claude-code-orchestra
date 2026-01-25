@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
+import { useProjectStore } from '../../stores/projectStore';
 import { Modal } from '../common/Modal';
 import type { ClaudeModel, InstanceMode } from '@shared/types';
 
@@ -20,9 +21,15 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
   const { t } = useTranslation();
   const { createInstance } = useInstanceStore();
   const { isClusterEnabled, config: clusterConfig, privacy } = useClusterStore();
+  const { projects } = useProjectStore();
+
+  // Find the project to check if skipPermissions is allowed
+  const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId]);
 
   const [model, setModel] = useState<ClaudeModel>('sonnet');
   const [planMode, setPlanMode] = useState(false);
+  const [verbose, setVerbose] = useState(false);
+  const [skipPermissions, setSkipPermissions] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -38,6 +45,9 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
   const mode: InstanceMode = 'interactive';
   const clusterIsActive = isClusterEnabled() && clusterConfig?.role !== 'standalone';
 
+  // Only show skipPermissions option if project allows it
+  const projectAllowsSkipPermissions = project?.skipPermissions === true;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -49,6 +59,9 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
         model,
         mode,
         planMode,
+        verbose,
+        // Only pass skipPermissions if project allows it and user enabled it
+        ...(projectAllowsSkipPermissions && skipPermissions ? { skipPermissions: true } : {}),
       });
 
       // Set cluster permissions if cluster is active
@@ -93,8 +106,9 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
           </div>
         </div>
 
-        {/* Plan Mode */}
-        <div>
+        {/* Instance Options */}
+        <div className="space-y-3">
+          {/* Plan Mode */}
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -111,6 +125,44 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
               </p>
             </div>
           </label>
+
+          {/* Verbose Mode */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={verbose}
+              onChange={(e) => setVerbose(e.target.checked)}
+              className="w-4 h-4 text-claude-orange bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange focus:ring-2"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-800 dark:text-white">
+                {t('instance.verbose')}
+              </span>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                {t('instance.verboseDesc')}
+              </p>
+            </div>
+          </label>
+
+          {/* Skip Permissions - Only show if project allows it */}
+          {projectAllowsSkipPermissions && (
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={skipPermissions}
+                onChange={(e) => setSkipPermissions(e.target.checked)}
+                className="w-4 h-4 text-orange-500 bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-orange-500 focus:ring-2"
+              />
+              <div>
+                <span className="text-sm font-medium text-orange-500 dark:text-orange-400">
+                  {t('instance.skipPermissions')}
+                </span>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {t('instance.skipPermissionsDesc')}
+                </p>
+              </div>
+            </label>
+          )}
         </div>
 
         {/* Cluster Privacy - Only show when cluster is active */}

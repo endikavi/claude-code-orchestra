@@ -191,6 +191,8 @@ export const validators = {
     mode: InstanceMode;
     prompt?: string;
     planMode?: boolean;
+    verbose?: boolean;
+    skipPermissions?: boolean;
     isDirector?: boolean;
   } {
     if (!data || typeof data !== 'object') {
@@ -223,6 +225,8 @@ export const validators = {
       mode: obj.mode,
       prompt: typeof obj.prompt === 'string' ? obj.prompt : undefined,
       planMode: obj.planMode === true,
+      verbose: obj.verbose === true,
+      skipPermissions: obj.skipPermissions === true,
       isDirector: obj.isDirector === true,
     };
   },

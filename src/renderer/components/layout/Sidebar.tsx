@@ -7,6 +7,11 @@ import { useIsMobile } from '../../hooks/useMediaQuery';
 import { ProjectList } from '../projects/ProjectList';
 import { CollapsedProjectList } from '../projects/CollapsedProjectList';
 
+// Check if running in Electron (has full API) vs Web (limited API)
+// Web clients can't add projects since they can't select directories
+const isElectron =
+  typeof window !== 'undefined' && window.electronAPI && 'dialog' in window.electronAPI;
+
 export function Sidebar() {
   const { t } = useTranslation();
   const { setShowProjectModal, sidebarCollapsed, sidebarMobileOpen, setSidebarMobileOpen } =
@@ -50,13 +55,15 @@ export function Sidebar() {
       <aside className="w-12 bg-claude-beige dark:bg-gray-800 border-r border-claude-tan/30 dark:border-gray-700 flex flex-col transition-all duration-300 overflow-x-hidden">
         {/* Collapsed Header */}
         <div className="p-2 border-b border-claude-tan/30 dark:border-gray-700 flex flex-col items-center gap-2">
-          <button
-            onClick={() => setShowProjectModal(true)}
-            className="p-1.5 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
-            title={t('sidebar.addProject')}
-          >
-            <PlusIcon className="w-3.5 h-3.5 text-white" />
-          </button>
+          {isElectron && (
+            <button
+              onClick={() => setShowProjectModal(true)}
+              className="p-1.5 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
+              title={t('sidebar.addProject')}
+            >
+              <PlusIcon className="w-3.5 h-3.5 text-white" />
+            </button>
+          )}
           {runningCount > 0 && (
             <div
               className="flex items-center gap-1"
@@ -143,13 +150,15 @@ function SidebarContent({
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
             {t('sidebar.projects')}
           </h2>
-          <button
-            onClick={() => setShowProjectModal(true)}
-            className="p-1.5 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
-            title={t('sidebar.addProject')}
-          >
-            <PlusIcon className="w-4 h-4 text-white" />
-          </button>
+          {isElectron && (
+            <button
+              onClick={() => setShowProjectModal(true)}
+              className="p-1.5 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
+              title={t('sidebar.addProject')}
+            >
+              <PlusIcon className="w-4 h-4 text-white" />
+            </button>
+          )}
         </div>
 
         {/* Stats */}

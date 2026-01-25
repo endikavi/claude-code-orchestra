@@ -194,6 +194,10 @@
     "allowRemoteInput": "Permitir input remoto",
     "planMode": "Iniciar en modo plan",
     "planModeDesc": "Claude primero creará un plan de implementación antes de ejecutar cualquier cambio",
+    "verbose": "Salida detallada",
+    "verboseDesc": "Mostrar información detallada sobre la ejecución de herramientas y procesos internos",
+    "skipPermissions": "Omitir confirmaciones de permisos",
+    "skipPermissionsDesc": "Claude ejecutará herramientas sin pedir confirmación (usar con precaución)",
     "modes": {
       "streamJson": "Stream JSON",
       "streamJsonDesc": "Salida JSON estructurada para análisis",

@@ -97,6 +97,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       mode: InstanceMode;
       prompt?: string;
       planMode?: boolean;
+      verbose?: boolean;
+      skipPermissions?: boolean;
     }): Promise<ClaudeInstance> => ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_CREATE, config),
 
     kill: (id: string, force?: boolean): Promise<void> =>
@@ -1041,6 +1043,8 @@ declare global {
           mode: InstanceMode;
           prompt?: string;
           planMode?: boolean;
+          verbose?: boolean;
+          skipPermissions?: boolean;
         }) => Promise<ClaudeInstance>;
         kill: (id: string, force?: boolean) => Promise<void>;
         sendInput: (id: string, input: string) => Promise<void>;

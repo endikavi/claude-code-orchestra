@@ -113,6 +113,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         mode: InstanceMode;
         prompt?: string;
         planMode?: boolean;
+        verbose?: boolean;
+        skipPermissions?: boolean;
         nodeId?: string; // Optional: for cluster projects
       }
     ) => {

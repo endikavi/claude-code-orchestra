@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, nativeImage } from 'electron';
 import { join } from 'path';
 import { setupIpcHandlers, cleanupIpcHandlers } from './ipc/handlers';
 import { getProcessManager } from './services/ProcessManager';
@@ -43,6 +43,7 @@ async function createWindow(): Promise<void> {
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#1a1a2e',
+    icon: nativeImage.createFromPath(join(__dirname, '../../resources/icons/png/256x256.png')),
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       nodeIntegration: false,
