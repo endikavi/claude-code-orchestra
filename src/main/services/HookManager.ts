@@ -8,9 +8,20 @@ import type {
   HookTemplate,
   HookTemplateType,
 } from '@shared/types';
+import { DataStore } from './DataStore';
 
 // Dashboard API port
 const DASHBOARD_API_PORT = 3847;
+
+/**
+ * Get the base API URL for hooks (http or https based on SSL config)
+ */
+function getApiBaseUrl(): string {
+  const remoteConfig = DataStore.getInstance().getRemoteConfig();
+  const protocol = remoteConfig.ssl?.enabled ? 'https' : 'http';
+  const port = remoteConfig.port || DASHBOARD_API_PORT;
+  return `${protocol}://localhost:${port}`;
+}
 
 // Hook templates
 // Note: HooksConfig is a flat structure with event types at the root level
@@ -166,7 +177,7 @@ export class HookManager extends EventEmitter {
     instanceIdEnvVar: string
   ): { extension: string; content: string } {
     const isWindows = process.platform === 'win32';
-    const apiUrl = `http://localhost:${this.apiPort}/api/hooks`;
+    const apiUrl = `${getApiBaseUrl()}/api/hooks`;
 
     if (isWindows) {
       return {
@@ -196,6 +207,14 @@ export class HookManager extends EventEmitter {
 # This script MUST always exit 0 to not block Claude CLI
 
 try {
+    # Allow self-signed certificates for HTTPS
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        # PowerShell 6+ has -SkipCertificateCheck
+    } else {
+        # PowerShell 5.x: disable certificate validation
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    }
+
     $inputRaw = [Console]::In.ReadToEnd()
     $instanceId = $env:${instanceIdEnvVar}
 
@@ -221,7 +240,18 @@ try {
     } | ConvertTo-Json -Depth 10 -Compress
 
     try {
-        $null = Invoke-RestMethod -Uri "${apiUrl}/${endpoint}" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $params = @{
+            Uri = "${apiUrl}/${endpoint}"
+            Method = 'Post'
+            Body = $body
+            ContentType = 'application/json'
+            TimeoutSec = 5
+            ErrorAction = 'SilentlyContinue'
+        }
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            $params.SkipCertificateCheck = $true
+        }
+        $null = Invoke-RestMethod @params
     } catch {
         # Silently ignore network errors
     }
@@ -277,7 +307,8 @@ if [ -z "$BODY" ]; then
     exit 0
 fi
 
-curl -s -X POST "${apiUrl}/${endpoint}" \\
+# Use -k to allow self-signed certificates for HTTPS
+curl -s -k -X POST "${apiUrl}/${endpoint}" \\
     -H "Content-Type: application/json" \\
     -d "$BODY" \\
     --connect-timeout 5 \\
@@ -295,7 +326,7 @@ exit 0
     content: string;
   } {
     const isWindows = process.platform === 'win32';
-    const apiUrl = `http://localhost:${this.apiPort}/api/hooks/permission/check`;
+    const apiUrl = `${getApiBaseUrl()}/api/hooks/permission/check`;
 
     if (isWindows) {
       return {
@@ -305,6 +336,14 @@ exit 0
 # This script MUST always exit 0 (or 2 to block) to not break Claude CLI
 
 try {
+    # Allow self-signed certificates for HTTPS
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        # PowerShell 6+ has -SkipCertificateCheck
+    } else {
+        # PowerShell 5.x: disable certificate validation
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    }
+
     $inputRaw = [Console]::In.ReadToEnd()
     $instanceId = $env:${instanceIdEnvVar}
 
@@ -334,7 +373,18 @@ try {
     } | ConvertTo-Json -Depth 10 -Compress
 
     try {
-        $response = Invoke-RestMethod -Uri "${apiUrl}" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $params = @{
+            Uri = "${apiUrl}"
+            Method = 'Post'
+            Body = $body
+            ContentType = 'application/json'
+            TimeoutSec = 5
+            ErrorAction = 'SilentlyContinue'
+        }
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            $params.SkipCertificateCheck = $true
+        }
+        $response = Invoke-RestMethod @params
 
         if ($response.decision -eq "allow") {
             # Complete hook output format per Claude Code specification
@@ -417,7 +467,8 @@ if [ -z "$BODY" ]; then
     exit 0
 fi
 
-RESPONSE=$(curl -s -X POST "${apiUrl}" \\
+# Use -k to allow self-signed certificates for HTTPS
+RESPONSE=$(curl -s -k -X POST "${apiUrl}" \\
     -H "Content-Type: application/json" \\
     -d "$BODY" \\
     --connect-timeout 5 \\

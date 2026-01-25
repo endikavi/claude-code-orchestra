@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 import type { UISettings } from '@shared/types/uiSettings';
+import { DEFAULT_REPAINT_SETTINGS } from '@shared/types/uiSettings';
 import { DEFAULT_SHARED_CONTEXT_SETTINGS } from '@shared/types/sharedContext';
 
 export type { UISettings } from '@shared/types/uiSettings';
@@ -19,6 +20,7 @@ const DEFAULT_SETTINGS: UISettings = {
   },
   terminalFont: 'system',
   sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
+  repaintSettings: DEFAULT_REPAINT_SETTINGS,
 };
 
 export class UISettingsStore {

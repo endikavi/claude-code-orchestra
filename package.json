@@ -63,6 +63,7 @@
     "commander": "^12.1.0",
     "cors": "^2.8.5",
     "electron-store": "^10.0.0",
+    "electron-updater": "^6.7.3",
     "express": "^5.2.1",
     "i18next": "^25.7.4",
     "i18next-browser-languagedetector": "^8.2.0",

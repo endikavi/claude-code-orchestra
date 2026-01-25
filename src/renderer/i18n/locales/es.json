@@ -60,7 +60,51 @@
       "proxy": "Proxy",
       "pool": "Pool",
       "security": "Seguridad",
-      "cluster": "Clúster"
+      "cluster": "Clúster",
+      "experimental": "Experimental",
+      "updates": "Actualizaciones"
+    },
+    "updates": {
+      "title": "Actualizaciones de Software",
+      "currentVersion": "Versión actual",
+      "upToDate": "Estás usando la última versión",
+      "checking": "Buscando actualizaciones...",
+      "available": "¡Actualización disponible!",
+      "newVersion": "Nueva versión",
+      "released": "Publicada",
+      "downloading": "Descargando actualización...",
+      "downloaded": "¡Actualización descargada!",
+      "restartRequired": "Reinicia la aplicación para instalar la actualización.",
+      "checkNow": "Buscar actualizaciones",
+      "download": "Descargar actualización",
+      "viewRelease": "Ver notas de la versión",
+      "restartNow": "Reiniciar ahora",
+      "error": "Error al buscar actualizaciones"
+    },
+    "repaint": {
+      "title": "Repintado de Terminal (Experimental)",
+      "description": "Opciones experimentales para corregir errores visuales en el TUI de Claude Code. Prueba diferentes modos si experimentas problemas de visualización.",
+      "warning": "Estas son opciones experimentales que pueden afectar el rendimiento. El modo \"Frame\" usa mucha CPU. Comienza con \"deshabilitado\" y solo habilita si experimentas problemas visuales.",
+      "mode": "Modo de Repintado",
+      "disabled": "Deshabilitado",
+      "disabledDesc": "Sin repintado automático. Usa esto si no experimentas problemas visuales.",
+      "manual": "Botón manual",
+      "manualDesc": "Muestra un botón en la terminal para forzar un repintado manualmente cuando sea necesario.",
+      "interval": "Auto-intervalo",
+      "intervalDesc": "Repinta automáticamente la terminal a un intervalo fijo mientras está visible.",
+      "frame": "Cada frame (RAF)",
+      "frameDesc": "Repinta en cada cuadro de animación. Alto uso de CPU, usar como último recurso.",
+      "fakeResize": "Resize falso (SIGWINCH)",
+      "fakeResizeDesc": "Cambia temporalmente el tamaño de la terminal para disparar una señal de redimensionamiento.",
+      "ansiClear": "Secuencia ANSI clear",
+      "ansiClearDesc": "Envía secuencias de escape ANSI para limpiar y redibujar la pantalla.",
+      "intervalMs": "Intervalo de Repintado",
+      "faster": "Más rápido",
+      "slower": "Más lento",
+      "intensityLow": "Bajo",
+      "intensityMedium": "Medio",
+      "intensityHigh": "Alto",
+      "manualInfo": "Un botón de repintado aparecerá en la barra de herramientas de la terminal. Haz clic para forzar una actualización de la terminal cuando veas errores visuales."
     },
     "context": {
       "title": "Contexto Compartido",
@@ -253,7 +297,9 @@
   },
   "terminal": {
     "copy": "Copiar",
-    "paste": "Pegar"
+    "paste": "Pegar",
+    "repaint": "Repintar",
+    "forceRepaint": "Forzar Repintado"
   },
   "modeToggle": {
     "title": "Cambiar modo de Claude",

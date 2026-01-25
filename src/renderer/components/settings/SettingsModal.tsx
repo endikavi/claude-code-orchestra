@@ -10,6 +10,8 @@ import { NotificationSettings } from './NotificationSettings';
 import { ProxySettings } from './ProxySettings';
 import { TerminalPoolSettings } from './TerminalPoolSettings';
 import { SharedContextSettings } from './SharedContextSettings';
+import { RepaintSettings } from './RepaintSettings';
+import { UpdateChecker } from './UpdateChecker';
 import type { Language } from '@shared/types';
 import type { TerminalFont } from '@shared/types/uiSettings';
 
@@ -91,6 +93,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             label: t('settings.tabs.cluster'),
             icon: <ServerIcon className="w-4 h-4" />,
           },
+          {
+            id: 'experimental',
+            label: t('settings.tabs.experimental', 'Experimental'),
+            icon: <BeakerIcon className="w-4 h-4" />,
+          },
+          {
+            id: 'updates',
+            label: t('settings.tabs.updates', 'Updates'),
+            icon: <RefreshIcon className="w-4 h-4" />,
+          },
         ]
       : []),
   ];
@@ -98,143 +110,153 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState('general');
 
   return (
-    <Modal title={t('settings.title')} onClose={onClose} width="2xl">
-      {/* Tabs */}
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+    <Modal title={t('settings.title')} onClose={onClose} width="3xl">
+      {/* Layout with vertical tabs on left and content on right */}
+      <div className="flex gap-4">
+        {/* Vertical Tabs */}
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} vertical />
 
-      {/* Tab Content */}
-      <div className="min-h-[400px]">
-        {activeTab === 'general' && (
-          <div className="space-y-6">
-            {/* Two column layout for general settings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Language Section */}
+        {/* Tab Content */}
+        <div className="flex-1 min-h-[400px] max-h-[500px] overflow-y-auto">
+          {activeTab === 'general' && (
+            <div className="space-y-6">
+              {/* Two column layout for general settings */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Language Section */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    {t('settings.language')}
+                  </h3>
+                  <div className="space-y-2">
+                    {LANGUAGES.map((lang) => (
+                      <label
+                        key={lang.value}
+                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                          language === lang.value
+                            ? 'bg-claude-orange/20 border border-claude-orange'
+                            : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="language"
+                          value={lang.value}
+                          checked={language === lang.value}
+                          onChange={(e) => setLanguage(e.target.value as Language)}
+                          className="sr-only"
+                        />
+                        <span className="text-xl">{lang.flag}</span>
+                        <span className="text-sm text-gray-800 dark:text-white">{lang.label}</span>
+                        {language === lang.value && (
+                          <CheckIcon className="w-4 h-4 text-claude-orange ml-auto" />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Theme Section */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    {t('settings.theme')}
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setTheme('dark')}
+                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg transition-colors ${
+                        theme === 'dark'
+                          ? 'bg-claude-orange/20 border border-claude-orange'
+                          : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <MoonIcon className="w-4 h-4" />
+                      <span className="text-sm">{t('settings.dark')}</span>
+                    </button>
+                    <button
+                      onClick={() => setTheme('light')}
+                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg transition-colors ${
+                        theme === 'light'
+                          ? 'bg-claude-orange/20 border border-claude-orange'
+                          : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <SunIcon className="w-4 h-4" />
+                      <span className="text-sm">{t('settings.light')}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Terminal Font Section */}
               <div>
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  {t('settings.language')}
+                  {t('settings.terminalFont', 'Terminal Font')}
                 </h3>
                 <div className="space-y-2">
-                  {LANGUAGES.map((lang) => (
+                  {TERMINAL_FONTS.map((font) => (
                     <label
-                      key={lang.value}
+                      key={font.value}
                       className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                        language === lang.value
+                        terminalFont === font.value
                           ? 'bg-claude-orange/20 border border-claude-orange'
                           : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
                       }`}
                     >
                       <input
                         type="radio"
-                        name="language"
-                        value={lang.value}
-                        checked={language === lang.value}
-                        onChange={(e) => setLanguage(e.target.value as Language)}
+                        name="terminalFont"
+                        value={font.value}
+                        checked={terminalFont === font.value}
+                        onChange={(e) => setTerminalFont(e.target.value as TerminalFont)}
                         className="sr-only"
                       />
-                      <span className="text-xl">{lang.flag}</span>
-                      <span className="text-sm text-gray-800 dark:text-white">{lang.label}</span>
-                      {language === lang.value && (
-                        <CheckIcon className="w-4 h-4 text-claude-orange ml-auto" />
+                      <span
+                        className="text-sm text-gray-800 dark:text-white flex-1"
+                        style={{ fontFamily: font.fontFamily }}
+                      >
+                        {font.label}
+                      </span>
+                      {terminalFont === font.value && (
+                        <CheckIcon className="w-4 h-4 text-claude-orange" />
                       )}
                     </label>
                   ))}
                 </div>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                  {t(
+                    'settings.terminalFontHint',
+                    'Fonts must be installed on your system to work.'
+                  )}
+                </p>
               </div>
 
-              {/* Theme Section */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  {t('settings.theme')}
-                </h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setTheme('dark')}
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg transition-colors ${
-                      theme === 'dark'
-                        ? 'bg-claude-orange/20 border border-claude-orange'
-                        : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <MoonIcon className="w-4 h-4" />
-                    <span className="text-sm">{t('settings.dark')}</span>
-                  </button>
-                  <button
-                    onClick={() => setTheme('light')}
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg transition-colors ${
-                      theme === 'light'
-                        ? 'bg-claude-orange/20 border border-claude-orange'
-                        : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <SunIcon className="w-4 h-4" />
-                    <span className="text-sm">{t('settings.light')}</span>
-                  </button>
-                </div>
+              {/* Info */}
+              <div className="pt-4 border-t border-claude-tan/30 dark:border-gray-700">
+                <p className="text-xs text-gray-500 dark:text-gray-500">
+                  {t('settings.savedAutomatically')}
+                </p>
               </div>
             </div>
+          )}
 
-            {/* Terminal Font Section */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                {t('settings.terminalFont', 'Terminal Font')}
-              </h3>
-              <div className="space-y-2">
-                {TERMINAL_FONTS.map((font) => (
-                  <label
-                    key={font.value}
-                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                      terminalFont === font.value
-                        ? 'bg-claude-orange/20 border border-claude-orange'
-                        : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="terminalFont"
-                      value={font.value}
-                      checked={terminalFont === font.value}
-                      onChange={(e) => setTerminalFont(e.target.value as TerminalFont)}
-                      className="sr-only"
-                    />
-                    <span
-                      className="text-sm text-gray-800 dark:text-white flex-1"
-                      style={{ fontFamily: font.fontFamily }}
-                    >
-                      {font.label}
-                    </span>
-                    {terminalFont === font.value && (
-                      <CheckIcon className="w-4 h-4 text-claude-orange" />
-                    )}
-                  </label>
-                ))}
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                {t('settings.terminalFontHint', 'Fonts must be installed on your system to work.')}
-              </p>
-            </div>
+          {activeTab === 'notifications' && <NotificationSettings />}
 
-            {/* Info */}
-            <div className="pt-4 border-t border-claude-tan/30 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-500">
-                {t('settings.savedAutomatically')}
-              </p>
-            </div>
-          </div>
-        )}
+          {activeTab === 'context' && <SharedContextSettings />}
 
-        {activeTab === 'notifications' && <NotificationSettings />}
+          {activeTab === 'remote' && <RemoteAccessSettings />}
 
-        {activeTab === 'context' && <SharedContextSettings />}
+          {activeTab === 'proxy' && <ProxySettings />}
 
-        {activeTab === 'remote' && <RemoteAccessSettings />}
+          {activeTab === 'pool' && <TerminalPoolSettings />}
 
-        {activeTab === 'proxy' && <ProxySettings />}
+          {activeTab === 'security' && <SecuritySettings />}
 
-        {activeTab === 'pool' && <TerminalPoolSettings />}
+          {activeTab === 'cluster' && <ClusterSettings />}
 
-        {activeTab === 'security' && <SecuritySettings />}
+          {activeTab === 'experimental' && <RepaintSettings />}
 
-        {activeTab === 'cluster' && <ClusterSettings />}
+          {activeTab === 'updates' && <UpdateChecker />}
+        </div>
       </div>
 
       {/* Close Button */}
@@ -389,6 +411,32 @@ function NetworkIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+      />
+    </svg>
+  );
+}
+
+function BeakerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+      />
+    </svg>
+  );
+}
+
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
       />
     </svg>
   );

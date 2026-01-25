@@ -62,6 +62,20 @@ const lightTerminalTheme: ITheme = {
   brightWhite: '#f5f0e8', // claude-beige
 };
 
+// Helper icon components for terminal UI
+function RepaintIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
+    </svg>
+  );
+}
+
 interface TerminalViewProps {
   instanceId: string;
 }
@@ -168,6 +182,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
   );
   const theme = useUIStore((state) => state.theme);
   const terminalFont = useUIStore((state) => state.terminalFont);
+  const repaintSettings = useUIStore((state) => state.repaintSettings);
 
   const output = getInstanceOutput(instanceId);
 
@@ -603,8 +618,80 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     return () => clearTimeout(focusTimer);
   }, [instanceId]);
 
+  // Force repaint handler for experimental TUI fix
+  const handleForceRepaint = useCallback(() => {
+    const { mode } = repaintSettings;
+    if (mode === 'disabled' || mode === 'manual' || !instanceId) return;
+
+    // Determine which IPC method to use based on mode
+    if (mode === 'fake-resize' || mode === 'ansi-clear') {
+      // These modes use the backend IPC to trigger repaint
+      void window.electronAPI.instance.forceRepaint(instanceId, mode);
+    }
+    // 'interval' and 'frame' modes use the same backend methods
+    // but are triggered automatically (see effect below)
+  }, [repaintSettings, instanceId]);
+
+  // Manual repaint button click handler
+  const handleManualRepaint = useCallback(() => {
+    // For manual mode, we'll use fake-resize as the default method
+    void window.electronAPI.instance.forceRepaint(instanceId, 'fake-resize');
+  }, [instanceId]);
+
+  // Experimental repaint loop effect
+  useEffect(() => {
+    const { mode, intervalMs } = repaintSettings;
+    if (mode === 'disabled' || mode === 'manual' || !instanceId) return;
+
+    let frameId: number;
+    let timerId: ReturnType<typeof setInterval>;
+
+    const triggerRepaint = () => {
+      // Determine the method to use based on mode
+      // 'interval' and 'frame' modes need a backend method to call
+      // We'll default to 'fake-resize' for these automatic modes
+      const method = mode === 'fake-resize' || mode === 'ansi-clear' ? mode : 'fake-resize';
+      void window.electronAPI.instance.forceRepaint(instanceId, method);
+    };
+
+    if (mode === 'interval') {
+      // Auto-interval mode: repaint every intervalMs
+      timerId = setInterval(triggerRepaint, intervalMs);
+    } else if (mode === 'frame') {
+      // RAF mode: repaint every frame (high CPU usage!)
+      const loop = () => {
+        triggerRepaint();
+        frameId = requestAnimationFrame(loop);
+      };
+      frameId = requestAnimationFrame(loop);
+    } else if (mode === 'fake-resize' || mode === 'ansi-clear') {
+      // These modes repaint on every data receive, but we can also set up a slower interval
+      // to help with initial rendering issues
+      // For now, trigger once on mount to help with initial render
+      triggerRepaint();
+    }
+
+    return () => {
+      if (timerId) clearInterval(timerId);
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [repaintSettings, instanceId, handleForceRepaint]);
+
   return (
     <div className="h-full flex flex-col bg-claude-cream dark:bg-[#1a1a2e] relative">
+      {/* Manual repaint button - only shown when mode is 'manual' */}
+      {repaintSettings.mode === 'manual' && (
+        <div className="absolute top-2 right-2 z-20">
+          <button
+            onClick={handleManualRepaint}
+            className="px-2 py-1 text-xs bg-claude-orange/80 hover:bg-claude-orange text-white rounded shadow-md transition-colors flex items-center gap-1"
+            title={t('terminal.forceRepaint', 'Force Repaint')}
+          >
+            <RepaintIcon className="w-3 h-3" />
+            <span>{t('terminal.repaint', 'Repaint')}</span>
+          </button>
+        </div>
+      )}
       <div
         ref={terminalRef}
         className="flex-1 p-2"

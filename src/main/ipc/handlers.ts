@@ -203,6 +203,17 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return processManager.getInstancesByProject(validatedId);
   });
 
+  // Force repaint handler for experimental TUI repaint options
+  ipcMain.handle(
+    IPC_CHANNELS.INSTANCE_FORCE_REPAINT,
+    (_event, id: string, method: 'fake-resize' | 'ansi-clear') => {
+      const validatedId = validators.id(id, 'instance:forceRepaint');
+      const validatedMethod =
+        method === 'fake-resize' || method === 'ansi-clear' ? method : 'fake-resize';
+      return processManager.forceRepaintInstance(validatedId, validatedMethod);
+    }
+  );
+
   // Resize handler (from renderer) with dimension synchronization
   ipcMain.on('instance:resize', (_event, id: string, cols: number, rows: number) => {
     // Track dimensions from the Electron renderer client

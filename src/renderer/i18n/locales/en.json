@@ -60,7 +60,51 @@
       "proxy": "Proxy",
       "pool": "Pool",
       "security": "Security",
-      "cluster": "Cluster"
+      "cluster": "Cluster",
+      "experimental": "Experimental",
+      "updates": "Updates"
+    },
+    "updates": {
+      "title": "Software Updates",
+      "currentVersion": "Current version",
+      "upToDate": "You are running the latest version",
+      "checking": "Checking for updates...",
+      "available": "Update available!",
+      "newVersion": "New version",
+      "released": "Released",
+      "downloading": "Downloading update...",
+      "downloaded": "Update downloaded!",
+      "restartRequired": "Restart the application to install the update.",
+      "checkNow": "Check for updates",
+      "download": "Download update",
+      "viewRelease": "View release notes",
+      "restartNow": "Restart now",
+      "error": "Error checking for updates"
+    },
+    "repaint": {
+      "title": "Terminal Repaint (Experimental)",
+      "description": "Experimental options to fix visual glitches in Claude Code TUI. Try different modes if you experience display issues.",
+      "warning": "These are experimental options that may affect performance. \"Frame\" mode uses significant CPU. Start with \"disabled\" and only enable if you experience visual issues.",
+      "mode": "Repaint Mode",
+      "disabled": "Disabled",
+      "disabledDesc": "No automatic repaint. Use this if you don't experience visual issues.",
+      "manual": "Manual button",
+      "manualDesc": "Shows a button in the terminal to manually trigger a repaint when needed.",
+      "interval": "Auto-interval",
+      "intervalDesc": "Automatically repaints the terminal at a fixed interval while visible.",
+      "frame": "Every frame (RAF)",
+      "frameDesc": "Repaints on every animation frame. High CPU usage, use as last resort.",
+      "fakeResize": "Fake resize (SIGWINCH)",
+      "fakeResizeDesc": "Temporarily changes terminal size to trigger a window resize signal.",
+      "ansiClear": "ANSI clear sequence",
+      "ansiClearDesc": "Sends ANSI escape sequences to clear and redraw the screen.",
+      "intervalMs": "Repaint Interval",
+      "faster": "Faster",
+      "slower": "Slower",
+      "intensityLow": "Low",
+      "intensityMedium": "Medium",
+      "intensityHigh": "High",
+      "manualInfo": "A repaint button will appear in the terminal toolbar. Click it to force a terminal refresh when you see visual glitches."
     },
     "context": {
       "title": "Shared Context",
@@ -253,7 +297,9 @@
   },
   "terminal": {
     "copy": "Copy",
-    "paste": "Paste"
+    "paste": "Paste",
+    "repaint": "Repaint",
+    "forceRepaint": "Force Repaint"
   },
   "modeToggle": {
     "title": "Toggle Claude mode",

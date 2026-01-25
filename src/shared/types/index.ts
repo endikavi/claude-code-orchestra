@@ -324,6 +324,9 @@ export * from './sharedContext';
 // Re-export SSL types
 export * from './ssl';
 
+// Re-export history types
+export * from './history';
+
 // Git status types
 export interface GitStatus {
   branch: string;

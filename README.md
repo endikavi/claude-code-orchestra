@@ -5,6 +5,7 @@ A desktop application for managing multiple Claude Code CLI instances across dif
 > **Note:** Orchestra is an independent, community-developed project. It is not affiliated with, endorsed by, or officially connected to Anthropic in any way.
 
 ![Orchestra](./resources/screenshot.png)
+![Orchestra](./resources/screenshot2.png)
 
 ## Why Orchestra?
 
@@ -136,7 +137,39 @@ Arch Linux:
 sudo pacman -S base-devel libsecret
 ```
 
-## Installation
+## Quick Install
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/endikavi/claude-code-orchestra/main/install.sh | bash
+```
+
+Or with wget:
+```bash
+wget -qO- https://raw.githubusercontent.com/endikavi/claude-code-orchestra/main/install.sh | bash
+```
+
+**Windows:**
+Download the installer from [GitHub Releases](https://github.com/endikavi/claude-code-orchestra/releases).
+
+## Updating
+
+**In-app update:**
+Orchestra will automatically check for updates on startup and notify you when a new version is available. You can also manually check for updates in Settings > Updates.
+
+**Linux/macOS (CLI):**
+```bash
+# Check for updates
+curl -fsSL https://raw.githubusercontent.com/endikavi/claude-code-orchestra/main/update.sh | bash -s -- --check
+
+# Update to latest version
+curl -fsSL https://raw.githubusercontent.com/endikavi/claude-code-orchestra/main/update.sh | bash
+```
+
+**Windows:**
+Download the latest installer from [GitHub Releases](https://github.com/endikavi/claude-code-orchestra/releases) and run it.
+
+## Installation (from source)
 
 ```bash
 # Clone the repository

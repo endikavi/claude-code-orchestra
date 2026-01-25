@@ -115,6 +115,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resize: (id: string, cols: number, rows: number): void =>
       ipcRenderer.send('instance:resize', id, cols, rows),
 
+    // Force repaint for experimental TUI fix options
+    forceRepaint: (id: string, method: 'fake-resize' | 'ansi-clear'): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_FORCE_REPAINT, id, method),
+
     // Event listeners
     onOutput: (callback: (instanceId: string, data: StreamMessage) => void) => {
       const listener = (
@@ -1023,6 +1027,97 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{ valid: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SSL_VALIDATE_CERT_KEY_PAIR, certPath, keyPath, passphrase),
   },
+
+  // Update operations
+  update: {
+    check: (): Promise<{
+      updateAvailable: boolean;
+      currentVersion: string;
+      latestVersion: string;
+      releaseNotes?: string;
+      releaseUrl?: string;
+      publishedAt?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CHECK),
+
+    download: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_DOWNLOAD),
+
+    install: (): void => {
+      ipcRenderer.invoke(IPC_CHANNELS.UPDATE_INSTALL);
+    },
+
+    getVersion: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_GET_VERSION),
+
+    onChecking: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on('update:checking', listener);
+      return () => ipcRenderer.removeListener('update:checking', listener);
+    },
+
+    onAvailable: (
+      callback: (data: { version: string; releaseNotes?: string; releaseDate?: string }) => void
+    ) => {
+      const listener = (_event: IpcRendererEvent, data: { version: string }) => callback(data);
+      ipcRenderer.on('update:available', listener);
+      return () => ipcRenderer.removeListener('update:available', listener);
+    },
+
+    onNotAvailable: (callback: (data: { version: string }) => void) => {
+      const listener = (_event: IpcRendererEvent, data: { version: string }) => callback(data);
+      ipcRenderer.on('update:not-available', listener);
+      return () => ipcRenderer.removeListener('update:not-available', listener);
+    },
+
+    onProgress: (
+      callback: (data: {
+        percent: number;
+        bytesPerSecond: number;
+        total: number;
+        transferred: number;
+      }) => void
+    ) => {
+      const listener = (
+        _event: IpcRendererEvent,
+        data: { percent: number; bytesPerSecond: number; total: number; transferred: number }
+      ) => callback(data);
+      ipcRenderer.on('update:progress', listener);
+      return () => ipcRenderer.removeListener('update:progress', listener);
+    },
+
+    onDownloaded: (callback: (data: { version: string }) => void) => {
+      const listener = (_event: IpcRendererEvent, data: { version: string }) => callback(data);
+      ipcRenderer.on('update:downloaded', listener);
+      return () => ipcRenderer.removeListener('update:downloaded', listener);
+    },
+
+    onError: (callback: (data: { message: string }) => void) => {
+      const listener = (_event: IpcRendererEvent, data: { message: string }) => callback(data);
+      ipcRenderer.on('update:error', listener);
+      return () => ipcRenderer.removeListener('update:error', listener);
+    },
+
+    onStartupAvailable: (
+      callback: (data: {
+        updateAvailable: boolean;
+        currentVersion: string;
+        latestVersion: string;
+        releaseNotes?: string;
+        releaseUrl?: string;
+      }) => void
+    ) => {
+      const listener = (
+        _event: IpcRendererEvent,
+        data: {
+          updateAvailable: boolean;
+          currentVersion: string;
+          latestVersion: string;
+          releaseNotes?: string;
+          releaseUrl?: string;
+        }
+      ) => callback(data);
+      ipcRenderer.on('update:startup-available', listener);
+      return () => ipcRenderer.removeListener('update:startup-available', listener);
+    },
+  },
 });
 
 // Type declarations for renderer
@@ -1051,6 +1146,7 @@ declare global {
         getAll: () => Promise<ClaudeInstance[]>;
         getByProject: (projectId: string) => Promise<ClaudeInstance[]>;
         resize: (id: string, cols: number, rows: number) => void;
+        forceRepaint: (id: string, method: 'fake-resize' | 'ansi-clear') => Promise<boolean>;
         resume: (config: {
           projectId: string;
           sessionId: string;
@@ -1451,6 +1547,43 @@ declare global {
           keyPath: string,
           passphrase?: string
         ) => Promise<{ valid: boolean; error?: string }>;
+      };
+      update: {
+        check: () => Promise<{
+          updateAvailable: boolean;
+          currentVersion: string;
+          latestVersion: string;
+          releaseNotes?: string;
+          releaseUrl?: string;
+          publishedAt?: string;
+        }>;
+        download: () => Promise<void>;
+        install: () => void;
+        getVersion: () => Promise<string>;
+        onChecking: (callback: () => void) => () => void;
+        onAvailable: (
+          callback: (data: { version: string; releaseNotes?: string; releaseDate?: string }) => void
+        ) => () => void;
+        onNotAvailable: (callback: (data: { version: string }) => void) => () => void;
+        onProgress: (
+          callback: (data: {
+            percent: number;
+            bytesPerSecond: number;
+            total: number;
+            transferred: number;
+          }) => void
+        ) => () => void;
+        onDownloaded: (callback: (data: { version: string }) => void) => () => void;
+        onError: (callback: (data: { message: string }) => void) => () => void;
+        onStartupAvailable: (
+          callback: (data: {
+            updateAvailable: boolean;
+            currentVersion: string;
+            latestVersion: string;
+            releaseNotes?: string;
+            releaseUrl?: string;
+          }) => void
+        ) => () => void;
       };
     };
   }

@@ -4,12 +4,15 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { StreamJSONParser, type ContextAutoPublishEvent } from './StreamJSONParser';
+import { HistoryWatcher, createHistoryWatcher } from './HistoryWatcher';
+import { TaskFileWatcher, createTaskFileWatcher } from './TaskFileWatcher';
 import { DataStore } from './DataStore';
 import { getWebServer } from './WebServer';
 import { getSubagentTracker } from './SubagentTracker';
 import { getTaskTracker } from './TaskTracker';
 import { SharedContextStore } from './SharedContextStore';
 import { getUserDataPath } from '../utils/paths';
+import { isLocalProject } from '../utils/claudePaths';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ClaudeModel,
@@ -18,25 +21,41 @@ import type {
   StreamMessage,
 } from '@shared/types';
 import type { SubagentStartedEvent, SubagentCompletedEvent } from '@shared/types/orchestration';
-import type { TaskStartedEvent, TaskUpdatedEvent, TaskListEvent } from '@shared/types/tasks';
+import type {
+  TaskStartedEvent,
+  TaskUpdatedEvent,
+  TaskListEvent,
+  TrackedTask,
+} from '@shared/types/tasks';
 import type { PooledTerminal } from '@shared/types/pool';
 import { randomUUID } from 'crypto';
+
+/**
+ * Get the base API URL for the dashboard (http or https based on SSL config)
+ */
+function getApiBaseUrl(): string {
+  const remoteConfig = DataStore.getInstance().getRemoteConfig();
+  const protocol = remoteConfig.ssl?.enabled ? 'https' : 'http';
+  return `${protocol}://localhost:${remoteConfig.port}`;
+}
 
 // MCP Bridge script content (embedded to avoid path issues in packaged app)
 const MCP_BRIDGE_SCRIPT = `#!/usr/bin/env node
 const http = require('http');
+const https = require('https');
 const readline = require('readline');
 
 const MCP_URL = process.env.ORCHESTRA_MCP_URL || 'http://localhost:3847/mcp';
 const MCP_TOKEN = process.env.ORCHESTRA_MCP_TOKEN || '';
 const url = new URL(MCP_URL);
+const transport = url.protocol === 'https:' ? https : http;
 
 function sendRequest(request) {
   return new Promise((resolve, reject) => {
     const postData = JSON.stringify(request);
     const options = {
       hostname: url.hostname,
-      port: url.port || 80,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: url.pathname,
       method: 'POST',
       headers: {
@@ -44,8 +63,9 @@ function sendRequest(request) {
         'Content-Length': Buffer.byteLength(postData),
         'X-Instance-Token': MCP_TOKEN,
       },
+      rejectUnauthorized: false, // Allow self-signed certificates
     };
-    const req = http.request(options, (res) => {
+    const req = transport.request(options, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
@@ -113,6 +133,7 @@ rl.on('close', () => process.exit(0));
 function generateSessionStartHookScript(instanceId: string, apiUrl: string): string {
   return `#!/usr/bin/env node
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
@@ -161,12 +182,17 @@ process.stdin.on('end', () => {
     const url = new URL('/api/instances/session-id', API_URL);
     const data = JSON.stringify({ instanceId: INSTANCE_ID, sessionId });
 
-    const req = http.request(url, {
+    // Choose http or https based on URL protocol
+    const transport = url.protocol === 'https:' ? https : http;
+
+    const req = transport.request(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': data.length
-      }
+      },
+      // Allow self-signed certificates (for local development)
+      rejectUnauthorized: false
     }, (res) => {
       log('Response received: ' + res.statusCode);
       // Output valid hook response after request completes
@@ -334,6 +360,8 @@ export class ClaudeInstance extends EventEmitter {
   private ptyProcess: pty.IPty | null = null;
   private mcpToken?: string; // Token for MCP authentication
   private parser: StreamJSONParser;
+  private historyWatcher: HistoryWatcher | null = null; // Fallback for non-verbose mode
+  private taskFileWatcher: TaskFileWatcher | null = null; // Watches Claude's task files
   private _status: InstanceStatus = 'starting';
   private _error?: string;
   private _sessionId?: string;
@@ -342,6 +370,7 @@ export class ClaudeInstance extends EventEmitter {
   private idleTimer: NodeJS.Timeout | null = null;
   private pooledTerminal?: PooledTerminal; // Pre-spawned terminal from pool
   private pendingTimers: Set<NodeJS.Timeout> = new Set(); // Track pending timeouts for cleanup
+  private _dimensions: { cols: number; rows: number } = { cols: 120, rows: 30 }; // Track current dimensions for repaint
 
   // Time in ms without output before considering Claude is waiting for input
   private static readonly IDLE_TIMEOUT = 2000;
@@ -367,6 +396,25 @@ export class ClaudeInstance extends EventEmitter {
     this.parser = new StreamJSONParser();
     this.setupParserListeners();
 
+    // Setup HistoryWatcher for non-verbose local projects
+    // This provides fallback Task/Subagent tracking by reading history files directly
+    if (!this.verbose && isLocalProject(this.projectPath)) {
+      this.historyWatcher = createHistoryWatcher(this.projectPath);
+      if (this.historyWatcher) {
+        this.setupHistoryWatcherListeners();
+        console.log(`[ClaudeInstance] HistoryWatcher enabled for non-verbose local project`);
+      }
+    }
+
+    // Setup TaskFileWatcher for local projects
+    // This watches Claude's task files in ~/.claude/tasks/<session-id>/
+    // Works for both verbose and non-verbose modes since tasks are file-based
+    if (isLocalProject(this.projectPath)) {
+      this.taskFileWatcher = createTaskFileWatcher(this.id);
+      this.setupTaskFileWatcherListeners();
+      console.log(`[ClaudeInstance] TaskFileWatcher enabled for local project`);
+    }
+
     // Initialize context for this instance
     const contextStore = SharedContextStore.getInstance();
     contextStore.setInstanceContext(this.id, this.projectId, {
@@ -379,10 +427,26 @@ export class ClaudeInstance extends EventEmitter {
 
   private setupParserListeners(): void {
     this.parser.on('message', (message: StreamMessage) => {
-      // Capture session_id from system message
+      // Capture session_id from system message (only works in stream-json mode)
       if (message.type === 'system' && message.session_id) {
         this._sessionId = message.session_id;
         this.emit('sessionId', message.session_id);
+
+        // Start HistoryWatcher once we have the session ID
+        if (this.historyWatcher && !this.historyWatcher.isActive()) {
+          this.historyWatcher.setSessionId(message.session_id);
+          this.historyWatcher.start();
+          console.log(`[ClaudeInstance] HistoryWatcher started for session: ${message.session_id}`);
+        }
+
+        // Start TaskFileWatcher - uses session ID as task list ID by default
+        if (this.taskFileWatcher && !this.taskFileWatcher.isActive()) {
+          this.taskFileWatcher.setTaskListId(message.session_id);
+          this.taskFileWatcher.start();
+          console.log(
+            `[ClaudeInstance] TaskFileWatcher started for session: ${message.session_id}`
+          );
+        }
       }
       this.emit('output', message);
     });
@@ -472,6 +536,91 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
+   * Setup listeners for HistoryWatcher events
+   * This provides Task/Subagent tracking when verbose mode is disabled
+   */
+  private setupHistoryWatcherListeners(): void {
+    if (!this.historyWatcher) return;
+
+    // Subagent tracking from history files
+    this.historyWatcher.on('subagent_started', (data: SubagentStartedEvent) => {
+      const tracker = getSubagentTracker();
+      const subagent = tracker.startSubagent(this.id, data);
+      this.emit('subagent:started', { instanceId: this.id, subagent });
+      console.log(`[ClaudeInstance] Subagent started (via history): ${data.id}`);
+    });
+
+    this.historyWatcher.on('subagent_completed', (data: SubagentCompletedEvent) => {
+      const tracker = getSubagentTracker();
+      const subagent = tracker.completeSubagent(this.id, data);
+      if (subagent) {
+        this.emit('subagent:completed', { instanceId: this.id, subagent });
+        console.log(`[ClaudeInstance] Subagent completed (via history): ${data.id}`);
+      }
+    });
+
+    // Task tracking from history files
+    this.historyWatcher.on('task_created', (data: TaskStartedEvent) => {
+      const tracker = getTaskTracker();
+      const task = tracker.createTask(this.id, data);
+      this.emit('task:created', { instanceId: this.id, task });
+      console.log(`[ClaudeInstance] Task created (via history): ${data.subject}`);
+    });
+
+    this.historyWatcher.on('task_updated', (data: TaskUpdatedEvent) => {
+      const tracker = getTaskTracker();
+      const task = tracker.updateTask(this.id, data);
+      if (task) {
+        this.emit('task:updated', { instanceId: this.id, task });
+        console.log(`[ClaudeInstance] Task updated (via history): ${data.id} -> ${data.status}`);
+      }
+    });
+
+    this.historyWatcher.on('error', (error: Error) => {
+      console.error('[ClaudeInstance] HistoryWatcher error:', error);
+    });
+  }
+
+  /**
+   * Setup listeners for TaskFileWatcher events
+   * This watches Claude's task files in ~/.claude/tasks/<session-id>/
+   */
+  private setupTaskFileWatcherListeners(): void {
+    if (!this.taskFileWatcher) return;
+
+    // Task created from task files
+    this.taskFileWatcher.on('task_created', (data: { task: TrackedTask; instanceId: string }) => {
+      const tracker = getTaskTracker();
+      // Update the tracker with the file-based task data
+      tracker.setTask(this.id, data.task);
+      this.emit('task:created', { instanceId: this.id, task: data.task });
+      console.log(`[ClaudeInstance] Task created (via file): ${data.task.subject}`);
+    });
+
+    // Task updated from task files
+    this.taskFileWatcher.on('task_updated', (data: { task: TrackedTask; instanceId: string }) => {
+      const tracker = getTaskTracker();
+      tracker.setTask(this.id, data.task);
+      this.emit('task:updated', { instanceId: this.id, task: data.task });
+      console.log(
+        `[ClaudeInstance] Task updated (via file): ${data.task.id} -> ${data.task.status}`
+      );
+    });
+
+    // Task deleted
+    this.taskFileWatcher.on('task_deleted', (data: { taskId: string; instanceId: string }) => {
+      const tracker = getTaskTracker();
+      tracker.deleteTask(this.id, data.taskId);
+      console.log(`[ClaudeInstance] Task deleted (via file): ${data.taskId}`);
+    });
+
+    // Error handling
+    this.taskFileWatcher.on('error', (error: Error) => {
+      console.error('[ClaudeInstance] TaskFileWatcher error:', error);
+    });
+  }
+
+  /**
    * Get filtered environment variables for the Claude process
    * Only allows safe, necessary variables to prevent credential leakage
    */
@@ -547,9 +696,7 @@ export class ClaudeInstance extends EventEmitter {
     if (!this.enableMcp) {
       return;
     }
-    const dataStore = DataStore.getInstance();
-    const remoteConfig = dataStore.getRemoteConfig();
-    const apiUrl = `http://localhost:${remoteConfig.port}`;
+    const apiUrl = getApiBaseUrl();
 
     // Generate unique token for this instance
     this.mcpToken = randomUUID();
@@ -653,7 +800,7 @@ export class ClaudeInstance extends EventEmitter {
   private setupSessionHook(): void {
     try {
       // Get the API URL for the hook to communicate with the dashboard
-      const apiUrl = `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`;
+      const apiUrl = getApiBaseUrl();
 
       // Generate hook script with embedded instance-specific values
       // Each instance gets its own script file to ensure correct instanceId is used
@@ -816,7 +963,7 @@ export class ClaudeInstance extends EventEmitter {
       // Use full process.env to ensure PATH includes Node.js and other required tools
       // The claude.cmd script needs node to be available
       // Also inject dashboard environment variables for hooks integration
-      const apiUrl = `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`;
+      const apiUrl = getApiBaseUrl();
 
       // Build environment variables
       const envVars: Record<string, string> = {
@@ -956,7 +1103,7 @@ export class ClaudeInstance extends EventEmitter {
       const escapedClaudePath = this.escapeShellPath(claudePathForShell, shellType);
 
       // Build a single combined command: env vars + cd + clear + claude
-      const apiUrl = `http://localhost:${DataStore.getInstance().getRemoteConfig().port}`;
+      const apiUrl = getApiBaseUrl();
 
       const fullCommand = this.buildFullCommand(
         escapedProjectPath,
@@ -1208,6 +1355,30 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
+   * Clean up HistoryWatcher to stop watching and prevent memory leaks
+   */
+  private cleanupHistoryWatcher(): void {
+    if (this.historyWatcher) {
+      this.historyWatcher.stop();
+      this.historyWatcher.removeAllListeners();
+      this.historyWatcher = null;
+      console.log(`[ClaudeInstance] HistoryWatcher cleaned up`);
+    }
+  }
+
+  /**
+   * Clean up TaskFileWatcher to stop watching and prevent memory leaks
+   */
+  private cleanupTaskFileWatcher(): void {
+    if (this.taskFileWatcher) {
+      this.taskFileWatcher.stop();
+      this.taskFileWatcher.removeAllListeners();
+      this.taskFileWatcher = null;
+      console.log(`[ClaudeInstance] TaskFileWatcher cleaned up`);
+    }
+  }
+
+  /**
    * Setup the onData handler for the PTY process
    * Extracted to avoid code duplication between start() and startWithPooledTerminal()
    */
@@ -1249,6 +1420,18 @@ export class ClaudeInstance extends EventEmitter {
 
       // Clean up MCP resources
       this.cleanupMcpResources();
+
+      // Stop HistoryWatcher and remove listeners to prevent memory leaks
+      if (this.historyWatcher) {
+        this.historyWatcher.stop();
+        this.historyWatcher.removeAllListeners();
+      }
+
+      // Stop TaskFileWatcher and remove listeners to prevent memory leaks
+      if (this.taskFileWatcher) {
+        this.taskFileWatcher.stop();
+        this.taskFileWatcher.removeAllListeners();
+      }
 
       // Note: We don't clear subagents on exit - they remain for UI display
       // They will be cleared when the instance is explicitly killed or removed
@@ -1294,9 +1477,47 @@ export class ClaudeInstance extends EventEmitter {
     if (this.ptyProcess && !this._hasExited) {
       try {
         this.ptyProcess.resize(cols, rows);
+        this._dimensions = { cols, rows };
       } catch {
         // Silently ignore resize errors - process may have exited
       }
+    }
+  }
+
+  /**
+   * Get current terminal dimensions
+   */
+  get dimensions(): { cols: number; rows: number } {
+    return this._dimensions;
+  }
+
+  /**
+   * Force a terminal repaint using various experimental methods
+   * Used to fix visual glitches in Claude Code TUI
+   * @param method The repaint method to use
+   */
+  forceRepaint(method: 'fake-resize' | 'ansi-clear'): void {
+    if (!this.ptyProcess || this._hasExited) return;
+
+    if (method === 'fake-resize') {
+      // Temporarily change cols to trigger SIGWINCH, then restore
+      const { cols, rows } = this._dimensions;
+      try {
+        this.ptyProcess.resize(cols - 1, rows);
+        // Use setImmediate to restore dimensions in the next event loop tick
+        setImmediate(() => {
+          if (this.ptyProcess && !this._hasExited) {
+            this.ptyProcess.resize(cols, rows);
+          }
+        });
+      } catch {
+        // Silently ignore resize errors
+      }
+    } else if (method === 'ansi-clear') {
+      // Send ANSI escape sequences to clear and redraw the screen
+      // ESC[H = Move cursor to home position
+      // ESC[2J = Clear entire screen
+      this.ptyProcess.write('\x1b[H\x1b[2J');
     }
   }
 
@@ -1314,6 +1535,12 @@ export class ClaudeInstance extends EventEmitter {
 
     // Clean up parser listeners to prevent memory leaks
     this.cleanupParserListeners();
+
+    // Clean up HistoryWatcher
+    this.cleanupHistoryWatcher();
+
+    // Clean up TaskFileWatcher
+    this.cleanupTaskFileWatcher();
 
     // Clean up MCP resources
     this.cleanupMcpResources();
@@ -1387,6 +1614,8 @@ export class ClaudeInstance extends EventEmitter {
     // If already exited or no process, just clean up and return
     if (this._hasExited || !this.ptyProcess) {
       this.cleanupParserListeners();
+      this.cleanupHistoryWatcher();
+      this.cleanupTaskFileWatcher();
       this.cleanupMcpResources();
       const tracker = getSubagentTracker();
       tracker.clearSubagents(this.id);
@@ -1519,6 +1748,47 @@ export class ClaudeInstance extends EventEmitter {
    */
   get sessionId(): string | undefined {
     return this._sessionId;
+  }
+
+  /**
+   * Set session ID externally (called from SessionStart hook via API)
+   * This starts the HistoryWatcher and TaskFileWatcher if not already started
+   */
+  setSessionId(sessionId: string): void {
+    if (this._sessionId === sessionId) {
+      return; // Already set
+    }
+
+    this._sessionId = sessionId;
+    this.emit('sessionId', sessionId);
+    console.log(`[ClaudeInstance] Session ID set externally: ${sessionId}`);
+
+    // Update status to 'running' since session has started
+    // This fixes the "Starting Claude..." overlay staying visible when resuming sessions
+    if (this._status === 'starting') {
+      this._status = 'running';
+      this.emit('status', this._status);
+      console.log(`[ClaudeInstance] Status changed to running (session started)`);
+
+      // Start idle timer to transition to waiting_input if no activity
+      if (this.mode !== 'stream-json') {
+        this.resetIdleTimer();
+      }
+    }
+
+    // Start HistoryWatcher if not already active
+    if (this.historyWatcher && !this.historyWatcher.isActive()) {
+      this.historyWatcher.setSessionId(sessionId);
+      this.historyWatcher.start();
+      console.log(`[ClaudeInstance] HistoryWatcher started for session: ${sessionId}`);
+    }
+
+    // Start TaskFileWatcher if not already active
+    if (this.taskFileWatcher && !this.taskFileWatcher.isActive()) {
+      this.taskFileWatcher.setTaskListId(sessionId);
+      this.taskFileWatcher.start();
+      console.log(`[ClaudeInstance] TaskFileWatcher started for session: ${sessionId}`);
+    }
   }
 
   /**

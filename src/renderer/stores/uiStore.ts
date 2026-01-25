@@ -9,7 +9,9 @@ import type {
   Theme,
   CollapsedSections,
   TerminalFont,
+  RepaintSettings,
 } from '@shared/types/uiSettings';
+import { DEFAULT_REPAINT_SETTINGS } from '@shared/types/uiSettings';
 
 interface UIState extends UISettings {
   _hasHydrated: boolean;
@@ -56,6 +58,10 @@ interface UIState extends UISettings {
   // Shared context settings
   sharedContext: SharedContextSettings;
   setSharedContext: (settings: Partial<SharedContextSettings>) => void;
+
+  // Repaint settings (experimental TUI fix)
+  repaintSettings: RepaintSettings;
+  setRepaintSettings: (settings: Partial<RepaintSettings>) => void;
 }
 
 // Check if running in Electron with uiSettings API
@@ -121,6 +127,7 @@ export const useUIStore = create<UIState>()(
       collapsedSections: { local: false, clusters: {} },
       terminalFont: 'system',
       sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
+      repaintSettings: DEFAULT_REPAINT_SETTINGS,
       sidebarMobileOpen: false,
       showProjectModal: false,
       showInstanceModal: false,
@@ -146,6 +153,7 @@ export const useUIStore = create<UIState>()(
               collapsedSections: settings.collapsedSections || { local: false, clusters: {} },
               terminalFont: settings.terminalFont || 'system',
               sharedContext: settings.sharedContext || DEFAULT_SHARED_CONTEXT_SETTINGS,
+              repaintSettings: settings.repaintSettings || DEFAULT_REPAINT_SETTINGS,
               _hasHydrated: true,
             });
             // Apply theme and language after loading
@@ -322,6 +330,14 @@ export const useUIStore = create<UIState>()(
         set({ sharedContext: updated });
         saveToMain({ sharedContext: updated });
       },
+
+      // Repaint settings (experimental TUI fix)
+      setRepaintSettings: (settings) => {
+        const current = get().repaintSettings;
+        const updated = { ...current, ...settings };
+        set({ repaintSettings: updated });
+        saveToMain({ repaintSettings: updated });
+      },
     }),
     {
       name: 'claude-code-orchestra-ui',
@@ -336,6 +352,7 @@ export const useUIStore = create<UIState>()(
         collapsedSections: state.collapsedSections,
         terminalFont: state.terminalFont,
         sharedContext: state.sharedContext,
+        repaintSettings: state.repaintSettings,
       }),
       onRehydrateStorage: () => (state) => {
         if (state && !isElectron()) {

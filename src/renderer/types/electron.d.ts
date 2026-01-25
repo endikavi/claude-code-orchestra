@@ -38,6 +38,7 @@ declare global {
         getAll: () => Promise<ClaudeInstance[]>;
         getByProject: (projectId: string) => Promise<ClaudeInstance[]>;
         resize: (id: string, cols: number, rows: number) => void;
+        forceRepaint: (id: string, method: 'fake-resize' | 'ansi-clear') => Promise<boolean>;
         onOutput: (callback: (instanceId: string, data: StreamMessage) => void) => () => void;
         onStatus: (callback: (instanceId: string, status: InstanceStatus) => void) => () => void;
         onError: (callback: (instanceId: string, error: string) => void) => () => void;

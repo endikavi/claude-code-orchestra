@@ -70,6 +70,7 @@ export default defineConfig({
     },
   },
   root: resolve(projectRoot, 'src/renderer'),
+  publicDir: resolve(projectRoot, 'public'),
   build: {
     outDir: resolve(projectRoot, 'dist/renderer'),
     emptyOutDir: true,

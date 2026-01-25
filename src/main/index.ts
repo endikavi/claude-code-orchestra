@@ -8,6 +8,7 @@ import { getClusterManager } from './services/ClusterManager';
 import { getTerminalPool } from './services/TerminalPool';
 import { initializeContextBroadcasting } from './services/SharedContextStore';
 import { getAutoReviewService } from './services/AutoReviewService';
+import { UpdateService } from './services/UpdateService';
 
 // GPU cache configuration for xterm.js WebGL performance
 // By default, we enable GPU caches for better terminal rendering performance
@@ -143,6 +144,14 @@ app
 
     // Initialize shared context broadcasting for cluster support
     initializeContextBroadcasting();
+
+    // Initialize update service and check for updates (30 seconds after startup)
+    if (mainWindow) {
+      const updateService = UpdateService.getInstance();
+      updateService.setMainWindow(mainWindow);
+      updateService.scheduleStartupCheck(30000);
+      console.log('[Main] Update service initialized');
+    }
   })
   .catch((error) => {
     console.error('[Main] Failed to initialize app:', error);

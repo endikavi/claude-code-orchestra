@@ -94,6 +94,21 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Set the session ID on an instance and start its watchers
+   * Called from the /session-id API endpoint when the SessionStart hook fires
+   */
+  setInstanceSessionId(instanceId: string, sessionId: string): boolean {
+    const instance = this.instances.get(instanceId);
+    if (!instance) {
+      console.log(`[ProcessManager] Instance ${instanceId} not found for setSessionId`);
+      return false;
+    }
+
+    instance.setSessionId(sessionId);
+    return true;
+  }
+
+  /**
    * Set the main window for IPC communication
    */
   setMainWindow(window: BrowserWindowType): void {
@@ -521,6 +536,22 @@ export class ProcessManager extends EventEmitter {
     if (instance) {
       instance.resize(cols, rows);
     }
+  }
+
+  /**
+   * Force a terminal repaint for an instance using experimental methods
+   * Used to fix visual glitches in Claude Code TUI
+   * @param id Instance ID
+   * @param method Repaint method: 'fake-resize' triggers SIGWINCH, 'ansi-clear' sends ANSI sequences
+   * @returns true if instance was found and repaint was triggered
+   */
+  forceRepaintInstance(id: string, method: 'fake-resize' | 'ansi-clear'): boolean {
+    const instance = this.instances.get(id);
+    if (!instance) {
+      return false;
+    }
+    instance.forceRepaint(method);
+    return true;
   }
 
   /**

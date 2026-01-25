@@ -67,9 +67,7 @@ export function TitleBar() {
             />
           </button>
         )}
-        <div className="w-6 h-6 rounded-md bg-gradient-to-br from-claude-orange to-claude-tan flex items-center justify-center">
-          <span className="text-white text-xs font-bold">O</span>
-        </div>
+        <img src="/favicon.png" alt="Logo" className="w-6 h-6 rounded-md" />
         <span className="text-sm font-medium text-gray-700 dark:text-gray-200 hidden sm:inline">
           {t('titleBar.title')}
         </span>

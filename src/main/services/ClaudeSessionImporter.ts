@@ -234,7 +234,10 @@ export class ClaudeSessionImporter {
         title,
         initialPrompt,
         model: 'sonnet' as ClaudeModel, // Default, we can't determine the original model
-        mode: 'stream-json' as InstanceMode,
+        // Use 'interactive' mode so that when resumed, the instance uses the simple
+        // status logic (any data = running) instead of relying solely on the parser.
+        // This fixes the loading overlay staying visible when resuming sessions.
+        mode: 'interactive' as InstanceMode,
       });
 
       // Update with session ID and calculate stats

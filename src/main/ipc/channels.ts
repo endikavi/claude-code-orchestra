@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   INSTANCE_SET_TITLE: 'instance:setTitle',
   INSTANCE_GET_ALL: 'instance:getAll',
   INSTANCE_GET_BY_PROJECT: 'instance:getByProject',
+  INSTANCE_FORCE_REPAINT: 'instance:forceRepaint', // Experimental TUI repaint
 
   // Instance events (main -> renderer)
   INSTANCE_OUTPUT: 'instance:output',
@@ -263,6 +264,21 @@ export const IPC_CHANNELS = {
   SSL_GENERATE_SELF_SIGNED: 'ssl:generateSelfSigned',
   SSL_GET_CERT_INFO: 'ssl:getCertInfo',
   SSL_VALIDATE_CERT_KEY_PAIR: 'ssl:validateCertKeyPair',
+
+  // Update operations
+  UPDATE_CHECK: 'update:check',
+  UPDATE_DOWNLOAD: 'update:download',
+  UPDATE_INSTALL: 'update:install',
+  UPDATE_GET_VERSION: 'update:getVersion',
+
+  // Update events (main -> renderer)
+  UPDATE_CHECKING: 'update:checking',
+  UPDATE_AVAILABLE: 'update:available',
+  UPDATE_NOT_AVAILABLE: 'update:notAvailable',
+  UPDATE_PROGRESS: 'update:progress',
+  UPDATE_DOWNLOADED: 'update:downloaded',
+  UPDATE_ERROR: 'update:error',
+  UPDATE_STARTUP_AVAILABLE: 'update:startupAvailable',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

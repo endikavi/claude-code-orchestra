@@ -241,6 +241,46 @@ export class TaskTracker extends EventEmitter {
   }
 
   /**
+   * Set a task directly (used by TaskFileWatcher which reads tasks from files)
+   * This replaces the task if it exists, or creates it if it doesn't
+   */
+  setTask(instanceId: string, task: TrackedTask): TrackedTask {
+    if (!this.tasks.has(instanceId)) {
+      this.tasks.set(instanceId, new Map());
+    }
+
+    const instanceTasks = this.tasks.get(instanceId);
+    if (!instanceTasks) {
+      throw new Error(`Failed to create task map for instance ${instanceId}`);
+    }
+
+    instanceTasks.set(task.id, task);
+    this.taskToInstance.set(task.id, instanceId);
+
+    console.log(`[TaskTracker] Set task "${task.subject}" (${task.id}) for instance ${instanceId}`);
+
+    return task;
+  }
+
+  /**
+   * Delete a specific task by ID
+   */
+  deleteTask(instanceId: string, taskId: string): boolean {
+    const instanceTasks = this.tasks.get(instanceId);
+    if (!instanceTasks) {
+      return false;
+    }
+
+    const deleted = instanceTasks.delete(taskId);
+    if (deleted) {
+      this.taskToInstance.delete(taskId);
+      console.log(`[TaskTracker] Deleted task ${taskId} from instance ${instanceId}`);
+    }
+
+    return deleted;
+  }
+
+  /**
    * Clear all tasks for an instance (when instance is killed/completed)
    */
   clearTasks(instanceId: string): void {

@@ -223,6 +223,12 @@ export function createInstanceRoutes(deps: InstanceRoutesDeps): Router {
 
     console.log(`[API] Received sessionId ${sessionId} for instance ${instanceId}`);
 
+    // Set the session ID on the instance (starts HistoryWatcher and TaskFileWatcher)
+    const instanceUpdated = processManager.setInstanceSessionId(instanceId, sessionId);
+    if (!instanceUpdated) {
+      console.log(`[API] Instance ${instanceId} not found, storing sessionId for later`);
+    }
+
     // Try to update the conversation with the sessionId
     const conversationId = processManager.getInstanceConversation(instanceId);
     if (conversationId) {

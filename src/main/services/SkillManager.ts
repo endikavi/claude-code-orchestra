@@ -1,9 +1,20 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
+import { DataStore } from './DataStore';
 
 // Dashboard API port
 const DASHBOARD_API_PORT = 3847;
+
+/**
+ * Get the base API URL for skills (http or https based on SSL config)
+ */
+function getApiBaseUrl(): string {
+  const remoteConfig = DataStore.getInstance().getRemoteConfig();
+  const protocol = remoteConfig.ssl?.enabled ? 'https' : 'http';
+  const port = remoteConfig.port || DASHBOARD_API_PORT;
+  return `${protocol}://localhost:${port}`;
+}
 
 // Skill definition
 interface SkillDefinition {
@@ -13,8 +24,8 @@ interface SkillDefinition {
   content: string;
 }
 
-// Generate skills with dynamic port
-function generateSkills(port: number): Record<string, SkillDefinition> {
+// Generate skills with dynamic base URL (supports http and https)
+function generateSkills(baseUrl: string): Record<string, SkillDefinition> {
   return {
     'dashboard-status': {
       id: 'dashboard-status',
@@ -35,7 +46,7 @@ Use the dashboard notification endpoint to report status:
 
 \`\`\`bash
 # Report status update
-curl -s -X POST "http://localhost:${port}/api/hooks/status" \\
+curl -sk -X POST "${baseUrl}/api/hooks/status" \\
   -H "Content-Type: application/json" \\
   -d '{
     "instanceId": "'$CLAUDE_DASHBOARD_INSTANCE_ID'",
@@ -64,15 +75,15 @@ curl -s -X POST "http://localhost:${port}/api/hooks/status" \\
 
 \`\`\`bash
 # Starting task
-curl -s -X POST "http://localhost:${port}/api/hooks/status" \\
+curl -sk -X POST "${baseUrl}/api/hooks/status" \\
   -d '{"instanceId":"'$CLAUDE_DASHBOARD_INSTANCE_ID'","status":"starting","message":"Beginning implementation"}'
 
 # Progress update
-curl -s -X POST "http://localhost:${port}/api/hooks/status" \\
+curl -sk -X POST "${baseUrl}/api/hooks/status" \\
   -d '{"instanceId":"'$CLAUDE_DASHBOARD_INSTANCE_ID'","status":"working","message":"50% complete","progress":50}'
 
 # Completion
-curl -s -X POST "http://localhost:${port}/api/hooks/status" \\
+curl -sk -X POST "${baseUrl}/api/hooks/status" \\
   -d '{"instanceId":"'$CLAUDE_DASHBOARD_INSTANCE_ID'","status":"completed","message":"Task finished"}'
 \`\`\`
 
@@ -100,7 +111,7 @@ Before starting complex tasks, you can fetch context from the dashboard to get:
 
 \`\`\`bash
 # Fetch context for current instance
-curl -s "http://localhost:${port}/api/hooks/instance/$CLAUDE_DASHBOARD_INSTANCE_ID/context"
+curl -sk "${baseUrl}/api/hooks/instance/$CLAUDE_DASHBOARD_INSTANCE_ID/context"
 \`\`\`
 
 ## Response Structure
@@ -141,7 +152,7 @@ The endpoint returns JSON with:
 
 \`\`\`bash
 # Get context and extract relevant info
-CONTEXT=$(curl -s "http://localhost:${port}/api/hooks/instance/$CLAUDE_DASHBOARD_INSTANCE_ID/context")
+CONTEXT=$(curl -sk "${baseUrl}/api/hooks/instance/$CLAUDE_DASHBOARD_INSTANCE_ID/context")
 
 # Check if other instances are active
 ACTIVE_COUNT=$(echo "$CONTEXT" | jq '.activeInstances | length')
@@ -171,7 +182,7 @@ Before making significant changes, check if other instances are active:
 
 \`\`\`bash
 # Get list of active instances for the project
-curl -s "http://localhost:${port}/api/hooks/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl -sk "${baseUrl}/api/hooks/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
 \`\`\`
 
 ## Response
@@ -198,7 +209,7 @@ Check if the file is being modified by another instance:
 
 \`\`\`bash
 FILE_PATH="src/components/Button.tsx"
-RESPONSE=$(curl -s "http://localhost:${port}/api/hooks/file-lock?path=$FILE_PATH&projectId=$CLAUDE_DASHBOARD_PROJECT_ID")
+RESPONSE=$(curl -sk "${baseUrl}/api/hooks/file-lock?path=$FILE_PATH&projectId=$CLAUDE_DASHBOARD_PROJECT_ID")
 LOCKED=$(echo "$RESPONSE" | jq -r '.locked')
 
 if [ "$LOCKED" = "true" ]; then
@@ -211,7 +222,7 @@ fi
 When you start modifying important files:
 
 \`\`\`bash
-curl -s -X POST "http://localhost:${port}/api/hooks/activity" \\
+curl -sk -X POST "${baseUrl}/api/hooks/activity" \\
   -H "Content-Type: application/json" \\
   -d '{
     "instanceId": "'$CLAUDE_DASHBOARD_INSTANCE_ID'",
@@ -225,7 +236,7 @@ curl -s -X POST "http://localhost:${port}/api/hooks/activity" \\
 Before committing or pushing changes:
 
 \`\`\`bash
-curl -s "http://localhost:${port}/api/hooks/conflicts?instanceId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+curl -sk "${baseUrl}/api/hooks/conflicts?instanceId=$CLAUDE_DASHBOARD_INSTANCE_ID"
 \`\`\`
 
 ## Best Practices
@@ -263,7 +274,7 @@ You are a Director instance coordinating multiple worker instances. Use the dash
 When you identify subtasks that should be delegated, propose workers:
 
 \`\`\`bash
-curl -s -X POST "http://localhost:${port}/api/orchestration/propose" \\
+curl -sk -X POST "${baseUrl}/api/orchestration/propose" \\
   -H "Content-Type: application/json" \\
   -d '{
     "directorId": "'$CLAUDE_DASHBOARD_INSTANCE_ID'",
@@ -295,7 +306,7 @@ Monitor your workers' progress:
 
 \`\`\`bash
 # Get status of all workers
-curl -s "http://localhost:${port}/api/orchestration/workers?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+curl -sk "${baseUrl}/api/orchestration/workers?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
 \`\`\`
 
 Response:
@@ -325,7 +336,7 @@ Response:
 Access the results from completed workers:
 
 \`\`\`bash
-curl -s "http://localhost:${port}/api/orchestration/context?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+curl -sk "${baseUrl}/api/orchestration/context?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
 \`\`\`
 
 Response includes:
@@ -406,19 +417,19 @@ Get a human-readable overview of current project state.
 
 \`\`\`bash
 # Check active peers
-curl "http://localhost:${port}/api/hooks/context/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl -k "${baseUrl}/api/hooks/context/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
 
 # Publish your context
-curl -X POST "http://localhost:${port}/api/hooks/context/publish" \\
+curl -k -X POST "${baseUrl}/api/hooks/context/publish" \\
   -H "Content-Type: application/json" \\
   -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \\
   -d '{"workStatus":"implementing","currentTask":"Refactoring auth","currentFiles":["src/auth.ts"]}'
 
 # Get project knowledge
-curl "http://localhost:${port}/api/hooks/context/project?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl -k "${baseUrl}/api/hooks/context/project?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
 
 # Contribute knowledge
-curl -X POST "http://localhost:${port}/api/hooks/context/project/contribute" \\
+curl -k -X POST "${baseUrl}/api/hooks/context/project/contribute" \\
   -H "Content-Type: application/json" \\
   -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \\
   -d '{"convention":{"type":"naming","description":"Components use PascalCase"}}'
@@ -519,14 +530,14 @@ export class SkillManager extends EventEmitter {
    * Get all available skills
    */
   public getAvailableSkills(): SkillDefinition[] {
-    return Object.values(generateSkills(this.apiPort));
+    return Object.values(generateSkills(getApiBaseUrl()));
   }
 
   /**
    * Get a specific skill
    */
   public getSkill(id: string): SkillDefinition | undefined {
-    const skills = generateSkills(this.apiPort);
+    const skills = generateSkills(getApiBaseUrl());
     return skills[id];
   }
 
@@ -539,7 +550,7 @@ export class SkillManager extends EventEmitter {
   ): Promise<{ success: boolean; installed: string[]; errors: string[] }> {
     const installed: string[] = [];
     const errors: string[] = [];
-    const skills = generateSkills(this.apiPort);
+    const skills = generateSkills(getApiBaseUrl());
 
     try {
       const skillsDir = path.join(projectPath, '.claude', 'skills');
@@ -617,7 +628,7 @@ export class SkillManager extends EventEmitter {
    */
   public async removeAllSkills(projectPath: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const skills = generateSkills(this.apiPort);
+      const skills = generateSkills(getApiBaseUrl());
       const skillsDir = path.join(projectPath, '.claude', 'skills');
 
       for (const skillId of Object.keys(skills)) {
@@ -646,7 +657,7 @@ export class SkillManager extends EventEmitter {
     try {
       const skillsDir = path.join(projectPath, '.claude', 'skills');
       const entries = await fs.promises.readdir(skillsDir, { withFileTypes: true });
-      const skills = generateSkills(this.apiPort);
+      const skills = generateSkills(getApiBaseUrl());
 
       const installed: string[] = [];
       for (const entry of entries) {
@@ -688,7 +699,7 @@ export class SkillManager extends EventEmitter {
     projectPath: string,
     skillId: string
   ): Promise<{ success: boolean; error?: string }> {
-    const skills = generateSkills(this.apiPort);
+    const skills = generateSkills(getApiBaseUrl());
     const skill = skills[skillId];
 
     if (!skill) {
