@@ -105,6 +105,8 @@ Orchestra includes a standalone web client that connects via WebSocket, enabling
 - **better-sqlite3** - Local database
 - **xterm.js** - Terminal emulation
 - **node-pty** - Pseudo-terminal spawning
+- **Socket.io** - Real-time WebSocket communication
+- **i18next** - Internationalization
 - **Vite** - Build tooling
 
 ## Prerequisites
@@ -201,21 +203,28 @@ cd claude-code-orchestra
 # Install dependencies
 npm install
 
-# Start development server
-npm run dev
+# Start development server (full Electron app)
+npm run electron:dev
 ```
 
 ## Development
 
 ```bash
-# Run in development mode (with hot reload)
-npm run dev
-
-# Or use electron:dev for full Electron experience
+# Run full Electron app with hot reload (recommended)
 npm run electron:dev
+
+# Vite-only development (web preview, no Electron)
+npm run dev
 
 # Type check
 npm run typecheck
+
+# Lint and format
+npm run lint
+npm run format
+
+# Run tests
+npm run test:run
 
 # Build for production
 npm run build
@@ -286,8 +295,15 @@ Orchestra reads configuration from:
 
 - [Architecture](./docs/architecture.md)
 - [Features](./docs/features.md)
+- [Services Overview](./docs/services-overview.md)
+- [State Management](./docs/state-management.md)
+- [IPC Channels](./docs/ipc-channels.md)
+- [Database Schema](./docs/database-schema.md)
 - [Headless/Server Deployment](./docs/headless-deployment.md)
 - [Remote Access](./docs/remote-access.md)
+- [Web Access Guide](./docs/web-access-guide.md)
+- [Security Model](./docs/security-model.md)
+- [Testing Guide](./docs/testing-guide.md)
 - [Roadmap](./docs/roadmap.md)
 
 ## Reporting Issues

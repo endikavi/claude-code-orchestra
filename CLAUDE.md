@@ -27,11 +27,17 @@ npm run format:check      # Check formatting
 npm run test              # Watch mode
 npm run test:run          # Single run
 npm run test:coverage     # With coverage report
+npx vitest run src/path/to/file.test.ts  # Run single test file
 
 # Building
 npm run build             # Full build (TypeScript + Vite + Web + Electron)
+npm run build:web         # Build standalone web client only
+npm run build:cli         # Build headless CLI
 npm run electron:build    # Package for current platform
 npm run rebuild           # Rebuild native modules (node-pty, better-sqlite3)
+
+# Headless server mode
+npm run start:server      # Run as headless server (after build:cli)
 ```
 
 ## Architecture Overview
@@ -54,6 +60,7 @@ This is an Electron desktop application for managing multiple Claude Code CLI in
 - `ConfigReader`: Reads Claude settings from `~/.claude.json` and project `.claude/settings.json`
 - `WebServer`: Express + Socket.io server for remote web access
 - `AuthService`: JWT-based authentication for remote access
+- `ClusterManager`: Multi-node clustering with primary/secondary roles
 
 ### State Management (Renderer)
 
@@ -87,7 +94,7 @@ Configured in `tsconfig.json` and `vitest.config.ts`:
 
 Tests are colocated with source files using `.test.ts` or `.test.tsx` suffix. Test setup file: `src/test/setup.ts`. Electron mocks: `src/test/mocks/electron.ts`.
 
-Coverage thresholds: 50% for statements, branches, functions, and lines.
+Coverage thresholds (beta): 15% statements/branches/lines, 20% functions.
 
 ## Code Conventions
 
