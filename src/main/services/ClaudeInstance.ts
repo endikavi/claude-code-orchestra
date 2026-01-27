@@ -340,6 +340,8 @@ export interface ClaudeInstanceConfig {
   pooledTerminal?: PooledTerminal; // Pre-spawned terminal from pool (local-only)
   agents?: CustomAgentsConfig; // Custom agents to inject as skills (--agents parameter)
   agentFile?: string; // Path to agent file for --agent parameter (e.g., AGENT.md)
+  isHidden?: boolean; // Hidden instances don't show in main tabs (e.g., Ralph background tasks)
+  ralphTaskId?: string; // Associated Ralph task ID if this is a Ralph loop instance
 }
 
 export class ClaudeInstance extends EventEmitter {
@@ -356,6 +358,8 @@ export class ClaudeInstance extends EventEmitter {
   public readonly enableMcp: boolean;
   public readonly agents?: CustomAgentsConfig;
   public readonly agentFile?: string;
+  public readonly isHidden: boolean; // Hidden instances don't show in main tabs
+  public readonly ralphTaskId?: string; // Associated Ralph task ID
 
   private ptyProcess: pty.IPty | null = null;
   private mcpToken?: string; // Token for MCP authentication
@@ -391,6 +395,8 @@ export class ClaudeInstance extends EventEmitter {
     this.pooledTerminal = config.pooledTerminal;
     this.agents = config.agents;
     this.agentFile = config.agentFile;
+    this.isHidden = config.isHidden ?? false;
+    this.ralphTaskId = config.ralphTaskId;
     this.createdAt = Date.now();
 
     this.parser = new StreamJSONParser();
@@ -1824,6 +1830,8 @@ export class ClaudeInstance extends EventEmitter {
       createdAt: this.createdAt,
       pid: this.pid,
       error: this._error,
+      isHidden: this.isHidden,
+      ralphTaskId: this.ralphTaskId,
     };
   }
 }

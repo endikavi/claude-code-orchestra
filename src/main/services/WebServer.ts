@@ -36,6 +36,7 @@ import { getTerminalDimensionManager } from './TerminalDimensionManager';
 import { McpServer } from './mcp/McpServer';
 import { MetricsService } from './MetricsService';
 import { GitStatusManager } from './GitStatusManager';
+import { getRalphTaskLoop } from './RalphTaskLoop';
 import type { McpRequest, McpToolContext } from '@shared/types/mcp';
 import {
   createAuthRoutes,
@@ -45,6 +46,7 @@ import {
   createHookRoutes,
   createProxyRoutes,
   createContextRoutes,
+  createRalphTaskRoutes,
   type AuthenticatedRequest,
 } from './routes';
 import type {
@@ -406,6 +408,9 @@ export class WebServer extends EventEmitter {
     // MCP endpoint (token-based auth for Claude instances)
     this.setupMcpEndpoint();
 
+    // Ralph Task CLI endpoints (no auth - called by Claude CLI instances)
+    this.setupRalphTaskInternalRoutes();
+
     // ==================== WEB ACCESS ROUTES (require webAccessEnabled) ====================
     // These routes are for remote web clients and require webAccessEnabled to be true
 
@@ -446,6 +451,16 @@ export class WebServer extends EventEmitter {
       this.webAccessGuard,
       createConversationRoutes({
         authMiddleware: this.authMiddleware,
+      })
+    );
+
+    // Ralph Task routes (protected by webAccessGuard + auth, except CLI endpoints)
+    this.app.use(
+      '/api/ralph-tasks',
+      this.webAccessGuard,
+      createRalphTaskRoutes({
+        authMiddleware: this.authMiddleware,
+        broadcastStateUpdate: () => this.broadcastStateUpdate(),
       })
     );
 
@@ -605,6 +620,50 @@ export class WebServer extends EventEmitter {
     });
 
     console.log('[WebServer] MCP endpoint configured at /mcp');
+  }
+
+  /**
+   * Setup internal routes for Ralph Task CLI endpoints
+   * These routes are available without webAccessGuard (called by Claude CLI instances)
+   */
+  private setupRalphTaskInternalRoutes(): void {
+    const taskLoop = getRalphTaskLoop();
+
+    // Complete a Ralph task (called by CLI) - NO AUTH REQUIRED for local CLI access
+    this.app.post('/api/ralph-tasks/:id/complete', (req: Request, res: Response) => {
+      try {
+        const summary = req.body.summary || 'Task completed';
+        const task = taskLoop.completeTask(String(req.params.id), summary);
+        if (!task) {
+          res.status(404).json({ success: false, error: 'Task not found' });
+          return;
+        }
+        res.json({ success: true, data: task });
+        this.broadcastStateUpdate();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ success: false, error: message });
+      }
+    });
+
+    // Request help for a Ralph task (called by CLI) - NO AUTH REQUIRED for local CLI access
+    this.app.post('/api/ralph-tasks/:id/help', (req: Request, res: Response) => {
+      try {
+        const reason = req.body.reason || 'Help requested';
+        const task = taskLoop.requestHelp(String(req.params.id), reason);
+        if (!task) {
+          res.status(404).json({ success: false, error: 'Task not found' });
+          return;
+        }
+        res.json({ success: true, data: task });
+        this.broadcastStateUpdate();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ success: false, error: message });
+      }
+    });
+
+    console.log('[WebServer] Ralph Task internal endpoints configured');
   }
 
   /**

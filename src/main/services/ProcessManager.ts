@@ -377,6 +377,9 @@ export class ProcessManager extends EventEmitter {
       // Broadcast to all destinations
       this.broadcastInstanceEvent('exit', instanceId, code);
 
+      // Emit for Ralph Task Loop and other listeners
+      this.emit('instanceExited', instanceId, code);
+
       // Mark conversation as completed on exit
       const conversationId = this.instanceConversations.get(instanceId);
       if (conversationId) {

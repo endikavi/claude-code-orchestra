@@ -5,3 +5,4 @@ export { createConversationRoutes, type ConversationRoutesDeps } from './convers
 export { createHookRoutes, type HookRoutesDeps } from './hookRoutes';
 export { createProxyRoutes, type ProxyRoutesDeps } from './proxyRoutes';
 export { createContextRoutes, type ContextRoutesDeps } from './contextRoutes';
+export { createRalphTaskRoutes, type RalphTaskRoutesDeps } from './ralphTaskRoutes';

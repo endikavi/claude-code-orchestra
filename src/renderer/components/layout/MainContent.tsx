@@ -15,6 +15,7 @@ import { ShellTerminalView } from '../terminal/ShellTerminalView';
 import { SplitTerminalView } from '../terminal/SplitTerminalView';
 import { StructuredView } from '../structured/StructuredView';
 import { ConversationHistory } from '../conversations/ConversationHistory';
+import { ProjectContentTabs } from '../ralphTasks/ProjectContentTabs';
 import { ConversationViewer } from '../conversations/ConversationViewer';
 import { MobileKeyboard } from '../terminal/MobileKeyboard';
 import { OrchestraView } from '../orchestration/OrchestraView';
@@ -110,7 +111,7 @@ export function MainContent() {
                 <StructuredView key={selectedInstanceId} instanceId={selectedInstanceId} />
               )
             ) : (
-              <ConversationHistory
+              <ProjectContentTabs
                 projectId={selectedProjectId}
                 onNewConversation={() => setShowInstanceModal(true)}
               />

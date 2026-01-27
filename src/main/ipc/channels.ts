@@ -279,6 +279,31 @@ export const IPC_CHANNELS = {
   UPDATE_DOWNLOADED: 'update:downloaded',
   UPDATE_ERROR: 'update:error',
   UPDATE_STARTUP_AVAILABLE: 'update:startupAvailable',
+
+  // Ralph Task operations
+  RALPH_TASK_CREATE: 'ralphTask:create',
+  RALPH_TASK_UPDATE: 'ralphTask:update',
+  RALPH_TASK_DELETE: 'ralphTask:delete',
+  RALPH_TASK_GET_BY_PROJECT: 'ralphTask:getByProject',
+  RALPH_TASK_GET_BY_ID: 'ralphTask:getById',
+  RALPH_TASK_MOVE: 'ralphTask:move',
+  RALPH_TASK_REORDER: 'ralphTask:reorder',
+  RALPH_TASK_START: 'ralphTask:start',
+  RALPH_TASK_STOP: 'ralphTask:stop',
+  RALPH_TASK_RESPOND_HELP: 'ralphTask:respondHelp',
+  RALPH_TASK_PROCESS_ALL: 'ralphTask:processAll',
+  RALPH_TASK_STOP_ALL: 'ralphTask:stopAll',
+
+  // Ralph Task events (main -> renderer)
+  RALPH_TASK_CREATED: 'ralphTask:created',
+  RALPH_TASK_UPDATED: 'ralphTask:updated',
+  RALPH_TASK_DELETED: 'ralphTask:deleted',
+  RALPH_TASK_HELP_REQUESTED: 'ralphTask:helpRequested',
+  RALPH_TASK_LOOP_STARTED: 'ralphTask:loopStarted',
+  RALPH_TASK_LOOP_COMPLETED: 'ralphTask:loopCompleted',
+  RALPH_TASK_PROCESS_ALL_STARTED: 'ralphTask:processAllStarted',
+  RALPH_TASK_PROCESS_ALL_COMPLETED: 'ralphTask:processAllCompleted',
+  RALPH_TASK_PROCESS_ALL_STOPPED: 'ralphTask:processAllStopped',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

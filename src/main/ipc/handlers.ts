@@ -5,6 +5,7 @@ import * as path from 'path';
 import { IPC_CHANNELS } from './channels';
 import { validators } from './validators';
 import { registerSecurityHandlers } from './securityHandlers';
+import { setupRalphTaskHandlers, cleanupRalphTaskHandlers } from './ralphTaskHandlers';
 import { DataStore } from '../services/DataStore';
 import { getProcessManager } from '../services/ProcessManager';
 import { getWebServer } from '../services/WebServer';
@@ -1376,6 +1377,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       }
     }
   );
+
+  // Setup Ralph Task handlers
+  setupRalphTaskHandlers(mainWindow);
 }
 
 export function cleanupIpcHandlers(): void {
@@ -1384,6 +1388,9 @@ export function cleanupIpcHandlers(): void {
     ipcMain.removeHandler(channel);
     ipcMain.removeAllListeners(channel);
   });
+
+  // Cleanup Ralph Task handlers
+  cleanupRalphTaskHandlers();
 }
 
 /**

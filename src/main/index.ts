@@ -9,6 +9,7 @@ import { getTerminalPool } from './services/TerminalPool';
 import { initializeContextBroadcasting } from './services/SharedContextStore';
 import { getAutoReviewService } from './services/AutoReviewService';
 import { UpdateService } from './services/UpdateService';
+import { getRalphTaskLoop } from './services/RalphTaskLoop';
 
 // GPU cache configuration for xterm.js WebGL performance
 // By default, we enable GPU caches for better terminal rendering performance
@@ -140,6 +141,16 @@ app
     } catch (error) {
       console.error('[Main] Failed to initialize terminal pool:', error);
       // Non-fatal - instances will fall back to direct spawn
+    }
+
+    // Initialize Ralph Task Loop for automated task execution
+    try {
+      const ralphTaskLoop = getRalphTaskLoop();
+      ralphTaskLoop.setProcessManager(getProcessManager());
+      console.log('[Main] Ralph Task Loop initialized');
+    } catch (error) {
+      console.error('[Main] Failed to initialize Ralph Task Loop:', error);
+      // Non-fatal - Ralph tasks will not auto-run
     }
 
     // Initialize shared context broadcasting for cluster support

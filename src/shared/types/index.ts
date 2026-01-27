@@ -102,6 +102,8 @@ export interface ClaudeInstance {
   error?: string;
   terminalTitle?: string; // Dynamic title set by Claude CLI via ANSI escape
   agents?: CustomAgentsConfig; // Custom agents injected via --agents parameter
+  isHidden?: boolean; // Hidden instances don't show in main tabs (e.g., Ralph background tasks)
+  ralphTaskId?: string; // Associated Ralph task ID if this is a Ralph loop instance
 }
 
 // Stream JSON message types from Claude CLI
@@ -326,6 +328,9 @@ export * from './ssl';
 
 // Re-export history types
 export * from './history';
+
+// Re-export ralph tasks types
+export * from './ralphTasks';
 
 // Git status types
 export interface GitStatus {

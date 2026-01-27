@@ -17,6 +17,12 @@ import type {
 } from '@shared/types';
 import { DEFAULT_SECURITY_CONFIG, DEFAULT_PROXY_CONFIG } from '@shared/types';
 import type { TerminalPoolConfig } from '@shared/types/pool';
+import type {
+  RalphTask,
+  RalphTaskStatus,
+  CreateRalphTaskInput,
+  UpdateRalphTaskInput,
+} from '@shared/types/ralphTasks';
 import { DEFAULT_TERMINAL_POOL_CONFIG } from '@shared/types/pool';
 import type { RemoteConfig } from '@shared/types/remote';
 import { DEFAULT_REMOTE_CONFIG } from '@shared/types/remote';
@@ -342,6 +348,45 @@ export class DataStore {
         idleTimeoutMs INTEGER DEFAULT 300000,
         replenishDelayMs INTEGER DEFAULT 1000
       )
+    `);
+
+    // Create ralph_tasks table for Trello-style task board with Ralph Loop
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS ralph_tasks (
+        id TEXT PRIMARY KEY,
+        projectId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'todo',
+        orderIndex REAL NOT NULL,
+        instanceId TEXT,
+        loopCount INTEGER DEFAULT 0,
+        isPaused INTEGER DEFAULT 0,
+        pauseReason TEXT,
+        completionSummary TEXT,
+        contextFilePath TEXT,
+        isInteractive INTEGER DEFAULT 1,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        startedAt INTEGER,
+        completedAt INTEGER,
+        FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Migration: add isInteractive column if it doesn't exist
+    try {
+      this.db.exec('ALTER TABLE ralph_tasks ADD COLUMN isInteractive INTEGER DEFAULT 1');
+    } catch {
+      // Column already exists, ignore
+    }
+
+    // Create indexes for ralph_tasks
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_ralph_tasks_projectId ON ralph_tasks(projectId)
+    `);
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_ralph_tasks_status ON ralph_tasks(status)
     `);
 
     // Insert default terminal pool config if not exists
@@ -1639,6 +1684,241 @@ export class DataStore {
    */
   resetTerminalPoolConfig(): TerminalPoolConfig {
     return this.updateTerminalPoolConfig(DEFAULT_TERMINAL_POOL_CONFIG);
+  }
+
+  // ==================== Ralph Tasks CRUD ====================
+
+  /**
+   * Create a new Ralph task
+   */
+  createRalphTask(data: CreateRalphTaskInput): RalphTask {
+    const now = Date.now();
+
+    // Get the highest orderIndex for this project and status
+    const maxOrderStmt = this.db.prepare(
+      'SELECT MAX(orderIndex) as maxOrder FROM ralph_tasks WHERE projectId = ? AND status = ?'
+    );
+    const result = maxOrderStmt.get(data.projectId, data.status || 'todo') as {
+      maxOrder: number | null;
+    };
+    const orderIndex = (result.maxOrder ?? 0) + 1;
+
+    const task: RalphTask = {
+      id: randomUUID(),
+      projectId: data.projectId,
+      name: data.name,
+      description: data.description,
+      status: data.status || 'todo',
+      orderIndex,
+      loopCount: 0,
+      isPaused: false,
+      isInteractive: true, // Default to interactive mode
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO ralph_tasks (id, projectId, name, description, status, orderIndex, instanceId, loopCount, isPaused, pauseReason, completionSummary, contextFilePath, isInteractive, createdAt, updatedAt, startedAt, completedAt)
+      VALUES (@id, @projectId, @name, @description, @status, @orderIndex, @instanceId, @loopCount, @isPaused, @pauseReason, @completionSummary, @contextFilePath, @isInteractive, @createdAt, @updatedAt, @startedAt, @completedAt)
+    `);
+
+    stmt.run({
+      id: task.id,
+      projectId: task.projectId,
+      name: task.name,
+      description: task.description ?? null,
+      status: task.status,
+      orderIndex: task.orderIndex,
+      instanceId: task.instanceId ?? null,
+      loopCount: task.loopCount,
+      isPaused: task.isPaused ? 1 : 0,
+      pauseReason: task.pauseReason ?? null,
+      completionSummary: task.completionSummary ?? null,
+      contextFilePath: task.contextFilePath ?? null,
+      isInteractive: task.isInteractive ? 1 : 0,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      startedAt: task.startedAt ?? null,
+      completedAt: task.completedAt ?? null,
+    });
+
+    return task;
+  }
+
+  /**
+   * Update a Ralph task
+   */
+  updateRalphTask(id: string, updates: UpdateRalphTaskInput): RalphTask | null {
+    const existing = this.getRalphTaskById(id);
+    if (!existing) return null;
+
+    const updated: RalphTask = {
+      ...existing,
+      ...updates,
+      // Handle null values explicitly
+      instanceId:
+        updates.instanceId === null ? undefined : (updates.instanceId ?? existing.instanceId),
+      pauseReason:
+        updates.pauseReason === null ? undefined : (updates.pauseReason ?? existing.pauseReason),
+      completionSummary:
+        updates.completionSummary === null
+          ? undefined
+          : (updates.completionSummary ?? existing.completionSummary),
+      startedAt: updates.startedAt === null ? undefined : (updates.startedAt ?? existing.startedAt),
+      completedAt:
+        updates.completedAt === null ? undefined : (updates.completedAt ?? existing.completedAt),
+      updatedAt: Date.now(),
+    };
+
+    const stmt = this.db.prepare(`
+      UPDATE ralph_tasks
+      SET name = @name, description = @description, status = @status, orderIndex = @orderIndex,
+          instanceId = @instanceId, loopCount = @loopCount, isPaused = @isPaused,
+          pauseReason = @pauseReason, completionSummary = @completionSummary,
+          contextFilePath = @contextFilePath, isInteractive = @isInteractive, updatedAt = @updatedAt,
+          startedAt = @startedAt, completedAt = @completedAt
+      WHERE id = @id
+    `);
+
+    stmt.run({
+      id: updated.id,
+      name: updated.name,
+      description: updated.description ?? null,
+      status: updated.status,
+      orderIndex: updated.orderIndex,
+      instanceId: updated.instanceId ?? null,
+      loopCount: updated.loopCount,
+      isPaused: updated.isPaused ? 1 : 0,
+      pauseReason: updated.pauseReason ?? null,
+      completionSummary: updated.completionSummary ?? null,
+      contextFilePath: updated.contextFilePath ?? null,
+      isInteractive: updated.isInteractive ? 1 : 0,
+      updatedAt: updated.updatedAt,
+      startedAt: updated.startedAt ?? null,
+      completedAt: updated.completedAt ?? null,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Delete a Ralph task
+   */
+  deleteRalphTask(id: string): void {
+    const stmt = this.db.prepare('DELETE FROM ralph_tasks WHERE id = ?');
+    stmt.run(id);
+  }
+
+  /**
+   * Get Ralph task by ID
+   */
+  getRalphTaskById(id: string): RalphTask | null {
+    const stmt = this.db.prepare('SELECT * FROM ralph_tasks WHERE id = ?');
+    const row = stmt.get(id) as Record<string, unknown> | undefined;
+    return row ? this.mapRowToRalphTask(row) : null;
+  }
+
+  /**
+   * Get Ralph tasks by project ID
+   */
+  getRalphTasksByProject(projectId: string): RalphTask[] {
+    const stmt = this.db.prepare(
+      'SELECT * FROM ralph_tasks WHERE projectId = ? ORDER BY status, orderIndex ASC'
+    );
+    const rows = stmt.all(projectId) as Record<string, unknown>[];
+    return rows.map((row) => this.mapRowToRalphTask(row));
+  }
+
+  /**
+   * Get Ralph tasks by status
+   */
+  getRalphTasksByStatus(projectId: string, status: RalphTaskStatus): RalphTask[] {
+    const stmt = this.db.prepare(
+      'SELECT * FROM ralph_tasks WHERE projectId = ? AND status = ? ORDER BY orderIndex ASC'
+    );
+    const rows = stmt.all(projectId, status) as Record<string, unknown>[];
+    return rows.map((row) => this.mapRowToRalphTask(row));
+  }
+
+  /**
+   * Move a Ralph task to a new status and/or order
+   */
+  moveRalphTask(id: string, newStatus: RalphTaskStatus, newOrderIndex?: number): RalphTask | null {
+    const task = this.getRalphTaskById(id);
+    if (!task) return null;
+
+    let orderIndex = newOrderIndex;
+
+    // If no order specified, put at the end of the target column
+    if (orderIndex === undefined) {
+      const maxOrderStmt = this.db.prepare(
+        'SELECT MAX(orderIndex) as maxOrder FROM ralph_tasks WHERE projectId = ? AND status = ?'
+      );
+      const result = maxOrderStmt.get(task.projectId, newStatus) as { maxOrder: number | null };
+      orderIndex = (result.maxOrder ?? 0) + 1;
+    }
+
+    const updates: UpdateRalphTaskInput = {
+      status: newStatus,
+      orderIndex,
+    };
+
+    // Set startedAt when moving to 'doing'
+    if (newStatus === 'doing' && !task.startedAt) {
+      updates.startedAt = Date.now();
+    }
+
+    // Set completedAt when moving to 'done'
+    if (newStatus === 'done' && !task.completedAt) {
+      updates.completedAt = Date.now();
+    }
+
+    return this.updateRalphTask(id, updates);
+  }
+
+  /**
+   * Reorder Ralph tasks within a column
+   */
+  reorderRalphTasks(
+    tasks: Array<{ id: string; status: RalphTaskStatus; orderIndex: number }>
+  ): void {
+    const stmt = this.db.prepare(`
+      UPDATE ralph_tasks SET status = ?, orderIndex = ?, updatedAt = ? WHERE id = ?
+    `);
+
+    const now = Date.now();
+    const updateMany = this.db.transaction(() => {
+      for (const task of tasks) {
+        stmt.run(task.status, task.orderIndex, now, task.id);
+      }
+    });
+
+    updateMany();
+  }
+
+  /**
+   * Map SQLite row to RalphTask
+   */
+  private mapRowToRalphTask(row: Record<string, unknown>): RalphTask {
+    return {
+      id: row.id as string,
+      projectId: row.projectId as string,
+      name: row.name as string,
+      description: row.description as string | undefined,
+      status: row.status as RalphTaskStatus,
+      orderIndex: row.orderIndex as number,
+      instanceId: row.instanceId as string | undefined,
+      loopCount: row.loopCount as number,
+      isPaused: row.isPaused === 1,
+      pauseReason: row.pauseReason as string | undefined,
+      completionSummary: row.completionSummary as string | undefined,
+      contextFilePath: row.contextFilePath as string | undefined,
+      isInteractive: row.isInteractive !== 0, // Default to true if null/undefined
+      createdAt: row.createdAt as number,
+      updatedAt: row.updatedAt as number,
+      startedAt: row.startedAt as number | undefined,
+      completedAt: row.completedAt as number | undefined,
+    };
   }
 
   // Clean up

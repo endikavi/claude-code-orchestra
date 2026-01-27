@@ -14,6 +14,12 @@ import type {
   ProjectSharedKnowledge,
   ProjectContextSummary,
   ContextUpdateEvent,
+  RalphTask,
+  CreateRalphTaskInput,
+  UpdateRalphTaskInput,
+  MoveRalphTaskInput,
+  ReorderRalphTasksInput,
+  RalphTaskHelpRequest,
 } from '@shared/types';
 
 declare global {
@@ -97,6 +103,29 @@ declare global {
         onKnowledgeUpdated: (
           callback: (projectId: string, knowledge: ProjectSharedKnowledge) => void
         ) => () => void;
+      };
+      ralphTask: {
+        create: (input: CreateRalphTaskInput) => Promise<RalphTask>;
+        update: (id: string, updates: UpdateRalphTaskInput) => Promise<RalphTask | null>;
+        delete: (id: string) => Promise<boolean>;
+        getByProject: (projectId: string) => Promise<RalphTask[]>;
+        getById: (id: string) => Promise<RalphTask | null>;
+        move: (input: MoveRalphTaskInput) => Promise<RalphTask | null>;
+        reorder: (input: ReorderRalphTasksInput) => Promise<RalphTask[]>;
+        start: (taskId: string, isInteractive?: boolean) => Promise<RalphTask | null>;
+        stop: (taskId: string) => Promise<RalphTask | null>;
+        respondToHelp: (taskId: string, response: string) => Promise<RalphTask | null>;
+        processAll: (projectId: string) => Promise<boolean>;
+        stopAll: (projectId: string) => Promise<boolean>;
+        onCreated: (callback: (task: RalphTask) => void) => () => void;
+        onUpdated: (callback: (task: RalphTask) => void) => () => void;
+        onDeleted: (callback: (taskId: string) => void) => () => void;
+        onHelpRequested: (callback: (request: RalphTaskHelpRequest) => void) => () => void;
+        onLoopStarted: (callback: (taskId: string, loopCount: number) => void) => () => void;
+        onLoopCompleted: (callback: (taskId: string) => void) => () => void;
+        onProcessAllStarted: (callback: (projectId: string) => void) => () => void;
+        onProcessAllCompleted: (callback: (projectId: string) => void) => () => void;
+        onProcessAllStopped: (callback: (projectId: string) => void) => () => void;
       };
     };
   }

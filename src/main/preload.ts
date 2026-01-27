@@ -47,6 +47,12 @@ import type {
   TrackedTask,
   ProxyConfig,
   AllowedPort,
+  RalphTask,
+  CreateRalphTaskInput,
+  UpdateRalphTaskInput,
+  MoveRalphTaskInput,
+  ReorderRalphTasksInput,
+  RalphTaskHelpRequest,
 } from '@shared/types';
 import type { RemoteConfig, RemoteServerStatus } from '@shared/types/remote';
 import type {
@@ -1118,6 +1124,105 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('update:startup-available', listener);
     },
   },
+
+  // Ralph Task operations
+  ralphTask: {
+    create: (input: CreateRalphTaskInput): Promise<RalphTask> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_CREATE, input),
+
+    update: (id: string, updates: UpdateRalphTaskInput): Promise<RalphTask | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_UPDATE, id, updates),
+
+    delete: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_DELETE, id),
+
+    getByProject: (projectId: string): Promise<RalphTask[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_GET_BY_PROJECT, projectId),
+
+    getById: (id: string): Promise<RalphTask | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_GET_BY_ID, id),
+
+    move: (input: MoveRalphTaskInput): Promise<RalphTask | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_MOVE, input),
+
+    reorder: (input: ReorderRalphTasksInput): Promise<RalphTask[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_REORDER, input),
+
+    start: (taskId: string, isInteractive?: boolean): Promise<RalphTask | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_START, taskId, isInteractive),
+
+    stop: (taskId: string): Promise<RalphTask | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_STOP, taskId),
+
+    respondToHelp: (taskId: string, response: string): Promise<RalphTask | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_RESPOND_HELP, taskId, response),
+
+    processAll: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL, projectId),
+
+    stopAll: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_STOP_ALL, projectId),
+
+    // Event listeners
+    onCreated: (callback: (task: RalphTask) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, task: RalphTask) => callback(task);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_CREATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_CREATED, listener);
+    },
+
+    onUpdated: (callback: (task: RalphTask) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, task: RalphTask) => callback(task);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_UPDATED, listener);
+    },
+
+    onDeleted: (callback: (taskId: string) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, taskId: string) => callback(taskId);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_DELETED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_DELETED, listener);
+    },
+
+    onHelpRequested: (callback: (request: RalphTaskHelpRequest) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, request: RalphTaskHelpRequest) =>
+        callback(request);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_HELP_REQUESTED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_HELP_REQUESTED, listener);
+    },
+
+    onLoopStarted: (callback: (taskId: string, loopCount: number) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, taskId: string, loopCount: number) =>
+        callback(taskId, loopCount);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_LOOP_STARTED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_LOOP_STARTED, listener);
+    },
+
+    onLoopCompleted: (callback: (taskId: string) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, taskId: string) => callback(taskId);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_LOOP_COMPLETED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_LOOP_COMPLETED, listener);
+    },
+
+    onProcessAllStarted: (callback: (projectId: string) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, projectId: string) => callback(projectId);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL_STARTED, listener);
+      return () =>
+        ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL_STARTED, listener);
+    },
+
+    onProcessAllCompleted: (callback: (projectId: string) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, projectId: string) => callback(projectId);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL_COMPLETED, listener);
+      return () =>
+        ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL_COMPLETED, listener);
+    },
+
+    onProcessAllStopped: (callback: (projectId: string) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, projectId: string) => callback(projectId);
+      ipcRenderer.on(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL_STOPPED, listener);
+      return () =>
+        ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL_STOPPED, listener);
+    },
+  },
 });
 
 // Type declarations for renderer
@@ -1584,6 +1689,29 @@ declare global {
             releaseUrl?: string;
           }) => void
         ) => () => void;
+      };
+      ralphTask: {
+        create: (input: CreateRalphTaskInput) => Promise<RalphTask>;
+        update: (id: string, updates: UpdateRalphTaskInput) => Promise<RalphTask | null>;
+        delete: (id: string) => Promise<boolean>;
+        getByProject: (projectId: string) => Promise<RalphTask[]>;
+        getById: (id: string) => Promise<RalphTask | null>;
+        move: (input: MoveRalphTaskInput) => Promise<RalphTask | null>;
+        reorder: (input: ReorderRalphTasksInput) => Promise<RalphTask[]>;
+        start: (taskId: string, isInteractive?: boolean) => Promise<RalphTask | null>;
+        stop: (taskId: string) => Promise<RalphTask | null>;
+        respondToHelp: (taskId: string, response: string) => Promise<RalphTask | null>;
+        processAll: (projectId: string) => Promise<boolean>;
+        stopAll: (projectId: string) => Promise<boolean>;
+        onCreated: (callback: (task: RalphTask) => void) => () => void;
+        onUpdated: (callback: (task: RalphTask) => void) => () => void;
+        onDeleted: (callback: (taskId: string) => void) => () => void;
+        onHelpRequested: (callback: (request: RalphTaskHelpRequest) => void) => () => void;
+        onLoopStarted: (callback: (taskId: string, loopCount: number) => void) => () => void;
+        onLoopCompleted: (callback: (taskId: string) => void) => () => void;
+        onProcessAllStarted: (callback: (projectId: string) => void) => () => void;
+        onProcessAllCompleted: (callback: (projectId: string) => void) => () => void;
+        onProcessAllStopped: (callback: (projectId: string) => void) => () => void;
       };
     };
   }
