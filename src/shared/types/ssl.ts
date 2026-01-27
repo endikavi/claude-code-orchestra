@@ -14,6 +14,10 @@ export interface SslConfig {
   caPath?: string;
   /** Use auto-generated self-signed certificate */
   selfSigned?: boolean;
+  /** Use Let's Encrypt (ACME) certificate */
+  letsEncrypt?: boolean;
+  /** Email for ACME registration and expiry notifications */
+  acmeEmail?: string;
   /** Passphrase for encrypted private keys */
   passphrase?: string;
 }

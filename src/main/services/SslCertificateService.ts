@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import http from 'http';
 import forge from 'node-forge';
+import acme from 'acme-client';
 import { getUserDataPath } from '../utils/paths';
 import type {
   SslConfig,
@@ -46,6 +48,127 @@ export class SslCertificateService {
       certPath: join(this.certDir, 'server.crt'),
       keyPath: join(this.certDir, 'server.key'),
     };
+  }
+
+  /**
+   * Get the paths for Let's Encrypt certificates
+   */
+  public getLetsEncryptCertPaths(): { certPath: string; keyPath: string } {
+    return {
+      certPath: join(this.certDir, 'letsencrypt.crt'),
+      keyPath: join(this.certDir, 'letsencrypt.key'),
+    };
+  }
+
+  /**
+   * Generate a Let's Encrypt certificate via ACME HTTP-01 challenge
+   * @param domain - The domain name for the certificate
+   * @param email - Optional email for ACME registration
+   * @returns The paths to the generated certificate and key
+   */
+  public async generateLetsEncryptCert(
+    domain: string,
+    email?: string
+  ): Promise<{ certPath: string; keyPath: string }> {
+    const contactEmail = email || `admin@${domain}`;
+    console.log(`[SslCertificateService] Generating Let's Encrypt certificate for ${domain}`);
+
+    // Store for HTTP-01 challenge tokens
+    const challengeTokens = new Map<string, string>();
+
+    // Start HTTP server on port 80 for ACME challenge
+    const challengeServer = http.createServer((req, res) => {
+      const prefix = '/.well-known/acme-challenge/';
+      if (req.url && req.url.startsWith(prefix)) {
+        const token = req.url.slice(prefix.length);
+        const keyAuth = challengeTokens.get(token);
+        if (keyAuth) {
+          console.log(`[SslCertificateService] Served ACME challenge token: ${token}`);
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(keyAuth);
+          return;
+        }
+      }
+      res.writeHead(404);
+      res.end('Not found');
+    });
+
+    try {
+      // Start challenge server
+      await new Promise<void>((resolve, reject) => {
+        challengeServer.listen(80, '0.0.0.0', () => {
+          console.log('[SslCertificateService] Challenge server listening on port 80');
+          resolve();
+        });
+        challengeServer.on('error', (err: NodeJS.ErrnoException) => {
+          if (err.code === 'EACCES') {
+            reject(
+              new Error('Port 80 requires administrator/root privileges. Run as Administrator.')
+            );
+          } else if (err.code === 'EADDRINUSE') {
+            reject(new Error('Port 80 is already in use. Stop the service using it first.'));
+          } else {
+            reject(err);
+          }
+        });
+      });
+
+      // Create ACME client (production)
+      const client = new acme.Client({
+        directoryUrl: acme.directory.letsencrypt.production,
+        accountKey: await acme.crypto.createPrivateKey(),
+      });
+
+      // Register account
+      await client.createAccount({
+        termsOfServiceAgreed: true,
+        contact: [`mailto:${contactEmail}`],
+      });
+
+      // Create certificate order
+      const order = await client.createOrder({
+        identifiers: [{ type: 'dns', value: domain }],
+      });
+
+      // Complete HTTP-01 challenge
+      const authorizations = await client.getAuthorizations(order);
+
+      for (const auth of authorizations) {
+        const challenge = auth.challenges.find((c: { type: string }) => c.type === 'http-01');
+        if (!challenge) {
+          throw new Error('No HTTP-01 challenge available. Check domain configuration.');
+        }
+
+        const keyAuthorization = await client.getChallengeKeyAuthorization(challenge);
+        challengeTokens.set(challenge.token, keyAuthorization);
+
+        await client.verifyChallenge(auth, challenge);
+        await client.completeChallenge(challenge);
+        await client.waitForValidStatus(challenge);
+      }
+
+      // Generate CSR and private key
+      const [serverKey, csr] = await acme.crypto.createCsr({
+        commonName: domain,
+        altNames: [domain],
+      });
+
+      // Finalize order and get certificate
+      await client.finalizeOrder(order, csr);
+      const certificate = await client.getCertificate(order);
+
+      // Save files with separate names from self-signed
+      const paths = this.getLetsEncryptCertPaths();
+      writeFileSync(paths.certPath, certificate, { mode: 0o644 });
+      writeFileSync(paths.keyPath, serverKey.toString(), { mode: 0o600 });
+
+      console.log(`[SslCertificateService] Let's Encrypt certificate saved to ${paths.certPath}`);
+      console.log(`[SslCertificateService] Let's Encrypt key saved to ${paths.keyPath}`);
+
+      return paths;
+    } finally {
+      challengeServer.close();
+    }
   }
 
   /**
@@ -163,7 +286,15 @@ export class SslCertificateService {
     let certPath: string;
     let keyPath: string;
 
-    if (config.selfSigned) {
+    if (config.letsEncrypt) {
+      // Use Let's Encrypt certificate
+      const paths = this.getLetsEncryptCertPaths();
+      if (!existsSync(paths.certPath) || !existsSync(paths.keyPath)) {
+        throw new Error("Let's Encrypt certificate not found. Generate one first via Settings.");
+      }
+      certPath = paths.certPath;
+      keyPath = paths.keyPath;
+    } else if (config.selfSigned) {
       // Use self-signed certificate
       const paths = this.getOrCreateSelfSignedCert();
       certPath = paths.certPath;

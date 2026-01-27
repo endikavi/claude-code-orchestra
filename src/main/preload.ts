@@ -1032,6 +1032,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       passphrase?: string
     ): Promise<{ valid: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SSL_VALIDATE_CERT_KEY_PAIR, certPath, keyPath, passphrase),
+
+    generateLetsEncrypt: (
+      domain: string,
+      email?: string
+    ): Promise<{ success: boolean; certPath?: string; keyPath?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SSL_GENERATE_LETS_ENCRYPT, domain, email),
   },
 
   // Update operations
@@ -1652,6 +1658,10 @@ declare global {
           keyPath: string,
           passphrase?: string
         ) => Promise<{ valid: boolean; error?: string }>;
+        generateLetsEncrypt: (
+          domain: string,
+          email?: string
+        ) => Promise<{ success: boolean; certPath?: string; keyPath?: string; error?: string }>;
       };
       update: {
         check: () => Promise<{

@@ -16,6 +16,7 @@ export default defineConfig({
     },
   },
   root: resolve(projectRoot, 'src/web'),
+  publicDir: resolve(projectRoot, 'public'),
   build: {
     outDir: resolve(projectRoot, 'dist/web'),
     emptyOutDir: true,

@@ -1349,6 +1349,21 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   );
 
+  ipcMain.handle(
+    IPC_CHANNELS.SSL_GENERATE_LETS_ENCRYPT,
+    async (_event, domain: string, email?: string) => {
+      try {
+        const paths = await sslService.generateLetsEncryptCert(domain, email);
+        return { success: true, certPath: paths.certPath, keyPath: paths.keyPath };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Let's Encrypt generation failed",
+        };
+      }
+    }
+  );
+
   ipcMain.handle(IPC_CHANNELS.SSL_GET_CERT_INFO, (_event, certPath: string) => {
     try {
       const info = sslService.getCertificateInfo(certPath);

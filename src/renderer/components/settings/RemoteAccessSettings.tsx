@@ -17,8 +17,11 @@ export function RemoteAccessSettings() {
   // SSL state
   const [sslEnabled, setSslEnabled] = useState(false);
   const [sslSelfSigned, setSslSelfSigned] = useState(true);
+  const [sslLetsEncrypt, setSslLetsEncrypt] = useState(false);
   const [sslCertPath, setSslCertPath] = useState('');
   const [sslKeyPath, setSslKeyPath] = useState('');
+  const [acmeEmail, setAcmeEmail] = useState('');
+  const [leGenerating, setLeGenerating] = useState(false);
   const [sslCertValidation, setSslCertValidation] = useState<{
     valid: boolean;
     error?: string;
@@ -44,9 +47,27 @@ export function RemoteAccessSettings() {
       // Load SSL config
       if (configData.ssl) {
         setSslEnabled(configData.ssl.enabled);
-        setSslSelfSigned(configData.ssl.selfSigned ?? true);
+        setSslLetsEncrypt(configData.ssl.letsEncrypt ?? false);
+        setSslSelfSigned(configData.ssl.letsEncrypt ? false : (configData.ssl.selfSigned ?? true));
         setSslCertPath(configData.ssl.certPath || '');
         setSslKeyPath(configData.ssl.keyPath || '');
+        setAcmeEmail(configData.ssl.acmeEmail || '');
+
+        // Auto-validate existing LE cert
+        if (configData.ssl.letsEncrypt && configData.ssl.certPath && window.electronAPI?.ssl) {
+          window.electronAPI.ssl
+            .validateCert(configData.ssl.certPath)
+            .then((result) => {
+              setSslCertValidation({
+                valid: result.valid,
+                error: result.error,
+                daysRemaining: result.daysRemaining,
+              });
+            })
+            .catch(() => {
+              // ignore validation errors on load
+            });
+        }
       }
 
       // Load QR code if web access is enabled and server is running
@@ -173,6 +194,8 @@ export function RemoteAccessSettings() {
       const sslConfig: SslConfig = {
         enabled: newSslEnabled,
         selfSigned: sslSelfSigned,
+        letsEncrypt: sslLetsEncrypt,
+        acmeEmail: acmeEmail || undefined,
         certPath: sslCertPath || undefined,
         keyPath: sslKeyPath || undefined,
       };
@@ -185,22 +208,29 @@ export function RemoteAccessSettings() {
     }
   };
 
-  const handleSslTypeChange = async (useSelfSigned: boolean) => {
+  const handleSslModeChange = async (mode: 'selfSigned' | 'custom' | 'letsEncrypt') => {
     if (!config) return;
 
-    setSslSelfSigned(useSelfSigned);
+    const prevSelfSigned = sslSelfSigned;
+    const prevLetsEncrypt = sslLetsEncrypt;
+
+    setSslSelfSigned(mode === 'selfSigned');
+    setSslLetsEncrypt(mode === 'letsEncrypt');
+    setSslCertValidation(null);
 
     try {
       await window.electronAPI.remote.updateConfig({
         ssl: {
           ...config.ssl,
-          selfSigned: useSelfSigned,
+          selfSigned: mode === 'selfSigned',
+          letsEncrypt: mode === 'letsEncrypt',
         },
       });
       await loadData();
     } catch {
       setError(t('remoteAccess.failedToUpdate'));
-      setSslSelfSigned(!useSelfSigned);
+      setSslSelfSigned(prevSelfSigned);
+      setSslLetsEncrypt(prevLetsEncrypt);
     }
   };
 
@@ -256,6 +286,50 @@ export function RemoteAccessSettings() {
       setError('Failed to generate certificate');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateLetsEncrypt = async () => {
+    if (!window.electronAPI?.ssl || !customHostname) return;
+
+    setLeGenerating(true);
+    setError(null);
+    setSslCertValidation(null);
+
+    try {
+      const result = await window.electronAPI.ssl.generateLetsEncrypt(
+        customHostname,
+        acmeEmail || undefined
+      );
+      if (result.success && result.certPath && result.keyPath) {
+        // Update config with the new cert paths and LE mode
+        await window.electronAPI.remote.updateConfig({
+          ssl: {
+            enabled: true,
+            selfSigned: false,
+            letsEncrypt: true,
+            certPath: result.certPath,
+            keyPath: result.keyPath,
+            acmeEmail: acmeEmail || undefined,
+          },
+        });
+
+        // Validate the new cert
+        const validation = await window.electronAPI.ssl.validateCert(result.certPath);
+        setSslCertValidation({
+          valid: validation.valid,
+          error: validation.error,
+          daysRemaining: validation.daysRemaining,
+        });
+
+        await loadData();
+      } else {
+        setError(result.error || "Failed to generate Let's Encrypt certificate");
+      }
+    } catch {
+      setError("Failed to generate Let's Encrypt certificate");
+    } finally {
+      setLeGenerating(false);
     }
   };
 
@@ -457,8 +531,8 @@ export function RemoteAccessSettings() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
-                    checked={sslSelfSigned}
-                    onChange={() => handleSslTypeChange(true)}
+                    checked={sslSelfSigned && !sslLetsEncrypt}
+                    onChange={() => handleSslModeChange('selfSigned')}
                     className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
                   />
                   <span className="text-sm text-gray-800 dark:text-white">
@@ -468,18 +542,40 @@ export function RemoteAccessSettings() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
-                    checked={!sslSelfSigned}
-                    onChange={() => handleSslTypeChange(false)}
+                    checked={!sslSelfSigned && !sslLetsEncrypt}
+                    onChange={() => handleSslModeChange('custom')}
                     className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
                   />
                   <span className="text-sm text-gray-800 dark:text-white">
                     {t('remoteAccess.sslCustom', 'Custom Certificate')}
                   </span>
                 </label>
+                <label
+                  className={`flex items-center gap-2 ${customHostname ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                >
+                  <input
+                    type="radio"
+                    checked={sslLetsEncrypt}
+                    onChange={() => handleSslModeChange('letsEncrypt')}
+                    disabled={!customHostname}
+                    className="w-4 h-4 text-claude-orange focus:ring-claude-orange disabled:opacity-50"
+                  />
+                  <span className="text-sm text-gray-800 dark:text-white">
+                    {t('remoteAccess.sslLetsEncrypt', "Let's Encrypt")}
+                  </span>
+                </label>
               </div>
+              {!customHostname && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {t(
+                    'remoteAccess.sslLetsEncryptNeedsHostname',
+                    "Set a custom hostname above to use Let's Encrypt"
+                  )}
+                </p>
+              )}
             </div>
 
-            {sslSelfSigned ? (
+            {sslSelfSigned && !sslLetsEncrypt ? (
               /* Self-signed certificate info */
               <div className="space-y-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -495,6 +591,70 @@ export function RemoteAccessSettings() {
                 >
                   {t('remoteAccess.sslGenerateCert', 'Generate New Certificate')}
                 </button>
+              </div>
+            ) : sslLetsEncrypt ? (
+              /* Let's Encrypt panel */
+              <div className="space-y-3">
+                {/* Warning about port 80 */}
+                <div className="p-2 rounded bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs flex items-center gap-2">
+                  <span>&#9888;</span>
+                  <span>
+                    {t(
+                      'remoteAccess.sslLetsEncryptPort80',
+                      'Port 80 must be open and accessible from the internet for HTTP-01 challenge verification.'
+                    )}
+                  </span>
+                </div>
+
+                {/* Email input */}
+                <div>
+                  <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">
+                    {t('remoteAccess.sslAcmeEmail', 'Email (optional)')}
+                  </label>
+                  <input
+                    type="email"
+                    value={acmeEmail}
+                    onChange={(e) => setAcmeEmail(e.target.value)}
+                    placeholder={t('remoteAccess.sslAcmeEmailPlaceholder', 'admin@example.com')}
+                    className="w-full max-w-sm px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {t(
+                      'remoteAccess.sslAcmeEmailDescription',
+                      "Used for certificate expiry notifications from Let's Encrypt"
+                    )}
+                  </p>
+                </div>
+
+                {/* Domain display */}
+                <div>
+                  <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">
+                    {t('remoteAccess.sslDomain', 'Domain')}
+                  </label>
+                  <p className="text-sm font-mono text-gray-800 dark:text-white px-3 py-2 bg-white/30 dark:bg-gray-800/30 rounded-md border border-claude-tan/30 dark:border-gray-700">
+                    {customHostname}
+                  </p>
+                </div>
+
+                {/* Generate button */}
+                <button
+                  onClick={handleGenerateLetsEncrypt}
+                  disabled={leGenerating || !customHostname}
+                  className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {leGenerating && <LoadingSpinner />}
+                  {leGenerating
+                    ? t('remoteAccess.sslLetsEncryptGenerating', 'Generating...')
+                    : t('remoteAccess.sslLetsEncryptGenerate', 'Generate Certificate')}
+                </button>
+
+                {/* Validity info */}
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t(
+                    'remoteAccess.sslLetsEncryptValidity',
+                    'Certificates are valid for 90 days. Regenerate before expiry.'
+                  )}
+                </p>
               </div>
             ) : (
               /* Custom certificate paths */

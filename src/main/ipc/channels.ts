@@ -262,6 +262,7 @@ export const IPC_CHANNELS = {
   // SSL/TLS operations
   SSL_VALIDATE_CERT: 'ssl:validateCert',
   SSL_GENERATE_SELF_SIGNED: 'ssl:generateSelfSigned',
+  SSL_GENERATE_LETS_ENCRYPT: 'ssl:generateLetsEncrypt',
   SSL_GET_CERT_INFO: 'ssl:getCertInfo',
   SSL_VALIDATE_CERT_KEY_PAIR: 'ssl:validateCertKeyPair',
 
