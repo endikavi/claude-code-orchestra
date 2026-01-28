@@ -1021,11 +1021,14 @@ export class ClaudeInstance extends EventEmitter {
 
       // For stream-json mode, send the initial prompt via stdin after a delay
       // This allows Claude to initialize before receiving input
+      // Format: {"type":"user","message":{"role":"user","content":"<prompt>"}}
       if (this.mode === 'stream-json' && this.prompt) {
+        const initialPrompt = this.prompt; // Capture for closure
         const promptTimer = setTimeout(() => {
           this.pendingTimers.delete(promptTimer);
           if (this.ptyProcess && !this._hasExited) {
-            this.sendInput(this.prompt + '\r');
+            // Send prompt in JSON format for stream-json input mode
+            this.sendJsonMessage(initialPrompt);
           }
         }, 1500); // Increased delay to ensure Claude is ready
         this.pendingTimers.add(promptTimer);
@@ -1293,14 +1296,19 @@ export class ClaudeInstance extends EventEmitter {
     }
 
     // For new conversations:
-    // Add print mode flag ONLY for print mode (one-shot, non-interactive)
-    // stream-json mode runs interactively to allow ongoing conversations
+    // Add print mode flag for print mode (one-shot) and stream-json mode (ongoing JSON conversation)
     if (this.mode === 'print') {
       args.push('-p');
       // Add prompt at the end for print mode
       if (this.prompt) {
         args.push(this.prompt);
       }
+    } else if (this.mode === 'stream-json') {
+      // stream-json mode: use -p with --input-format stream-json for ongoing JSON conversations
+      // This allows sending multiple JSON messages via stdin without the terminal UI
+      args.push('-p');
+      args.push('--input-format', 'stream-json');
+      // Note: prompt will be sent via stdin in JSON format after process starts
     }
 
     // Always use stream-json output format to capture session_id and structured data
@@ -1523,6 +1531,8 @@ export class ClaudeInstance extends EventEmitter {
 
   /**
    * Send input to the process
+   * For interactive mode: sends raw input (terminal-style)
+   * For stream-json mode: use sendJsonMessage instead for user messages
    */
   sendInput(input: string): void {
     if (this.ptyProcess) {
@@ -1533,6 +1543,40 @@ export class ClaudeInstance extends EventEmitter {
       }
       this.ptyProcess.write(input);
     }
+  }
+
+  /**
+   * Send a user message in JSON format for stream-json mode
+   * Format: {"type":"user","message":{"role":"user","content":"<message>"}}
+   * This is the proper way to send user input in non-interactive JSON mode
+   */
+  sendJsonMessage(message: string): void {
+    if (this.ptyProcess && !this._hasExited) {
+      // When user sends input while waiting, change back to running
+      if (this._status === 'waiting_input') {
+        this._status = 'running';
+        this.emit('status', this._status);
+      }
+
+      // Format message as JSON per Claude CLI stream-json input format
+      const jsonMessage = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: message,
+        },
+      });
+
+      // Write JSON message followed by newline (required for stdin parsing)
+      this.ptyProcess.write(jsonMessage + '\n');
+    }
+  }
+
+  /**
+   * Check if this instance uses JSON input format (stream-json mode)
+   */
+  usesJsonInput(): boolean {
+    return this.mode === 'stream-json';
   }
 
   /**

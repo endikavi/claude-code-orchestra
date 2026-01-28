@@ -133,6 +133,7 @@ interface InstanceState {
   killInstance: (id: string) => void;
   removeInstance: (id: string) => void;
   sendInput: (id: string, input: string) => Promise<void>;
+  sendJsonMessage: (id: string, message: string) => Promise<void>; // For stream-json mode
   selectInstance: (id: string | null) => void;
   loadInstances: () => Promise<void>;
 
@@ -573,6 +574,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to send input',
+      });
+    }
+  },
+
+  sendJsonMessage: async (id, message) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (window.electronAPI.instance as any).sendJsonMessage(id, message);
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to send message',
       });
     }
   },

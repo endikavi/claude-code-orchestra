@@ -24,7 +24,7 @@ function isInputEnabled(status: InstanceStatus): boolean {
 
 export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps) {
   const { t } = useTranslation();
-  const { send } = useInstanceInput(instanceId);
+  const { sendJson } = useInstanceInput(instanceId);
   const { activatePendingInstance } = useInstanceStore();
   const [message, setMessage] = useState(initialPrompt || '');
   const [isSending, setIsSending] = useState(false);
@@ -60,15 +60,14 @@ export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps)
         // First message: activate the pending instance with this prompt
         await activatePendingInstance(instanceId, message.trim());
       } else {
-        // Normal message: send to existing Claude process
-        // Send message with carriage return to simulate pressing Enter in terminal
-        await send(message + '\r');
+        // Send message as JSON for stream-json mode (structured view uses non-interactive Claude)
+        await sendJson(message.trim());
       }
       setMessage('');
     } finally {
       setIsSending(false);
     }
-  }, [message, enabled, isSending, isPending, instanceId, activatePendingInstance, send]);
+  }, [message, enabled, isSending, isPending, instanceId, activatePendingInstance, sendJson]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {

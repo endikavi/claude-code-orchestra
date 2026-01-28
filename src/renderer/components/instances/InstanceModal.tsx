@@ -93,8 +93,8 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
     void loadAgents();
   }, [project?.path]);
 
-  // User-created instances are always interactive (terminal mode)
-  const mode: InstanceMode = 'interactive';
+  // Mode depends on view: stream-json for structured view, interactive for terminal
+  const mode: InstanceMode = viewMode === 'structured' ? 'stream-json' : 'interactive';
   const clusterIsActive = isClusterEnabled() && clusterConfig?.role !== 'standalone';
 
   // Only show skipPermissions option if project allows it

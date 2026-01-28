@@ -713,6 +713,25 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Send a JSON-formatted user message to an instance (for stream-json mode)
+   * This is the proper way to send user input in non-interactive JSON mode
+   */
+  sendJsonMessage(id: string, message: string): void {
+    const instance = this.instances.get(id);
+    if (instance) {
+      instance.sendJsonMessage(message);
+    }
+  }
+
+  /**
+   * Check if an instance uses JSON input format
+   */
+  instanceUsesJsonInput(id: string): boolean {
+    const instance = this.instances.get(id);
+    return instance ? instance.usesJsonInput() : false;
+  }
+
+  /**
    * Set terminal title for an instance and broadcast to all clients
    */
   setInstanceTitle(id: string, title: string): void {

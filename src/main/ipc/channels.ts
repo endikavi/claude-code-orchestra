@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
   INSTANCE_ACTIVATE: 'instance:activate', // Activate pending instance with first message
   INSTANCE_KILL: 'instance:kill',
   INSTANCE_SEND_INPUT: 'instance:sendInput',
+  INSTANCE_SEND_JSON_MESSAGE: 'instance:sendJsonMessage', // Send JSON-formatted message for stream-json mode
   INSTANCE_SET_TITLE: 'instance:setTitle',
   INSTANCE_GET_ALL: 'instance:getAll',
   INSTANCE_GET_BY_PROJECT: 'instance:getByProject',

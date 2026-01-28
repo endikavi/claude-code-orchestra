@@ -131,6 +131,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     sendInput: (id: string, input: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_SEND_INPUT, id, input),
 
+    // Send JSON-formatted message for stream-json mode (structured view)
+    sendJsonMessage: (id: string, message: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_SEND_JSON_MESSAGE, id, message),
+
     getAll: (): Promise<ClaudeInstance[]> => ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_GET_ALL),
 
     getByProject: (projectId: string): Promise<ClaudeInstance[]> =>

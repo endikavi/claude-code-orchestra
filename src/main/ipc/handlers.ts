@@ -257,6 +257,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     processManager.sendInput(validated.id, validated.input);
   });
 
+  // Send JSON-formatted message for stream-json mode
+  ipcMain.handle(IPC_CHANNELS.INSTANCE_SEND_JSON_MESSAGE, (_event, id: string, message: string) => {
+    const validated = validators.instanceInput(id, message);
+    processManager.sendJsonMessage(validated.id, validated.input);
+  });
+
   // Set terminal title and broadcast to web clients and cluster
   ipcMain.handle(IPC_CHANNELS.INSTANCE_SET_TITLE, (_event, id: string, title: string) => {
     processManager.setInstanceTitle(id, title);
