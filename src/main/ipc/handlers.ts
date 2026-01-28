@@ -6,6 +6,7 @@ import { IPC_CHANNELS } from './channels';
 import { validators } from './validators';
 import { registerSecurityHandlers } from './securityHandlers';
 import { setupRalphTaskHandlers, cleanupRalphTaskHandlers } from './ralphTaskHandlers';
+import { registerPresetHandlers, cleanupPresetHandlers } from './presetHandlers';
 import { DataStore } from '../services/DataStore';
 import { getProcessManager } from '../services/ProcessManager';
 import { getWebServer } from '../services/WebServer';
@@ -15,6 +16,7 @@ import { ConfigReader } from '../services/ConfigReader';
 import { ClaudeSessionImporter } from '../services/ClaudeSessionImporter';
 import { UISettingsStore, type UISettings } from '../services/UISettingsStore';
 import { ShellDetector } from '../services/ShellDetector';
+import { getPermissionPromptManager } from '../services/PermissionPromptManager';
 import QRCode from 'qrcode';
 import type {
   Project,
@@ -33,6 +35,10 @@ import type {
 } from '@shared/types';
 import type { RemoteConfig } from '@shared/types/remote';
 import type { ClusterConfig, RemoteInstanceRequest } from '@shared/types/cluster';
+import type {
+  PermissionPromptRequest,
+  PermissionPromptResponse,
+} from '@shared/types/permissionPrompt';
 import { getNotificationManager } from '../services/NotificationManager';
 import { getHookManager } from '../services/HookManager';
 import { getSkillManager } from '../services/SkillManager';
@@ -45,6 +51,7 @@ import { getTerminalPool } from '../services/TerminalPool';
 import { getTerminalDimensionManager } from '../services/TerminalDimensionManager';
 import { SharedContextStore } from '../services/SharedContextStore';
 import { getSslCertificateService } from '../services/SslCertificateService';
+import { AgentDiscovery } from '../services/AgentDiscovery';
 import type { TerminalPoolConfig } from '@shared/types/pool';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
@@ -180,8 +187,68 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   );
 
+  // Create a pending instance (for structured view deferred flow)
+  ipcMain.handle(
+    IPC_CHANNELS.INSTANCE_CREATE_PENDING,
+    (
+      _event,
+      config: {
+        projectId: string;
+        model: ClaudeModel;
+        mode: InstanceMode;
+        planMode?: boolean;
+        verbose?: boolean;
+        skipPermissions?: boolean;
+        usePermissionPromptTool?: boolean;
+      }
+    ) => {
+      const validated = validators.instanceCreate(config);
+      const instance = processManager.createPendingInstance(validated);
+
+      // Create a conversation for tracking
+      const conversation = dataStore.createConversation({
+        projectId: validated.projectId,
+        title: `Pending Session #${Date.now().toString(36).slice(-6).toUpperCase()}`,
+        initialPrompt: '',
+        model: validated.model,
+        mode: validated.mode,
+      });
+
+      // Store the mapping
+      processManager.setInstanceConversation(instance.id, conversation.id);
+
+      return { ...instance, conversationId: conversation.id };
+    }
+  );
+
+  // Activate a pending instance with the first message
+  ipcMain.handle(IPC_CHANNELS.INSTANCE_ACTIVATE, (_event, id: string, prompt: string) => {
+    const validatedId = validators.id(id, 'instance:activate');
+    if (!prompt || typeof prompt !== 'string') {
+      throw new Error('Prompt is required to activate instance');
+    }
+    const instance = processManager.activatePendingInstance(validatedId, prompt);
+
+    // Update conversation title with first message
+    const conversationId = processManager.getInstanceConversation(validatedId);
+    if (conversationId) {
+      const title = prompt.slice(0, 50).split('\n')[0] + (prompt.length > 50 ? '...' : '');
+      dataStore.updateConversation(conversationId, { title });
+
+      // Update mapping to new instance ID (activation creates new ID)
+      processManager.setInstanceConversation(instance.id, conversationId);
+    }
+
+    return instance;
+  });
+
   ipcMain.handle(IPC_CHANNELS.INSTANCE_KILL, async (_event, id: string, force?: boolean) => {
     const validatedId = validators.id(id, 'instance:kill');
+    // Check if it's a pending instance (no process to kill)
+    if (processManager.isPendingInstance(validatedId)) {
+      // Just clean up the pending config
+      return;
+    }
     await processManager.killInstance(validatedId, force ?? false);
   });
 
@@ -888,6 +955,15 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   );
 
+  // ==================== Agent Discovery Handlers ====================
+  ipcMain.handle(IPC_CHANNELS.AGENT_DISCOVER, (_event, projectPath: string) => {
+    return AgentDiscovery.discoverAgents(projectPath);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_VALIDATE_FILE, (_event, agentPath: string) => {
+    return AgentDiscovery.validateAgentFile(agentPath);
+  });
+
   // ==================== Skill Handlers ====================
   const skillManager = getSkillManager();
 
@@ -957,6 +1033,42 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.PERMISSION_CLEAR_LOG, () => {
     permissionManager.clearLog();
     return { success: true };
+  });
+
+  // ==================== Permission Prompt Handlers (--permission-prompt-tool support) ====================
+  const permissionPromptManager = getPermissionPromptManager();
+
+  // Forward permission:request events to renderer
+  permissionPromptManager.on('permission:request', (request: PermissionPromptRequest) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.PERMISSION_PROMPT_REQUEST, request);
+      console.log(
+        `[IPC] Sent permission:request to renderer for ${request.toolName} (${request.id})`
+      );
+    }
+  });
+
+  // Forward permission:timeout events to renderer
+  permissionPromptManager.on('permission:timeout', (request: PermissionPromptRequest) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.PERMISSION_PROMPT_TIMEOUT, request);
+      console.log(`[IPC] Sent permission:timeout to renderer for ${request.id}`);
+    }
+  });
+
+  // Handle permission response from renderer
+  ipcMain.handle(
+    IPC_CHANNELS.PERMISSION_PROMPT_RESPOND,
+    (_event, permissionId: string, response: PermissionPromptResponse) => {
+      const success = permissionPromptManager.respondToPermission(permissionId, response);
+      return { success };
+    }
+  );
+
+  // Handle permission cancellation from renderer
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_PROMPT_CANCEL, (_event, permissionId: string) => {
+    const success = permissionPromptManager.cancelPermission(permissionId);
+    return { success };
   });
 
   // ==================== Metrics Handlers ====================
@@ -1395,6 +1507,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Setup Ralph Task handlers
   setupRalphTaskHandlers(mainWindow);
+
+  // Setup Preset handlers
+  registerPresetHandlers();
 }
 
 export function cleanupIpcHandlers(): void {
@@ -1406,6 +1521,9 @@ export function cleanupIpcHandlers(): void {
 
   // Cleanup Ralph Task handlers
   cleanupRalphTaskHandlers();
+
+  // Cleanup Preset handlers
+  cleanupPresetHandlers();
 }
 
 /**

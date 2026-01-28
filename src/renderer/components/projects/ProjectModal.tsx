@@ -6,7 +6,15 @@ import { useConversationStore } from '../../stores/conversationStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { Modal } from '../common/Modal';
 import { ImportSessionsModal } from '../conversations/ImportSessionsModal';
-import type { AvailableShell, HookTemplate, HookTemplateType } from '@shared/types';
+import { AgentFormModal } from './AgentFormModal';
+import type {
+  AvailableShell,
+  HookTemplate,
+  HookTemplateType,
+  CustomAgent,
+  CustomAgentsConfig,
+  AgentDeliveryMethod,
+} from '@shared/types';
 import type { ProjectClusterPermissions } from '@shared/types/clusterPermissions';
 
 const PROJECT_COLORS = [
@@ -65,6 +73,27 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   const [selectedHookTemplate, setSelectedHookTemplate] = useState<HookTemplateType>('monitored');
   const [showHookOptions, setShowHookOptions] = useState(false);
   const [hasExistingHooks, setHasExistingHooks] = useState(false);
+
+  // Additional directories state
+  const [additionalDirs, setAdditionalDirs] = useState<string[]>(
+    existingProject?.additionalDirs || []
+  );
+
+  // Custom agents state
+  const [agentDeliveryMethod, setAgentDeliveryMethod] = useState<AgentDeliveryMethod>(
+    existingProject?.agentDeliveryMethod || 'skill'
+  );
+  const [agents, setAgents] = useState<CustomAgentsConfig>(existingProject?.agents || {});
+  const [showAgentForm, setShowAgentForm] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<{ name: string; agent: CustomAgent } | null>(
+    null
+  );
+  const [showAgentsSection, setShowAgentsSection] = useState(
+    Object.keys(existingProject?.agents || {}).length > 0
+  );
+  const [showDirsSection, setShowDirsSection] = useState(
+    (existingProject?.additionalDirs?.length || 0) > 0
+  );
 
   const { loadConversations } = useConversationStore();
 
@@ -133,6 +162,42 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
     }
   };
 
+  // Additional directories handlers
+  const handleAddAdditionalDir = async () => {
+    const selectedPath = await window.electronAPI.dialog.selectDirectory();
+    if (selectedPath && !additionalDirs.includes(selectedPath)) {
+      setAdditionalDirs([...additionalDirs, selectedPath]);
+    }
+  };
+
+  const handleRemoveAdditionalDir = (dirToRemove: string) => {
+    setAdditionalDirs(additionalDirs.filter((d) => d !== dirToRemove));
+  };
+
+  // Agent handlers
+  const handleSaveAgent = (name: string, agent: CustomAgent) => {
+    const newAgents = { ...agents };
+    // If editing and name changed, remove old entry
+    if (editingAgent && editingAgent.name !== name) {
+      delete newAgents[editingAgent.name];
+    }
+    newAgents[name] = agent;
+    setAgents(newAgents);
+    setShowAgentForm(false);
+    setEditingAgent(null);
+  };
+
+  const handleEditAgent = (name: string) => {
+    setEditingAgent({ name, agent: agents[name] });
+    setShowAgentForm(true);
+  };
+
+  const handleDeleteAgent = (name: string) => {
+    const newAgents = { ...agents };
+    delete newAgents[name];
+    setAgents(newAgents);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -173,6 +238,9 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           autoReview,
           preferredShell: preferredShell || undefined,
           clusterPermissions,
+          additionalDirs: additionalDirs.length > 0 ? additionalDirs : undefined,
+          agentDeliveryMethod,
+          agents: Object.keys(agents).length > 0 ? agents : undefined,
         });
 
         // Handle hooks integration changes
@@ -209,6 +277,9 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           autoReview,
           preferredShell: preferredShell || undefined,
           clusterPermissions,
+          additionalDirs: additionalDirs.length > 0 ? additionalDirs : undefined,
+          agentDeliveryMethod,
+          agents: Object.keys(agents).length > 0 ? agents : undefined,
         });
 
         // Set up hooks for new project if enabled
@@ -429,6 +500,172 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           </label>
         </div>
 
+        {/* Additional Working Directories */}
+        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={() => setShowDirsSection(!showDirsSection)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <ChevronIcon
+              className={`w-4 h-4 text-gray-500 transition-transform ${showDirsSection ? 'rotate-90' : ''}`}
+            />
+            <FolderPlusIcon className="w-4 h-4 text-cyan-500" />
+            <span className="text-sm font-medium text-gray-800 dark:text-white">
+              {t('project.additionalDirs', 'Additional Working Directories')}
+            </span>
+            {additionalDirs.length > 0 && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                ({additionalDirs.length})
+              </span>
+            )}
+          </button>
+
+          {showDirsSection && (
+            <div className="mt-3 ml-6 space-y-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {t('project.additionalDirsDesc', 'Extra directories Claude can access (--add-dir)')}
+              </p>
+
+              {additionalDirs.map((dir, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={dir}
+                    readOnly
+                    className="flex-1 px-2 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAdditionalDir(dir)}
+                    className="p-1.5 text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
+                    title={t('common.remove', 'Remove')}
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={handleAddAdditionalDir}
+                className="flex items-center gap-1 text-sm text-claude-orange hover:text-claude-orange-dark transition-colors"
+              >
+                <PlusIcon className="w-4 h-4" />
+                {t('project.addDirectory', 'Add directory')}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Custom Agents */}
+        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={() => setShowAgentsSection(!showAgentsSection)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <ChevronIcon
+              className={`w-4 h-4 text-gray-500 transition-transform ${showAgentsSection ? 'rotate-90' : ''}`}
+            />
+            <BotIcon className="w-4 h-4 text-indigo-500" />
+            <span className="text-sm font-medium text-gray-800 dark:text-white">
+              {t('project.customAgents', 'Custom Agents')}
+            </span>
+            {Object.keys(agents).length > 0 && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                ({Object.keys(agents).length})
+              </span>
+            )}
+          </button>
+
+          {showAgentsSection && (
+            <div className="mt-3 ml-6 space-y-3">
+              {/* Delivery Method */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  {t('project.agentDeliveryMethod', 'Agent Delivery Method')}
+                </label>
+                <select
+                  value={agentDeliveryMethod}
+                  onChange={(e) => setAgentDeliveryMethod(e.target.value as AgentDeliveryMethod)}
+                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="skill">
+                    {t('project.deliverAsSkills', 'Install as Skills (recommended)')}
+                  </option>
+                  <option value="args">
+                    {t('project.deliverViaFlag', 'Pass via --agents flag')}
+                  </option>
+                </select>
+              </div>
+
+              {/* Agents List */}
+              {Object.keys(agents).length === 0 ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+                  {t('project.noAgents', 'No custom agents configured')}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(agents).map(([agentName, agent]) => (
+                    <div
+                      key={agentName}
+                      className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-md"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                            {agentName}
+                          </span>
+                          {agent.model && (
+                            <span className="text-xs px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded">
+                              {agent.model}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {agent.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 ml-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEditAgent(agentName)}
+                          className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                          title={t('project.editAgent', 'Edit agent')}
+                        >
+                          <PencilIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAgent(agentName)}
+                          className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
+                          title={t('project.deleteAgent', 'Delete agent')}
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Agent Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingAgent(null);
+                  setShowAgentForm(true);
+                }}
+                className="flex items-center gap-1 text-sm text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors"
+              >
+                <PlusIcon className="w-4 h-4" />
+                {t('project.addAgent', 'Add agent')}
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Dashboard Hooks Integration */}
         <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
           <label className="flex items-start gap-3 cursor-pointer">
@@ -644,6 +881,20 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           }}
         />
       )}
+
+      {/* Agent Form Modal */}
+      {showAgentForm && (
+        <AgentFormModal
+          agent={editingAgent?.agent}
+          agentName={editingAgent?.name}
+          existingAgentNames={Object.keys(agents).filter((n) => n !== editingAgent?.name)}
+          onSave={handleSaveAgent}
+          onClose={() => {
+            setShowAgentForm(false);
+            setEditingAgent(null);
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -678,6 +929,66 @@ function LockIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+      />
+    </svg>
+  );
+}
+
+function FolderPlusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+      />
+    </svg>
+  );
+}
+
+function BotIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+      />
+    </svg>
+  );
+}
+
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+    </svg>
+  );
+}
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+      />
+    </svg>
+  );
+}
+
+function PencilIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
       />
     </svg>
   );

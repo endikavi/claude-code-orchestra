@@ -447,6 +447,9 @@ export class TerminalPool extends EventEmitter {
     // Enable the new task tracking system in Claude Code
     env['CLAUDE_CODE_ENABLE_TASKS'] = 'true';
 
+    // Enable reading CLAUDE.md from additional directories (--add-dir)
+    env['CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD'] = '1';
+
     // On Windows, ensure CLAUDE_CODE_GIT_BASH_PATH is set for Claude Code
     if (process.platform === 'win32' && this.gitBashPath) {
       env['CLAUDE_CODE_GIT_BASH_PATH'] = this.gitBashPath;

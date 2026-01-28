@@ -12,6 +12,7 @@ import { GitStatusManager } from '../GitStatusManager';
 import { registerProjectTools } from './tools/ProjectTools';
 import { registerProxyTools } from './tools/ProxyTools';
 import { registerContextTools } from './tools/ContextTools';
+import { registerPermissionPromptTool } from './tools/PermissionPromptTool';
 
 /**
  * MCP Server Implementation
@@ -51,6 +52,9 @@ export class McpServer {
 
     // Register shared context tools
     registerContextTools(this.tools);
+
+    // Register permission prompt tool (for --permission-prompt-tool support)
+    registerPermissionPromptTool(this.tools);
 
     console.log(`[MCP] Initialized ${this.tools.size} tools`);
   }

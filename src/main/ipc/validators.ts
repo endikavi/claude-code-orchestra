@@ -1,5 +1,12 @@
 import { resolve, normalize } from 'path';
-import type { Project, ClaudeModel, InstanceMode, ConversationStatus } from '@shared/types';
+import type {
+  Project,
+  ClaudeModel,
+  InstanceMode,
+  ConversationStatus,
+  AgentDeliveryMethod,
+  CustomAgentsConfig,
+} from '@shared/types';
 import { ipcLogger } from '@shared/utils/logger';
 
 /**
@@ -102,6 +109,47 @@ function isValidConversationStatus(value: unknown): value is ConversationStatus 
 }
 
 /**
+ * Validate that a value is a valid agent delivery method
+ */
+function isValidAgentDeliveryMethod(value: unknown): value is AgentDeliveryMethod {
+  return value === 'skill' || value === 'args';
+}
+
+/**
+ * Validate that a value is a valid array of directory paths
+ */
+function isValidDirectoryArray(value: unknown): value is string[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  return value.every((item) => isValidPath(item));
+}
+
+/**
+ * Validate that a value is a valid custom agents config
+ */
+function isValidCustomAgentsConfig(value: unknown): value is CustomAgentsConfig {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  // Basic structure validation - each key should have description and prompt
+  for (const [, agent] of Object.entries(value)) {
+    if (!agent || typeof agent !== 'object') {
+      return false;
+    }
+    const agentObj = agent as Record<string, unknown>;
+    if (typeof agentObj.description !== 'string' || typeof agentObj.prompt !== 'string') {
+      return false;
+    }
+    // Optional model validation
+    if (agentObj.model !== undefined && !isValidModel(agentObj.model)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Validators for each IPC channel
  */
 export const validators = {
@@ -122,6 +170,36 @@ export const validators = {
     // Use enhanced path validation with traversal protection
     const validatedPath = validateProjectPath(obj.path, 'project:create');
 
+    // Validate additionalDirs if provided
+    let additionalDirs: string[] | undefined;
+    if (obj.additionalDirs !== undefined) {
+      if (!isValidDirectoryArray(obj.additionalDirs)) {
+        throw new IpcValidationError('project:create', 'Invalid additional directories');
+      }
+      additionalDirs = obj.additionalDirs;
+    }
+
+    // Validate agentDeliveryMethod if provided
+    let agentDeliveryMethod: AgentDeliveryMethod | undefined;
+    if (obj.agentDeliveryMethod !== undefined) {
+      if (!isValidAgentDeliveryMethod(obj.agentDeliveryMethod)) {
+        throw new IpcValidationError(
+          'project:create',
+          'Invalid agent delivery method (must be "skill" or "args")'
+        );
+      }
+      agentDeliveryMethod = obj.agentDeliveryMethod;
+    }
+
+    // Validate agents if provided
+    let agents: CustomAgentsConfig | undefined;
+    if (obj.agents !== undefined) {
+      if (!isValidCustomAgentsConfig(obj.agents)) {
+        throw new IpcValidationError('project:create', 'Invalid agents configuration');
+      }
+      agents = obj.agents;
+    }
+
     return {
       name: obj.name.trim(),
       path: validatedPath,
@@ -129,6 +207,10 @@ export const validators = {
       color: typeof obj.color === 'string' ? obj.color : undefined,
       skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
       enableMcp: typeof obj.enableMcp === 'boolean' ? obj.enableMcp : undefined,
+      autoReview: typeof obj.autoReview === 'boolean' ? obj.autoReview : undefined,
+      additionalDirs,
+      agentDeliveryMethod,
+      agents,
     };
   },
 
@@ -157,6 +239,36 @@ export const validators = {
       throw new IpcValidationError('project:update', 'Timestamps are required');
     }
 
+    // Validate additionalDirs if provided
+    let additionalDirs: string[] | undefined;
+    if (obj.additionalDirs !== undefined) {
+      if (!isValidDirectoryArray(obj.additionalDirs)) {
+        throw new IpcValidationError('project:update', 'Invalid additional directories');
+      }
+      additionalDirs = obj.additionalDirs;
+    }
+
+    // Validate agentDeliveryMethod if provided
+    let agentDeliveryMethod: AgentDeliveryMethod | undefined;
+    if (obj.agentDeliveryMethod !== undefined) {
+      if (!isValidAgentDeliveryMethod(obj.agentDeliveryMethod)) {
+        throw new IpcValidationError(
+          'project:update',
+          'Invalid agent delivery method (must be "skill" or "args")'
+        );
+      }
+      agentDeliveryMethod = obj.agentDeliveryMethod;
+    }
+
+    // Validate agents if provided
+    let agents: CustomAgentsConfig | undefined;
+    if (obj.agents !== undefined) {
+      if (!isValidCustomAgentsConfig(obj.agents)) {
+        throw new IpcValidationError('project:update', 'Invalid agents configuration');
+      }
+      agents = obj.agents;
+    }
+
     return {
       id: obj.id,
       name: obj.name.trim(),
@@ -166,7 +278,11 @@ export const validators = {
       hostname: typeof obj.hostname === 'string' ? obj.hostname : undefined,
       skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
       enableMcp: typeof obj.enableMcp === 'boolean' ? obj.enableMcp : undefined,
+      autoReview: typeof obj.autoReview === 'boolean' ? obj.autoReview : undefined,
       preferredShell: typeof obj.preferredShell === 'string' ? obj.preferredShell : undefined,
+      additionalDirs,
+      agentDeliveryMethod,
+      agents,
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
     };
@@ -194,6 +310,7 @@ export const validators = {
     verbose?: boolean;
     skipPermissions?: boolean;
     isDirector?: boolean;
+    usePermissionPromptTool?: boolean;
   } {
     if (!data || typeof data !== 'object') {
       throw new IpcValidationError('instance:create', 'Invalid instance config');
@@ -228,6 +345,7 @@ export const validators = {
       verbose: obj.verbose === true,
       skipPermissions: obj.skipPermissions === true,
       isDirector: obj.isDirector === true,
+      usePermissionPromptTool: obj.usePermissionPromptTool === true,
     };
   },
 

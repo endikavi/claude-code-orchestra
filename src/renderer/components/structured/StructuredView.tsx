@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { ChatInput } from './ChatInput';
 import { PermissionBar } from './PermissionBar';
@@ -10,10 +11,15 @@ interface StructuredViewProps {
 }
 
 export function StructuredView({ instanceId }: StructuredViewProps) {
-  const { getInstanceOutput, getSelectedInstance } = useInstanceStore();
+  const { t } = useTranslation();
+  const { getInstanceOutput, getSelectedInstance, getPendingPermissionForInstance } =
+    useInstanceStore();
   const output = getInstanceOutput(instanceId);
   const instance = getSelectedInstance();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Check for pending MCP permission prompt
+  const pendingPermission = getPendingPermissionForInstance(instanceId);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -21,15 +27,44 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
   }, [output?.messages.length]);
 
   const status = instance?.status || 'starting';
-  const showPermissionBar = status === 'needs_permission';
+  const isPending = status === 'pending';
+  // Show permission bar when status is 'needs_permission' OR when there's a pending MCP permission
+  const showPermissionBar = status === 'needs_permission' || pendingPermission !== undefined;
 
+  // For pending instances, show welcome screen with chat input
+  if (isPending) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md px-4">
+            <ChatIcon className="w-12 h-12 mx-auto mb-4 text-claude-orange" />
+            <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">
+              {t('structuredChat.welcome.title')}
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-2">
+              {t('structuredChat.welcome.description')}
+            </p>
+            {instance && (
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-4 p-3 bg-white/50 dark:bg-gray-800 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+                <span className="font-medium">{t('instance.model')}:</span> {instance.model}
+                {instance.planMode && <span className="ml-2">&bull; {t('instance.planMode')}</span>}
+              </div>
+            )}
+          </div>
+        </div>
+        <ChatInput instanceId={instanceId} status={status} />
+      </div>
+    );
+  }
+
+  // For starting/running instances with no output yet, show spinner
   if (!output || output.messages.length === 0) {
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-500">
           <div className="text-center">
             <SpinnerIcon className="w-8 h-8 mx-auto mb-3 animate-spin text-gray-400 dark:text-gray-600" />
-            <p>Waiting for output...</p>
+            <p>{t('structuredChat.waitingForOutput')}</p>
           </div>
         </div>
         {/* Show chat input even when waiting */}
@@ -239,6 +274,19 @@ function ToolIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  );
+}
+
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
       />
     </svg>
   );

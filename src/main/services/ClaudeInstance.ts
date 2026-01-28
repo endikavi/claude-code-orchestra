@@ -342,6 +342,9 @@ export interface ClaudeInstanceConfig {
   agentFile?: string; // Path to agent file for --agent parameter (e.g., AGENT.md)
   isHidden?: boolean; // Hidden instances don't show in main tabs (e.g., Ralph background tasks)
   ralphTaskId?: string; // Associated Ralph task ID if this is a Ralph loop instance
+  additionalDirs?: string[]; // Additional working directories for --add-dir flag
+  useAgentsFlag?: boolean; // Use --agents flag instead of installing as skills
+  usePermissionPromptTool?: boolean; // Use --permission-prompt-tool for structured view permission handling
 }
 
 export class ClaudeInstance extends EventEmitter {
@@ -360,6 +363,9 @@ export class ClaudeInstance extends EventEmitter {
   public readonly agentFile?: string;
   public readonly isHidden: boolean; // Hidden instances don't show in main tabs
   public readonly ralphTaskId?: string; // Associated Ralph task ID
+  public readonly additionalDirs?: string[]; // Additional working directories
+  public readonly useAgentsFlag: boolean; // Use --agents flag instead of skills
+  public readonly usePermissionPromptTool: boolean; // Use MCP tool for permission prompts
 
   private ptyProcess: pty.IPty | null = null;
   private mcpToken?: string; // Token for MCP authentication
@@ -397,6 +403,9 @@ export class ClaudeInstance extends EventEmitter {
     this.agentFile = config.agentFile;
     this.isHidden = config.isHidden ?? false;
     this.ralphTaskId = config.ralphTaskId;
+    this.additionalDirs = config.additionalDirs;
+    this.useAgentsFlag = config.useAgentsFlag ?? false;
+    this.usePermissionPromptTool = config.usePermissionPromptTool ?? false;
     this.createdAt = Date.now();
 
     this.parser = new StreamJSONParser();
@@ -978,6 +987,8 @@ export class ClaudeInstance extends EventEmitter {
         TERM: 'xterm-256color',
         // Enable the new task tracking system in Claude Code
         CLAUDE_CODE_ENABLE_TASKS: 'true',
+        // Enable reading CLAUDE.md from additional directories (--add-dir)
+        CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
         // Dashboard integration environment variables
         // These are used by hook scripts to communicate with the dashboard
         CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
@@ -1164,6 +1175,8 @@ export class ClaudeInstance extends EventEmitter {
       CLAUDE_DASHBOARD_PROJECT_ID: this.projectId,
       CLAUDE_DASHBOARD_PROJECT_PATH: this.projectPath,
       CLAUDE_DASHBOARD_API_URL: apiUrl,
+      // Enable reading CLAUDE.md from additional directories (--add-dir)
+      CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
     };
 
     if (this.enableMcp && this.mcpToken) {
@@ -1248,10 +1261,9 @@ export class ClaudeInstance extends EventEmitter {
       // Always use stream-json to capture structured data
       args.push('--output-format', 'stream-json');
 
-      // Add verbose flag if enabled
-      if (this.verbose) {
-        args.push('--verbose');
-      }
+      // Always add --verbose when using stream-json (required for proper parsing)
+      // Note: --output-format stream-json requires --verbose to work correctly
+      args.push('--verbose');
 
       // Add model
       args.push('--model', this.model);
@@ -1264,6 +1276,17 @@ export class ClaudeInstance extends EventEmitter {
       // Add agent file if specified (for orchestration instructions)
       if (this.agentFile) {
         args.push('--agent', this.agentFile);
+      }
+
+      // Add additional directories
+      this.addAdditionalDirsArgs(args);
+
+      // Add agents via --agents flag if configured
+      this.addAgentsArgs(args);
+
+      // Add --permission-prompt-tool for structured view permission handling
+      if (this.usePermissionPromptTool && this.enableMcp) {
+        args.push('--permission-prompt-tool', 'mcp__orchestra__permission_prompt');
       }
 
       return args;
@@ -1285,10 +1308,9 @@ export class ClaudeInstance extends EventEmitter {
     // The rawOutput event provides terminal-compatible output for display
     args.push('--output-format', 'stream-json');
 
-    // Add verbose flag if enabled
-    if (this.verbose) {
-      args.push('--verbose');
-    }
+    // Always add --verbose when using stream-json (required for proper parsing)
+    // Note: --output-format stream-json requires --verbose to work correctly
+    args.push('--verbose');
 
     // Add model
     args.push('--model', this.model);
@@ -1308,7 +1330,45 @@ export class ClaudeInstance extends EventEmitter {
       args.push('--agent', this.agentFile);
     }
 
+    // Add additional directories
+    this.addAdditionalDirsArgs(args);
+
+    // Add agents via --agents flag if configured
+    this.addAgentsArgs(args);
+
+    // Add --permission-prompt-tool for structured view permission handling
+    // This routes permission prompts through the MCP tool instead of terminal
+    if (this.usePermissionPromptTool && this.enableMcp) {
+      args.push('--permission-prompt-tool', 'mcp__orchestra__permission_prompt');
+    }
+
     return args;
+  }
+
+  /**
+   * Add --add-dir arguments for additional working directories
+   */
+  private addAdditionalDirsArgs(args: string[]): void {
+    if (this.additionalDirs && this.additionalDirs.length > 0) {
+      for (const dir of this.additionalDirs) {
+        // Validate directory exists before adding
+        if (fs.existsSync(dir)) {
+          args.push('--add-dir', dir);
+        } else {
+          console.warn(`[ClaudeInstance] Additional directory does not exist: ${dir}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Add --agents argument with JSON payload for custom agents
+   * Only used when useAgentsFlag is true (agentDeliveryMethod='args')
+   */
+  private addAgentsArgs(args: string[]): void {
+    if (this.useAgentsFlag && this.agents && Object.keys(this.agents).length > 0) {
+      args.push('--agents', JSON.stringify(this.agents));
+    }
   }
 
   /**

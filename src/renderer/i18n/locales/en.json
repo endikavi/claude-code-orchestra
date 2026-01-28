@@ -17,7 +17,11 @@
     "messages": "messages",
     "copy": "Copy",
     "expand": "Show more",
-    "collapse": "Show less"
+    "collapse": "Show less",
+    "add": "Add",
+    "remove": "Remove",
+    "yes": "Yes",
+    "no": "No"
   },
   "titleBar": {
     "title": "Orchestra",
@@ -222,7 +226,24 @@
     "useNodeDefault": "Use node default",
     "shareWithCluster": "Share with cluster",
     "dontShare": "Keep private",
-    "allowRemoteInstances": "Allow remote instances"
+    "allowRemoteInstances": "Allow remote instances",
+    "additionalDirs": "Additional Working Directories",
+    "additionalDirsDesc": "Extra directories Claude can access (--add-dir)",
+    "addDirectory": "Add directory",
+    "customAgents": "Custom Agents",
+    "agentDeliveryMethod": "Agent Delivery Method",
+    "deliverAsSkills": "Install as Skills (recommended)",
+    "deliverViaFlag": "Pass via --agents flag",
+    "noAgents": "No custom agents configured",
+    "addAgent": "Add agent",
+    "editAgent": "Edit agent",
+    "deleteAgent": "Delete agent",
+    "enableHooksIntegration": "Enable Dashboard Integration",
+    "enableHooksIntegrationDescription": "Receive notifications and track activity from Claude instances in this project",
+    "advancedOptions": "Advanced options",
+    "hookTemplate": "Integration template",
+    "hooksWillBeRemoved": "Warning: Disabling this will remove existing dashboard hooks from the project.",
+    "privateProjectNote": "This project will not be visible to other cluster nodes"
   },
   "instance": {
     "newInstance": "New Claude Instance",
@@ -249,7 +270,10 @@
       "interactiveDesc": "Full interactive terminal mode",
       "print": "Print",
       "printDesc": "Non-interactive, prints result only"
-    }
+    },
+    "agentFile": "Agent Instructions",
+    "autoDetectAgent": "Auto-detect (AGENT.md if present)",
+    "agentFileDesc": "Select agent instructions file to use for orchestration"
   },
   "emptyState": {
     "noProjectSelected": "No project selected",
@@ -299,7 +323,8 @@
     "copy": "Copy",
     "paste": "Paste",
     "repaint": "Repaint",
-    "forceRepaint": "Force Repaint"
+    "forceRepaint": "Force Repaint",
+    "starting": "Starting Claude..."
   },
   "modeToggle": {
     "title": "Toggle Claude mode",
@@ -409,11 +434,24 @@
   },
   "structuredChat": {
     "placeholder": "Type a message to Claude...",
+    "pendingPlaceholder": "Type your first message to start the conversation...",
     "disabledPlaceholder": "Waiting for Claude...",
     "hint": "Press Enter to send, Shift+Enter for new line",
     "permissionRequired": "Permission required",
     "accept": "Accept (Y)",
-    "reject": "Reject (N)"
+    "reject": "Reject (N)",
+    "waitingForOutput": "Waiting for output...",
+    "welcome": {
+      "title": "Start a Conversation",
+      "description": "Type your first message below to begin working with Claude."
+    }
+  },
+  "permissionPrompt": {
+    "toolRequest": "Claude wants to use {{tool}}",
+    "allow": "Allow",
+    "deny": "Deny",
+    "timeout": "Permission request timed out",
+    "pending": "Waiting for your approval..."
   },
   "git": {
     "staged": "staged",
@@ -602,5 +640,162 @@
       "pending": "Pending",
       "completed": "Completed"
     }
+  },
+  "agent": {
+    "name": "Agent Name",
+    "nameHint": "Unique identifier (no spaces)",
+    "nameRequired": "Agent name is required",
+    "nameInvalid": "Name can only contain letters, numbers, hyphens, and underscores",
+    "nameDuplicate": "An agent with this name already exists",
+    "description": "Description",
+    "descriptionPlaceholder": "A short description of what this agent does",
+    "descriptionRequired": "Description is required",
+    "prompt": "Instructions/Prompt",
+    "promptPlaceholder": "Instructions for the agent...",
+    "promptRequired": "Instructions/prompt is required",
+    "model": "Model (optional)",
+    "useDefaultModel": "Use default model",
+    "tools": "Allowed Tools",
+    "allToolsAllowed": "No restrictions - all tools allowed",
+    "selectedTools": "{{count}} tool(s) selected"
+  },
+  "analytics": {
+    "title": "Usage Analytics",
+    "description": "Track Claude usage patterns and costs",
+    "totalSessions": "Total Sessions",
+    "activeInstances": "Active Instances",
+    "sessionsToday": "Sessions Today",
+    "totalCost": "Total Cost",
+    "toolUsage": "Tool Usage",
+    "costBreakdown": "Cost Breakdown",
+    "noCostData": "No cost data available",
+    "usageTrends": "Usage Trends",
+    "byModel": "By Model",
+    "byProject": "By Project",
+    "total": "Total",
+    "sessions": "Sessions",
+    "toolCalls": "Tool Uses",
+    "cost": "Cost",
+    "noToolUsage": "No tool usage data available",
+    "uses": "uses",
+    "success": "success"
+  },
+  "tabs": {
+    "splitTerminal": "Split terminal",
+    "close": "Close",
+    "newInstance": "New instance",
+    "newInstancesTerminal": "New instances: Terminal view",
+    "newInstancesStructured": "New instances: Structured view"
+  },
+  "context": {
+    "title": "Shared Context",
+    "refresh": "Refresh",
+    "noProject": "No project selected",
+    "noProjectDesc": "Select a project to view shared context",
+    "noInstances": "No active instances sharing context",
+    "architecture": "Architecture",
+    "techStack": "Tech Stack",
+    "empty": "No shared context yet",
+    "emptyDesc": "Context will appear when instances share information about their work",
+    "sections": {
+      "instances": "Active Instances",
+      "conventions": "Conventions",
+      "warnings": "Warnings",
+      "importantFiles": "Important Files"
+    },
+    "status": {
+      "implementing": "Implementing",
+      "exploring": "Exploring",
+      "testing": "Testing",
+      "reviewing": "Reviewing",
+      "planning": "Planning",
+      "waiting": "Waiting",
+      "idle": "Idle"
+    },
+    "time": {
+      "justNow": "just now",
+      "minsAgo": "{{m}}m ago",
+      "hoursAgo": "{{h}}h ago",
+      "daysAgo": "{{d}}d ago"
+    }
+  },
+  "preset": {
+    "title": "Instance Presets",
+    "selectPreset": "Load preset",
+    "noPreset": "No preset (manual config)",
+    "saveAsPreset": "Save as preset",
+    "createPreset": "Create Preset",
+    "editPreset": "Edit Preset",
+    "deletePreset": "Delete Preset",
+    "duplicatePreset": "Duplicate",
+    "name": "Preset Name",
+    "namePlaceholder": "My Preset",
+    "nameRequired": "Preset name is required",
+    "description": "Description",
+    "descriptionPlaceholder": "Brief description of this preset",
+    "category": "Category",
+    "tags": "Tags",
+    "tagsPlaceholder": "Add tags...",
+    "isGlobal": "Available in all projects",
+    "isGlobalDesc": "Global presets can be used in any project",
+    "initialPrompt": "Initial Prompt",
+    "initialPromptPlaceholder": "Enter the initial prompt to send when instance starts...",
+    "initialPromptDesc": "Prompt sent automatically when instance starts",
+    "confirmDelete": "Are you sure you want to delete this preset?",
+    "noPresets": "No presets saved yet",
+    "globalPresets": "Global Presets",
+    "projectPresets": "Project Presets",
+    "managePresets": "Manage presets",
+    "presetApplied": "Preset applied",
+    "presetSaved": "Preset saved",
+    "presetDeleted": "Preset deleted",
+    "presetDuplicated": "Preset duplicated",
+    "categories": {
+      "development": "Development",
+      "testing": "Testing",
+      "documentation": "Documentation",
+      "devops": "DevOps",
+      "analysis": "Analysis",
+      "custom": "Custom"
+    }
+  },
+  "permissions": {
+    "title": "Permission Rules",
+    "description": "Configure auto-approval rules for Claude tool usage",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "allowed": "Allowed",
+    "denied": "Denied",
+    "totalChecks": "Total Checks",
+    "rulesTab": "Rules",
+    "logTab": "Activity Log",
+    "addRule": "Add Rule",
+    "noRules": "No permission rules configured",
+    "clearLog": "Clear log",
+    "noLog": "No activity recorded yet",
+    "tool": "Tool",
+    "path": "Path",
+    "usageCount": "Used",
+    "disable": "Disable",
+    "enable": "Enable",
+    "edit": "Edit",
+    "delete": "Delete",
+    "editRule": "Edit Rule",
+    "ruleName": "Rule Name",
+    "ruleNamePlaceholder": "e.g., Allow Read in src",
+    "ruleDescription": "Description",
+    "ruleDescriptionPlaceholder": "Optional description",
+    "toolName": "Tool Name",
+    "toolNameHelp": "Leave empty to match all tools",
+    "pathPattern": "Path Pattern",
+    "pathPatternHelp": "Optional glob pattern for file paths",
+    "decision": "Decision",
+    "allow": "Allow",
+    "deny": "Deny",
+    "ask": "Ask",
+    "priority": "Priority",
+    "priorityHelp": "Higher priority rules are evaluated first",
+    "enableRule": "Enable this rule",
+    "confirmDeleteRule": "Are you sure you want to delete this rule?"
   }
 }

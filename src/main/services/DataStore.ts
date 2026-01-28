@@ -23,6 +23,7 @@ import type {
   CreateRalphTaskInput,
   UpdateRalphTaskInput,
 } from '@shared/types/ralphTasks';
+import type { InstancePreset, CreatePresetInput, UpdatePresetInput } from '@shared/types/presets';
 import { DEFAULT_TERMINAL_POOL_CONFIG } from '@shared/types/pool';
 import type { RemoteConfig } from '@shared/types/remote';
 import { DEFAULT_REMOTE_CONFIG } from '@shared/types/remote';
@@ -90,6 +91,18 @@ export class DataStore {
 
     // Migration: Add enableMcp column if it doesn't exist
     this.migrateAddEnableMcp();
+
+    // Migration: Add additionalDirs column if it doesn't exist
+    this.migrateAddAdditionalDirs();
+
+    // Migration: Add agentDeliveryMethod column if it doesn't exist
+    this.migrateAddAgentDeliveryMethod();
+
+    // Migration: Add agents column if it doesn't exist
+    this.migrateAddAgents();
+
+    // Migration: Add autoReview column if it doesn't exist
+    this.migrateAddAutoReview();
 
     // Create index on path for faster lookups
     this.db.exec(`
@@ -389,6 +402,37 @@ export class DataStore {
       CREATE INDEX IF NOT EXISTS idx_ralph_tasks_status ON ralph_tasks(status)
     `);
 
+    // Create instance_presets table for saving Claude instance configurations
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS instance_presets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        model TEXT NOT NULL DEFAULT 'sonnet',
+        planMode INTEGER DEFAULT 0,
+        verbose INTEGER DEFAULT 0,
+        agentFile TEXT,
+        agents TEXT,
+        additionalDirs TEXT,
+        initialPrompt TEXT,
+        category TEXT,
+        tags TEXT,
+        isGlobal INTEGER DEFAULT 0,
+        projectId TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create indexes for instance_presets
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_instance_presets_projectId ON instance_presets(projectId)
+    `);
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_instance_presets_isGlobal ON instance_presets(isGlobal)
+    `);
+
     // Insert default terminal pool config if not exists
     const existingPoolConfig = this.db
       .prepare('SELECT * FROM terminal_pool_config WHERE id = 1')
@@ -540,6 +584,76 @@ export class DataStore {
     }
   }
 
+  /**
+   * Migration: Add additionalDirs column for --add-dir support
+   */
+  private migrateAddAdditionalDirs(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'additionalDirs'
+      );
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN additionalDirs TEXT');
+      }
+    } catch (error) {
+      console.warn('Migration additionalDirs:', error);
+    }
+  }
+
+  /**
+   * Migration: Add agentDeliveryMethod column for agents delivery configuration
+   */
+  private migrateAddAgentDeliveryMethod(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'agentDeliveryMethod'
+      );
+
+      if (!hasColumn) {
+        this.db.exec("ALTER TABLE projects ADD COLUMN agentDeliveryMethod TEXT DEFAULT 'skill'");
+      }
+    } catch (error) {
+      console.warn('Migration agentDeliveryMethod:', error);
+    }
+  }
+
+  /**
+   * Migration: Add agents column for custom agents configuration
+   */
+  private migrateAddAgents(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some((col) => col.name === 'agents');
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN agents TEXT');
+      }
+    } catch (error) {
+      console.warn('Migration agents:', error);
+    }
+  }
+
+  /**
+   * Migration: Add autoReview column for auto-review subagent configuration
+   */
+  private migrateAddAutoReview(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'autoReview'
+      );
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN autoReview INTEGER DEFAULT 1');
+      }
+    } catch (error) {
+      console.warn('Migration autoReview:', error);
+    }
+  }
+
   // Project CRUD operations
   createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Project {
     const now = Date.now();
@@ -552,8 +666,8 @@ export class DataStore {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, enableMcp, clusterPermissions, createdAt, updatedAt)
-      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @enableMcp, @clusterPermissions, @createdAt, @updatedAt)
+      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, enableMcp, autoReview, clusterPermissions, agents, additionalDirs, agentDeliveryMethod, createdAt, updatedAt)
+      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @enableMcp, @autoReview, @clusterPermissions, @agents, @additionalDirs, @agentDeliveryMethod, @createdAt, @updatedAt)
     `);
 
     stmt.run({
@@ -561,9 +675,13 @@ export class DataStore {
       skipPermissions: project.skipPermissions ? 1 : 0,
       preferredShell: project.preferredShell ?? null,
       enableMcp: project.enableMcp ? 1 : 0,
+      autoReview: project.autoReview === false ? 0 : 1, // Default to true
       clusterPermissions: project.clusterPermissions
         ? JSON.stringify(project.clusterPermissions)
         : null,
+      agents: project.agents ? JSON.stringify(project.agents) : null,
+      additionalDirs: project.additionalDirs ? JSON.stringify(project.additionalDirs) : null,
+      agentDeliveryMethod: project.agentDeliveryMethod ?? 'skill',
     });
     return project;
   }
@@ -578,7 +696,9 @@ export class DataStore {
       UPDATE projects
       SET name = @name, path = @path, description = @description,
           color = @color, hostname = @hostname, skipPermissions = @skipPermissions,
-          preferredShell = @preferredShell, enableMcp = @enableMcp, clusterPermissions = @clusterPermissions,
+          preferredShell = @preferredShell, enableMcp = @enableMcp, autoReview = @autoReview,
+          clusterPermissions = @clusterPermissions, agents = @agents,
+          additionalDirs = @additionalDirs, agentDeliveryMethod = @agentDeliveryMethod,
           updatedAt = @updatedAt
       WHERE id = @id
     `);
@@ -593,9 +713,15 @@ export class DataStore {
       skipPermissions: updatedProject.skipPermissions ? 1 : 0,
       preferredShell: updatedProject.preferredShell ?? null,
       enableMcp: updatedProject.enableMcp ? 1 : 0,
+      autoReview: updatedProject.autoReview === false ? 0 : 1, // Default to true
       clusterPermissions: updatedProject.clusterPermissions
         ? JSON.stringify(updatedProject.clusterPermissions)
         : null,
+      agents: updatedProject.agents ? JSON.stringify(updatedProject.agents) : null,
+      additionalDirs: updatedProject.additionalDirs
+        ? JSON.stringify(updatedProject.additionalDirs)
+        : null,
+      agentDeliveryMethod: updatedProject.agentDeliveryMethod ?? 'skill',
       updatedAt: updatedProject.updatedAt,
     });
     if (result.changes === 0) {
@@ -627,6 +753,26 @@ export class DataStore {
       }
     }
 
+    // Parse agents if present
+    let agents = undefined;
+    if (row.agents && typeof row.agents === 'string') {
+      try {
+        agents = JSON.parse(row.agents);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
+    // Parse additionalDirs if present
+    let additionalDirs = undefined;
+    if (row.additionalDirs && typeof row.additionalDirs === 'string') {
+      try {
+        additionalDirs = JSON.parse(row.additionalDirs);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
     return {
       id: row.id as string,
       name: row.name as string,
@@ -637,7 +783,11 @@ export class DataStore {
       skipPermissions: row.skipPermissions === 1,
       preferredShell: row.preferredShell as string | undefined,
       enableMcp: row.enableMcp === 1,
+      autoReview: row.autoReview !== 0, // Default to true if null/0
       clusterPermissions,
+      agents,
+      additionalDirs,
+      agentDeliveryMethod: (row.agentDeliveryMethod as 'skill' | 'args') ?? 'skill',
       createdAt: row.createdAt as number,
       updatedAt: row.updatedAt as number,
     };
@@ -1918,6 +2068,235 @@ export class DataStore {
       updatedAt: row.updatedAt as number,
       startedAt: row.startedAt as number | undefined,
       completedAt: row.completedAt as number | undefined,
+    };
+  }
+
+  // ==================== Instance Presets CRUD ====================
+
+  /**
+   * Create a new instance preset
+   */
+  createPreset(data: CreatePresetInput): InstancePreset {
+    const now = Date.now();
+    const preset: InstancePreset = {
+      id: randomUUID(),
+      name: data.name,
+      description: data.description,
+      model: data.model,
+      planMode: data.planMode,
+      verbose: data.verbose,
+      agentFile: data.agentFile,
+      agents: data.agents,
+      additionalDirs: data.additionalDirs,
+      initialPrompt: data.initialPrompt,
+      category: data.category,
+      tags: data.tags,
+      isGlobal: data.isGlobal,
+      projectId: data.isGlobal ? undefined : data.projectId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO instance_presets (id, name, description, model, planMode, verbose, agentFile, agents, additionalDirs, initialPrompt, category, tags, isGlobal, projectId, createdAt, updatedAt)
+      VALUES (@id, @name, @description, @model, @planMode, @verbose, @agentFile, @agents, @additionalDirs, @initialPrompt, @category, @tags, @isGlobal, @projectId, @createdAt, @updatedAt)
+    `);
+
+    stmt.run({
+      id: preset.id,
+      name: preset.name,
+      description: preset.description ?? null,
+      model: preset.model,
+      planMode: preset.planMode ? 1 : 0,
+      verbose: preset.verbose ? 1 : 0,
+      agentFile: preset.agentFile ?? null,
+      agents: preset.agents ? JSON.stringify(preset.agents) : null,
+      additionalDirs: preset.additionalDirs ? JSON.stringify(preset.additionalDirs) : null,
+      initialPrompt: preset.initialPrompt ?? null,
+      category: preset.category ?? null,
+      tags: preset.tags ? JSON.stringify(preset.tags) : null,
+      isGlobal: preset.isGlobal ? 1 : 0,
+      projectId: preset.projectId ?? null,
+      createdAt: preset.createdAt,
+      updatedAt: preset.updatedAt,
+    });
+
+    return preset;
+  }
+
+  /**
+   * Update an existing instance preset
+   */
+  updatePreset(id: string, updates: UpdatePresetInput): InstancePreset | null {
+    const existing = this.getPresetById(id);
+    if (!existing) return null;
+
+    const updated: InstancePreset = {
+      ...existing,
+      ...updates,
+      // Ensure projectId is cleared if becoming global
+      projectId:
+        updates.isGlobal === true
+          ? undefined
+          : updates.isGlobal === false
+            ? existing.projectId
+            : existing.projectId,
+      updatedAt: Date.now(),
+    };
+
+    const stmt = this.db.prepare(`
+      UPDATE instance_presets
+      SET name = @name, description = @description, model = @model, planMode = @planMode,
+          verbose = @verbose, agentFile = @agentFile, agents = @agents, additionalDirs = @additionalDirs,
+          initialPrompt = @initialPrompt, category = @category, tags = @tags, isGlobal = @isGlobal,
+          projectId = @projectId, updatedAt = @updatedAt
+      WHERE id = @id
+    `);
+
+    stmt.run({
+      id: updated.id,
+      name: updated.name,
+      description: updated.description ?? null,
+      model: updated.model,
+      planMode: updated.planMode ? 1 : 0,
+      verbose: updated.verbose ? 1 : 0,
+      agentFile: updated.agentFile ?? null,
+      agents: updated.agents ? JSON.stringify(updated.agents) : null,
+      additionalDirs: updated.additionalDirs ? JSON.stringify(updated.additionalDirs) : null,
+      initialPrompt: updated.initialPrompt ?? null,
+      category: updated.category ?? null,
+      tags: updated.tags ? JSON.stringify(updated.tags) : null,
+      isGlobal: updated.isGlobal ? 1 : 0,
+      projectId: updated.projectId ?? null,
+      updatedAt: updated.updatedAt,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Delete an instance preset
+   */
+  deletePreset(id: string): void {
+    const stmt = this.db.prepare('DELETE FROM instance_presets WHERE id = ?');
+    stmt.run(id);
+  }
+
+  /**
+   * Get preset by ID
+   */
+  getPresetById(id: string): InstancePreset | null {
+    const stmt = this.db.prepare('SELECT * FROM instance_presets WHERE id = ?');
+    const row = stmt.get(id) as Record<string, unknown> | undefined;
+    return row ? this.mapRowToPreset(row) : null;
+  }
+
+  /**
+   * Get presets available for a project (includes global presets and project-specific presets)
+   */
+  getPresetsByProject(projectId: string): InstancePreset[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM instance_presets
+      WHERE isGlobal = 1 OR projectId = ?
+      ORDER BY isGlobal DESC, name ASC
+    `);
+    const rows = stmt.all(projectId) as Record<string, unknown>[];
+    return rows.map((row) => this.mapRowToPreset(row));
+  }
+
+  /**
+   * Get all global presets
+   */
+  getGlobalPresets(): InstancePreset[] {
+    const stmt = this.db.prepare(
+      'SELECT * FROM instance_presets WHERE isGlobal = 1 ORDER BY name ASC'
+    );
+    const rows = stmt.all() as Record<string, unknown>[];
+    return rows.map((row) => this.mapRowToPreset(row));
+  }
+
+  /**
+   * Get all presets
+   */
+  getAllPresets(): InstancePreset[] {
+    const stmt = this.db.prepare('SELECT * FROM instance_presets ORDER BY isGlobal DESC, name ASC');
+    const rows = stmt.all() as Record<string, unknown>[];
+    return rows.map((row) => this.mapRowToPreset(row));
+  }
+
+  /**
+   * Duplicate a preset with a new name
+   */
+  duplicatePreset(id: string, newName: string): InstancePreset | null {
+    const existing = this.getPresetById(id);
+    if (!existing) return null;
+
+    return this.createPreset({
+      name: newName,
+      description: existing.description,
+      model: existing.model,
+      planMode: existing.planMode,
+      verbose: existing.verbose,
+      agentFile: existing.agentFile,
+      agents: existing.agents,
+      additionalDirs: existing.additionalDirs,
+      initialPrompt: existing.initialPrompt,
+      category: existing.category,
+      tags: existing.tags,
+      isGlobal: existing.isGlobal,
+      projectId: existing.projectId,
+    });
+  }
+
+  /**
+   * Map SQLite row to InstancePreset
+   */
+  private mapRowToPreset(row: Record<string, unknown>): InstancePreset {
+    // Parse JSON fields
+    let agents = undefined;
+    if (row.agents && typeof row.agents === 'string') {
+      try {
+        agents = JSON.parse(row.agents);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
+    let additionalDirs = undefined;
+    if (row.additionalDirs && typeof row.additionalDirs === 'string') {
+      try {
+        additionalDirs = JSON.parse(row.additionalDirs);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
+    let tags = undefined;
+    if (row.tags && typeof row.tags === 'string') {
+      try {
+        tags = JSON.parse(row.tags);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      description: row.description as string | undefined,
+      model: row.model as InstancePreset['model'],
+      planMode: row.planMode === 1,
+      verbose: row.verbose === 1,
+      agentFile: row.agentFile as string | undefined,
+      agents,
+      additionalDirs,
+      initialPrompt: row.initialPrompt as string | undefined,
+      category: row.category as string | undefined,
+      tags,
+      isGlobal: row.isGlobal === 1,
+      projectId: row.projectId as string | undefined,
+      createdAt: row.createdAt as number,
+      updatedAt: row.updatedAt as number,
     };
   }
 

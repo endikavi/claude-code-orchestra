@@ -17,7 +17,11 @@
     "messages": "mensajes",
     "copy": "Copiar",
     "expand": "Ver más",
-    "collapse": "Ver menos"
+    "collapse": "Ver menos",
+    "add": "Añadir",
+    "remove": "Eliminar",
+    "yes": "Sí",
+    "no": "No"
   },
   "titleBar": {
     "title": "Orchestra",
@@ -222,7 +226,24 @@
     "useNodeDefault": "Usar default del nodo",
     "shareWithCluster": "Compartir con el clúster",
     "dontShare": "Mantener privado",
-    "allowRemoteInstances": "Permitir instancias remotas"
+    "allowRemoteInstances": "Permitir instancias remotas",
+    "additionalDirs": "Directorios de Trabajo Adicionales",
+    "additionalDirsDesc": "Directorios extra a los que Claude puede acceder (--add-dir)",
+    "addDirectory": "Añadir directorio",
+    "customAgents": "Agentes Personalizados",
+    "agentDeliveryMethod": "Método de Entrega del Agente",
+    "deliverAsSkills": "Instalar como Skills (recomendado)",
+    "deliverViaFlag": "Pasar via flag --agents",
+    "noAgents": "No hay agentes personalizados configurados",
+    "addAgent": "Añadir agente",
+    "editAgent": "Editar agente",
+    "deleteAgent": "Eliminar agente",
+    "enableHooksIntegration": "Habilitar Integración con Dashboard",
+    "enableHooksIntegrationDescription": "Recibir notificaciones y rastrear actividad de las instancias de Claude en este proyecto",
+    "advancedOptions": "Opciones avanzadas",
+    "hookTemplate": "Plantilla de integración",
+    "hooksWillBeRemoved": "Advertencia: Deshabilitar esto eliminará los hooks del dashboard existentes del proyecto.",
+    "privateProjectNote": "Este proyecto no será visible para otros nodos del clúster"
   },
   "instance": {
     "newInstance": "Nueva Instancia de Claude",
@@ -249,7 +270,10 @@
       "interactiveDesc": "Modo terminal interactivo completo",
       "print": "Imprimir",
       "printDesc": "No interactivo, solo imprime el resultado"
-    }
+    },
+    "agentFile": "Instrucciones del Agente",
+    "autoDetectAgent": "Auto-detectar (AGENT.md si existe)",
+    "agentFileDesc": "Seleccionar archivo de instrucciones del agente para orquestación"
   },
   "emptyState": {
     "noProjectSelected": "Ningún proyecto seleccionado",
@@ -299,7 +323,8 @@
     "copy": "Copiar",
     "paste": "Pegar",
     "repaint": "Repintar",
-    "forceRepaint": "Forzar Repintado"
+    "forceRepaint": "Forzar Repintado",
+    "starting": "Iniciando Claude..."
   },
   "modeToggle": {
     "title": "Cambiar modo de Claude",
@@ -409,11 +434,24 @@
   },
   "structuredChat": {
     "placeholder": "Escribe un mensaje a Claude...",
+    "pendingPlaceholder": "Escribe tu primer mensaje para iniciar la conversación...",
     "disabledPlaceholder": "Esperando a Claude...",
     "hint": "Presiona Enter para enviar, Shift+Enter para nueva línea",
     "permissionRequired": "Permiso requerido",
     "accept": "Aceptar (Y)",
-    "reject": "Rechazar (N)"
+    "reject": "Rechazar (N)",
+    "waitingForOutput": "Esperando respuesta...",
+    "welcome": {
+      "title": "Inicia una Conversación",
+      "description": "Escribe tu primer mensaje abajo para comenzar a trabajar con Claude."
+    }
+  },
+  "permissionPrompt": {
+    "toolRequest": "Claude quiere usar {{tool}}",
+    "allow": "Permitir",
+    "deny": "Denegar",
+    "timeout": "La solicitud de permiso ha expirado",
+    "pending": "Esperando tu aprobación..."
   },
   "git": {
     "staged": "preparados",
@@ -602,5 +640,162 @@
       "pending": "Pendientes",
       "completed": "Completadas"
     }
+  },
+  "agent": {
+    "name": "Nombre del Agente",
+    "nameHint": "Identificador único (sin espacios)",
+    "nameRequired": "El nombre del agente es obligatorio",
+    "nameInvalid": "El nombre solo puede contener letras, números, guiones y guiones bajos",
+    "nameDuplicate": "Ya existe un agente con este nombre",
+    "description": "Descripción",
+    "descriptionPlaceholder": "Una breve descripción de lo que hace este agente",
+    "descriptionRequired": "La descripción es obligatoria",
+    "prompt": "Instrucciones/Prompt",
+    "promptPlaceholder": "Instrucciones para el agente...",
+    "promptRequired": "Las instrucciones/prompt son obligatorias",
+    "model": "Modelo (opcional)",
+    "useDefaultModel": "Usar modelo por defecto",
+    "tools": "Herramientas Permitidas",
+    "allToolsAllowed": "Sin restricciones - todas las herramientas permitidas",
+    "selectedTools": "{{count}} herramienta(s) seleccionada(s)"
+  },
+  "analytics": {
+    "title": "Analíticas de Uso",
+    "description": "Rastrea patrones de uso y costos de Claude",
+    "totalSessions": "Sesiones Totales",
+    "activeInstances": "Instancias Activas",
+    "sessionsToday": "Sesiones Hoy",
+    "totalCost": "Costo Total",
+    "toolUsage": "Uso de Herramientas",
+    "costBreakdown": "Desglose de Costos",
+    "noCostData": "No hay datos de costos disponibles",
+    "usageTrends": "Tendencias de Uso",
+    "byModel": "Por Modelo",
+    "byProject": "Por Proyecto",
+    "total": "Total",
+    "sessions": "Sesiones",
+    "toolCalls": "Usos de Herramientas",
+    "cost": "Costo",
+    "noToolUsage": "No hay datos de uso de herramientas disponibles",
+    "uses": "usos",
+    "success": "éxito"
+  },
+  "tabs": {
+    "splitTerminal": "Dividir terminal",
+    "close": "Cerrar",
+    "newInstance": "Nueva instancia",
+    "newInstancesTerminal": "Nuevas instancias: Vista terminal",
+    "newInstancesStructured": "Nuevas instancias: Vista estructurada"
+  },
+  "context": {
+    "title": "Contexto Compartido",
+    "refresh": "Actualizar",
+    "noProject": "Ningún proyecto seleccionado",
+    "noProjectDesc": "Selecciona un proyecto para ver el contexto compartido",
+    "noInstances": "No hay instancias activas compartiendo contexto",
+    "architecture": "Arquitectura",
+    "techStack": "Stack Tecnológico",
+    "empty": "Sin contexto compartido aún",
+    "emptyDesc": "El contexto aparecerá cuando las instancias compartan información sobre su trabajo",
+    "sections": {
+      "instances": "Instancias Activas",
+      "conventions": "Convenciones",
+      "warnings": "Advertencias",
+      "importantFiles": "Archivos Importantes"
+    },
+    "status": {
+      "implementing": "Implementando",
+      "exploring": "Explorando",
+      "testing": "Probando",
+      "reviewing": "Revisando",
+      "planning": "Planificando",
+      "waiting": "Esperando",
+      "idle": "Inactivo"
+    },
+    "time": {
+      "justNow": "ahora mismo",
+      "minsAgo": "hace {{m}}m",
+      "hoursAgo": "hace {{h}}h",
+      "daysAgo": "hace {{d}}d"
+    }
+  },
+  "preset": {
+    "title": "Plantillas de Instancia",
+    "selectPreset": "Cargar plantilla",
+    "noPreset": "Sin plantilla (config manual)",
+    "saveAsPreset": "Guardar como plantilla",
+    "createPreset": "Crear Plantilla",
+    "editPreset": "Editar Plantilla",
+    "deletePreset": "Eliminar Plantilla",
+    "duplicatePreset": "Duplicar",
+    "name": "Nombre de la Plantilla",
+    "namePlaceholder": "Mi Plantilla",
+    "nameRequired": "El nombre de la plantilla es obligatorio",
+    "description": "Descripcion",
+    "descriptionPlaceholder": "Breve descripcion de esta plantilla",
+    "category": "Categoria",
+    "tags": "Etiquetas",
+    "tagsPlaceholder": "Añadir etiquetas...",
+    "isGlobal": "Disponible en todos los proyectos",
+    "isGlobalDesc": "Las plantillas globales se pueden usar en cualquier proyecto",
+    "initialPrompt": "Prompt Inicial",
+    "initialPromptPlaceholder": "Ingresa el prompt inicial para enviar cuando inicie la instancia...",
+    "initialPromptDesc": "Prompt enviado automaticamente al iniciar la instancia",
+    "confirmDelete": "Estas seguro de que quieres eliminar esta plantilla?",
+    "noPresets": "No hay plantillas guardadas",
+    "globalPresets": "Plantillas Globales",
+    "projectPresets": "Plantillas del Proyecto",
+    "managePresets": "Gestionar plantillas",
+    "presetApplied": "Plantilla aplicada",
+    "presetSaved": "Plantilla guardada",
+    "presetDeleted": "Plantilla eliminada",
+    "presetDuplicated": "Plantilla duplicada",
+    "categories": {
+      "development": "Desarrollo",
+      "testing": "Pruebas",
+      "documentation": "Documentacion",
+      "devops": "DevOps",
+      "analysis": "Analisis",
+      "custom": "Personalizado"
+    }
+  },
+  "permissions": {
+    "title": "Reglas de Permisos",
+    "description": "Configura reglas de auto-aprobación para el uso de herramientas de Claude",
+    "enabled": "Habilitado",
+    "disabled": "Deshabilitado",
+    "allowed": "Permitido",
+    "denied": "Denegado",
+    "totalChecks": "Verificaciones Totales",
+    "rulesTab": "Reglas",
+    "logTab": "Registro de Actividad",
+    "addRule": "Añadir Regla",
+    "noRules": "No hay reglas de permisos configuradas",
+    "clearLog": "Limpiar registro",
+    "noLog": "No hay actividad registrada aún",
+    "tool": "Herramienta",
+    "path": "Ruta",
+    "usageCount": "Usado",
+    "disable": "Deshabilitar",
+    "enable": "Habilitar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "editRule": "Editar Regla",
+    "ruleName": "Nombre de la Regla",
+    "ruleNamePlaceholder": "ej., Permitir Read en src",
+    "ruleDescription": "Descripción",
+    "ruleDescriptionPlaceholder": "Descripción opcional",
+    "toolName": "Nombre de Herramienta",
+    "toolNameHelp": "Dejar vacío para coincidir con todas las herramientas",
+    "pathPattern": "Patrón de Ruta",
+    "pathPatternHelp": "Patrón glob opcional para rutas de archivos",
+    "decision": "Decisión",
+    "allow": "Permitir",
+    "deny": "Denegar",
+    "ask": "Preguntar",
+    "priority": "Prioridad",
+    "priorityHelp": "Las reglas de mayor prioridad se evalúan primero",
+    "enableRule": "Habilitar esta regla",
+    "confirmDeleteRule": "¿Estás seguro de que quieres eliminar esta regla?"
   }
 }

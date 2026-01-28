@@ -17,6 +17,7 @@ export interface InstanceListProps {
 }
 
 const STATUS_COLORS: Record<InstanceStatus, string> = {
+  pending: 'gray',
   starting: 'yellow',
   running: 'green',
   waiting_input: 'cyan',
@@ -29,6 +30,7 @@ const STATUS_COLORS: Record<InstanceStatus, string> = {
 };
 
 const STATUS_ICONS: Record<InstanceStatus, string> = {
+  pending: '~~~',
   starting: '...',
   running: '>>>',
   waiting_input: '...',

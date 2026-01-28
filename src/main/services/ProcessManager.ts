@@ -41,6 +41,22 @@ async function getFileLockManagerModule() {
   return fileLockManagerModule;
 }
 
+// Pending instance config (for deferred structured view flow)
+interface PendingInstanceConfig {
+  projectId: string;
+  model: ClaudeModel;
+  mode: InstanceMode;
+  planMode?: boolean;
+  verbose?: boolean;
+  skipPermissions?: boolean;
+  enableMcp?: boolean;
+  agentFile?: string;
+  agents?: import('@shared/types').CustomAgentsConfig;
+  additionalDirs?: string[];
+  useAgentsFlag?: boolean;
+  usePermissionPromptTool?: boolean;
+}
+
 export class ProcessManager extends EventEmitter {
   private instances: Map<string, ClaudeInstance> = new Map();
   private shellInstances: Map<string, ShellInstance> = new Map();
@@ -49,6 +65,7 @@ export class ProcessManager extends EventEmitter {
   private instanceOutputs: Map<string, InternalOutputBuffer> = new Map(); // instanceId -> output buffer
   private pendingSessionIds: Map<string, string> = new Map(); // instanceId -> sessionId (for race condition fix)
   private cleanupTimers: Map<string, NodeJS.Timeout> = new Map(); // instanceId -> cleanup timer
+  private pendingInstances: Map<string, PendingInstanceConfig> = new Map(); // instanceId -> config (for deferred flow)
   private dataStore: DataStore;
   private mainWindow: BrowserWindowType | null = null;
 
@@ -174,6 +191,11 @@ export class ProcessManager extends EventEmitter {
       pooledTerminal,
       agentFile,
       agents: config.agents || project.agents, // Custom agents from config or project
+      additionalDirs: config.additionalDirs ?? project.additionalDirs, // Additional directories from config or project
+      useAgentsFlag: project.agentDeliveryMethod === 'args', // Use --agents flag if project configured for args delivery
+      isHidden: config.isHidden,
+      ralphTaskId: config.ralphTaskId,
+      usePermissionPromptTool: config.usePermissionPromptTool, // Enable MCP permission prompt for structured view
     });
 
     this.setupInstanceListeners(instance);
@@ -227,6 +249,8 @@ export class ProcessManager extends EventEmitter {
       resumeSessionId: config.sessionId,
       agentFile,
       agents: project.agents, // Custom agents from project settings
+      additionalDirs: project.additionalDirs, // Additional directories from project
+      useAgentsFlag: project.agentDeliveryMethod === 'args', // Use --agents flag if project configured
     });
 
     this.setupInstanceListeners(instance);
@@ -240,6 +264,170 @@ export class ProcessManager extends EventEmitter {
     this.emit('instanceCreated', instance.id);
 
     return instance.toJSON();
+  }
+
+  /**
+   * Create a pending instance without starting the Claude process.
+   * Used for structured view deferred flow where user types the first message.
+   */
+  createPendingInstance(
+    config: Omit<
+      PendingInstanceConfig,
+      'enableMcp' | 'useAgentsFlag' | 'additionalDirs' | 'agents'
+    > & {
+      skipPermissions?: boolean;
+    }
+  ): ClaudeInstanceType {
+    // Get project from database
+    const project = this.dataStore.getProjectById(config.projectId);
+    if (!project) {
+      throw new Error(`Project with id ${config.projectId} not found`);
+    }
+
+    // Generate a unique instance ID
+    const instanceId = `pending-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    // Check for AGENT.md in project directory
+    let agentFile = config.agentFile;
+    if (!agentFile) {
+      const agentMdPath = path.join(project.path, 'AGENT.md');
+      if (fs.existsSync(agentMdPath)) {
+        agentFile = agentMdPath;
+      }
+    }
+
+    // Store the config for later activation
+    const pendingConfig: PendingInstanceConfig = {
+      projectId: config.projectId,
+      model: config.model,
+      mode: config.mode,
+      planMode: config.planMode,
+      verbose: config.verbose,
+      skipPermissions: project.skipPermissions
+        ? (config.skipPermissions ?? project.skipPermissions)
+        : false,
+      enableMcp: project.enableMcp,
+      agentFile,
+      agents: project.agents,
+      additionalDirs: project.additionalDirs,
+      useAgentsFlag: project.agentDeliveryMethod === 'args',
+      usePermissionPromptTool: config.usePermissionPromptTool,
+    };
+
+    this.pendingInstances.set(instanceId, pendingConfig);
+
+    // Initialize output buffer
+    this.initOutputBuffer(instanceId);
+
+    // Set default cluster permissions
+    this.dataStore.setInstanceClusterPermissions(instanceId, {
+      shareWithCluster: true,
+      allowRemoteInput: true,
+    });
+
+    // Create a placeholder instance object (not a real ClaudeInstance)
+    const pendingInstance: ClaudeInstanceType = {
+      id: instanceId,
+      projectId: config.projectId,
+      model: config.model,
+      mode: config.mode,
+      planMode: config.planMode,
+      status: 'pending',
+      createdAt: Date.now(),
+    };
+
+    // Notify web clients of state change
+    this.broadcastStateUpdate();
+    this.emit('instanceCreated', instanceId);
+
+    return pendingInstance;
+  }
+
+  /**
+   * Activate a pending instance by starting the Claude process with the given prompt.
+   * @param id The pending instance ID
+   * @param prompt The first user message to send to Claude
+   * @returns The activated instance
+   */
+  activatePendingInstance(id: string, prompt: string): ClaudeInstanceType {
+    const config = this.pendingInstances.get(id);
+    if (!config) {
+      throw new Error(`Pending instance with id ${id} not found`);
+    }
+
+    // Get project from database
+    const project = this.dataStore.getProjectById(config.projectId);
+    if (!project) {
+      throw new Error(`Project with id ${config.projectId} not found`);
+    }
+
+    // Create the actual ClaudeInstance with the prompt
+    const instance = new ClaudeInstance({
+      projectId: config.projectId,
+      projectPath: project.path,
+      model: config.model,
+      mode: config.mode,
+      prompt: prompt, // The first user message
+      skipPermissions: config.skipPermissions,
+      verbose: config.verbose,
+      enableMcp: config.enableMcp,
+      planMode: config.planMode,
+      agentFile: config.agentFile,
+      agents: config.agents,
+      additionalDirs: config.additionalDirs,
+      useAgentsFlag: config.useAgentsFlag,
+      usePermissionPromptTool: config.usePermissionPromptTool,
+    });
+
+    // Remove from pending
+    this.pendingInstances.delete(id);
+
+    // We need to use the same ID to maintain continuity
+    // The ClaudeInstance generates its own ID, so we need to swap it
+    // Actually, let's just create a new instance and transfer the data
+    this.setupInstanceListeners(instance);
+    this.instances.set(instance.id, instance);
+
+    // Transfer the output buffer from pending to real instance
+    const pendingBuffer = this.instanceOutputs.get(id);
+    if (pendingBuffer) {
+      this.instanceOutputs.set(instance.id, pendingBuffer);
+      this.instanceOutputs.delete(id);
+    }
+
+    // Transfer conversation mapping if exists
+    const conversationId = this.instanceConversations.get(id);
+    if (conversationId) {
+      this.instanceConversations.set(instance.id, conversationId);
+      this.instanceConversations.delete(id);
+    }
+
+    // Transfer cluster permissions
+    const oldPermissions = this.dataStore.getInstanceClusterPermissions(id);
+    this.dataStore.deleteInstanceClusterPermissions(id);
+    this.dataStore.setInstanceClusterPermissions(instance.id, oldPermissions);
+
+    // Start the instance
+    instance.start();
+
+    // Notify web clients of state change
+    this.broadcastStateUpdate();
+
+    return instance.toJSON();
+  }
+
+  /**
+   * Check if an instance is pending (not yet activated)
+   */
+  isPendingInstance(id: string): boolean {
+    return this.pendingInstances.has(id);
+  }
+
+  /**
+   * Get a pending instance config
+   */
+  getPendingInstanceConfig(id: string): PendingInstanceConfig | undefined {
+    return this.pendingInstances.get(id);
   }
 
   /**

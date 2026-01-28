@@ -37,9 +37,25 @@ declare global {
           projectId: string;
           model: ClaudeModel;
           mode: InstanceMode;
+          prompt?: string;
           planMode?: boolean;
+          verbose?: boolean;
+          skipPermissions?: boolean;
+          usePermissionPromptTool?: boolean;
         }) => Promise<ClaudeInstance>;
-        kill: (id: string) => Promise<void>;
+        // Create a pending instance (no Claude process yet) for structured view deferred flow
+        createPending: (config: {
+          projectId: string;
+          model: ClaudeModel;
+          mode: InstanceMode;
+          planMode?: boolean;
+          verbose?: boolean;
+          skipPermissions?: boolean;
+          usePermissionPromptTool?: boolean;
+        }) => Promise<ClaudeInstance & { conversationId?: string }>;
+        // Activate a pending instance with the first user message
+        activate: (id: string, prompt: string) => Promise<ClaudeInstance>;
+        kill: (id: string, force?: boolean) => Promise<void>;
         sendInput: (id: string, input: string) => Promise<void>;
         getAll: () => Promise<ClaudeInstance[]>;
         getByProject: (projectId: string) => Promise<ClaudeInstance[]>;

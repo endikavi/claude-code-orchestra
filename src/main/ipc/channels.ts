@@ -9,6 +9,8 @@ export const IPC_CHANNELS = {
 
   // Instance operations
   INSTANCE_CREATE: 'instance:create',
+  INSTANCE_CREATE_PENDING: 'instance:createPending', // Create instance without starting Claude process
+  INSTANCE_ACTIVATE: 'instance:activate', // Activate pending instance with first message
   INSTANCE_KILL: 'instance:kill',
   INSTANCE_SEND_INPUT: 'instance:sendInput',
   INSTANCE_SET_TITLE: 'instance:setTitle',
@@ -169,6 +171,10 @@ export const IPC_CHANNELS = {
   // Orchestration operations
   ORCHESTRATION_SETUP_AGENT_MD: 'orchestration:setupAgentMd',
 
+  // Agent discovery operations
+  AGENT_DISCOVER: 'agent:discover',
+  AGENT_VALIDATE_FILE: 'agent:validateFile',
+
   // Hook events (main -> renderer)
   HOOK_ACTIVITY: 'hook:activity', // Real-time activity tracking from hooks
 
@@ -187,6 +193,12 @@ export const IPC_CHANNELS = {
   PERMISSION_GET_LOG: 'permission:getLog',
   PERMISSION_GET_STATS: 'permission:getStats',
   PERMISSION_CLEAR_LOG: 'permission:clearLog',
+
+  // Permission Prompt operations (for --permission-prompt-tool support)
+  PERMISSION_PROMPT_REQUEST: 'permissionPrompt:request', // Event: main -> renderer (permission needed)
+  PERMISSION_PROMPT_RESPOND: 'permissionPrompt:respond', // Action: renderer -> main (user decision)
+  PERMISSION_PROMPT_CANCEL: 'permissionPrompt:cancel', // Action: renderer -> main (cancel request)
+  PERMISSION_PROMPT_TIMEOUT: 'permissionPrompt:timeout', // Event: main -> renderer (request timed out)
 
   // Metrics operations
   METRICS_GET_TOOL_USAGE: 'metrics:getToolUsage',
@@ -305,6 +317,16 @@ export const IPC_CHANNELS = {
   RALPH_TASK_PROCESS_ALL_STARTED: 'ralphTask:processAllStarted',
   RALPH_TASK_PROCESS_ALL_COMPLETED: 'ralphTask:processAllCompleted',
   RALPH_TASK_PROCESS_ALL_STOPPED: 'ralphTask:processAllStopped',
+
+  // Instance Preset operations
+  PRESET_CREATE: 'preset:create',
+  PRESET_UPDATE: 'preset:update',
+  PRESET_DELETE: 'preset:delete',
+  PRESET_GET_BY_ID: 'preset:getById',
+  PRESET_GET_BY_PROJECT: 'preset:getByProject',
+  PRESET_GET_GLOBAL: 'preset:getGlobal',
+  PRESET_GET_ALL: 'preset:getAll',
+  PRESET_DUPLICATE: 'preset:duplicate',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

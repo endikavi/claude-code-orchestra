@@ -79,8 +79,9 @@ export function MainContent() {
 
   const hasInstances = projectInstances.length > 0;
 
-  // View mode for instances - always terminal for interactive use
-  const effectiveViewMode = 'terminal';
+  // View mode for instances - use the instance's viewMode (set at creation time)
+  const selectedInstance = projectInstances.find((i) => i.id === selectedInstanceId);
+  const effectiveViewMode = selectedInstance?.viewMode ?? 'terminal';
 
   const isViewingHistory = viewingConversation !== null;
 

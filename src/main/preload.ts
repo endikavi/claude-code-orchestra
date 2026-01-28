@@ -75,6 +75,7 @@ import type {
   ProjectContextSummary,
   ContextUpdateEvent,
 } from '@shared/types/sharedContext';
+import type { InstancePreset, CreatePresetInput, UpdatePresetInput } from '@shared/types/presets';
 import type { IpcRendererEvent } from 'electron';
 
 // Expose protected methods to renderer
@@ -105,7 +106,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
       planMode?: boolean;
       verbose?: boolean;
       skipPermissions?: boolean;
+      usePermissionPromptTool?: boolean;
     }): Promise<ClaudeInstance> => ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_CREATE, config),
+
+    // Create a pending instance without starting Claude (for structured view deferred flow)
+    createPending: (config: {
+      projectId: string;
+      model: ClaudeModel;
+      mode: InstanceMode;
+      planMode?: boolean;
+      verbose?: boolean;
+      skipPermissions?: boolean;
+      usePermissionPromptTool?: boolean;
+    }): Promise<ClaudeInstance & { conversationId?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_CREATE_PENDING, config),
+
+    // Activate a pending instance with the first user message
+    activate: (id: string, prompt: string): Promise<ClaudeInstance> =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_ACTIVATE, id, prompt),
 
     kill: (id: string, force?: boolean): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_KILL, id, force),
@@ -683,6 +701,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATION_SETUP_AGENT_MD, projectPath),
   },
 
+  // Agent discovery operations
+  agent: {
+    discover: (
+      projectPath: string
+    ): Promise<Array<{ name: string; path: string; source: 'project' | 'global' }>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_DISCOVER, projectPath),
+    validateFile: (agentPath: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_VALIDATE_FILE, agentPath),
+  },
+
   // Skill operations
   skill: {
     getAvailable: (): Promise<Array<{ id: string; name: string; description: string }>> =>
@@ -726,6 +754,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     clearLog: (): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_CLEAR_LOG),
+  },
+
+  // Permission Prompt operations (for --permission-prompt-tool support in structured view)
+  permissionPrompt: {
+    // Listen for permission requests from Claude instances
+    onRequest: (
+      callback: (request: {
+        id: string;
+        instanceId: string;
+        toolName: string;
+        toolInput: Record<string, unknown>;
+        createdAt: number;
+      }) => void
+    ) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        request: {
+          id: string;
+          instanceId: string;
+          toolName: string;
+          toolInput: Record<string, unknown>;
+          createdAt: number;
+        }
+      ) => callback(request);
+      ipcRenderer.on(IPC_CHANNELS.PERMISSION_PROMPT_REQUEST, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.PERMISSION_PROMPT_REQUEST, listener);
+    },
+
+    // Listen for timeout events
+    onTimeout: (
+      callback: (request: {
+        id: string;
+        instanceId: string;
+        toolName: string;
+        toolInput: Record<string, unknown>;
+        createdAt: number;
+      }) => void
+    ) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        request: {
+          id: string;
+          instanceId: string;
+          toolName: string;
+          toolInput: Record<string, unknown>;
+          createdAt: number;
+        }
+      ) => callback(request);
+      ipcRenderer.on(IPC_CHANNELS.PERMISSION_PROMPT_TIMEOUT, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.PERMISSION_PROMPT_TIMEOUT, listener);
+    },
+
+    // Respond to a permission request (allow/deny)
+    respond: (
+      permissionId: string,
+      response: {
+        allowed: boolean;
+        updatedInput?: Record<string, unknown>;
+        message?: string;
+      }
+    ): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_PROMPT_RESPOND, permissionId, response),
+
+    // Cancel a permission request
+    cancel: (permissionId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PERMISSION_PROMPT_CANCEL, permissionId),
   },
 
   // Metrics operations
@@ -1229,6 +1323,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.removeListener(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL_STOPPED, listener);
     },
   },
+
+  // Instance Preset operations
+  preset: {
+    create: (data: CreatePresetInput): Promise<InstancePreset> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRESET_CREATE, data),
+
+    update: (id: string, updates: UpdatePresetInput): Promise<InstancePreset | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRESET_UPDATE, id, updates),
+
+    delete: (id: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRESET_DELETE, id),
+
+    getById: (id: string): Promise<InstancePreset | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRESET_GET_BY_ID, id),
+
+    getByProject: (projectId: string): Promise<InstancePreset[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRESET_GET_BY_PROJECT, projectId),
+
+    getGlobal: (): Promise<InstancePreset[]> => ipcRenderer.invoke(IPC_CHANNELS.PRESET_GET_GLOBAL),
+
+    getAll: (): Promise<InstancePreset[]> => ipcRenderer.invoke(IPC_CHANNELS.PRESET_GET_ALL),
+
+    duplicate: (id: string, newName: string): Promise<InstancePreset | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRESET_DUPLICATE, id, newName),
+  },
 });
 
 // Type declarations for renderer
@@ -1251,6 +1370,7 @@ declare global {
           planMode?: boolean;
           verbose?: boolean;
           skipPermissions?: boolean;
+          usePermissionPromptTool?: boolean;
         }) => Promise<ClaudeInstance>;
         kill: (id: string, force?: boolean) => Promise<void>;
         sendInput: (id: string, input: string) => Promise<void>;
@@ -1486,6 +1606,12 @@ declare global {
           projectPath: string
         ) => Promise<{ success: boolean; path?: string; error?: string }>;
       };
+      agent: {
+        discover: (
+          projectPath: string
+        ) => Promise<Array<{ name: string; path: string; source: 'project' | 'global' }>>;
+        validateFile: (agentPath: string) => Promise<boolean>;
+      };
       skill: {
         getAvailable: () => Promise<Array<{ id: string; name: string; description: string }>>;
         install: (
@@ -1512,6 +1638,35 @@ declare global {
         getLog: (options?: PermissionLogQueryOptions) => Promise<PermissionLogEntry[]>;
         getStats: () => Promise<PermissionStats>;
         clearLog: () => Promise<{ success: boolean }>;
+      };
+      permissionPrompt: {
+        onRequest: (
+          callback: (request: {
+            id: string;
+            instanceId: string;
+            toolName: string;
+            toolInput: Record<string, unknown>;
+            createdAt: number;
+          }) => void
+        ) => () => void;
+        onTimeout: (
+          callback: (request: {
+            id: string;
+            instanceId: string;
+            toolName: string;
+            toolInput: Record<string, unknown>;
+            createdAt: number;
+          }) => void
+        ) => () => void;
+        respond: (
+          permissionId: string,
+          response: {
+            allowed: boolean;
+            updatedInput?: Record<string, unknown>;
+            message?: string;
+          }
+        ) => Promise<{ success: boolean }>;
+        cancel: (permissionId: string) => Promise<{ success: boolean }>;
       };
       metrics: {
         getToolUsage: (options?: MetricsQueryOptions) => Promise<ToolUsageMetric[]>;
@@ -1722,6 +1877,16 @@ declare global {
         onProcessAllStarted: (callback: (projectId: string) => void) => () => void;
         onProcessAllCompleted: (callback: (projectId: string) => void) => () => void;
         onProcessAllStopped: (callback: (projectId: string) => void) => () => void;
+      };
+      preset: {
+        create: (data: CreatePresetInput) => Promise<InstancePreset>;
+        update: (id: string, updates: UpdatePresetInput) => Promise<InstancePreset | null>;
+        delete: (id: string) => Promise<{ success: boolean }>;
+        getById: (id: string) => Promise<InstancePreset | null>;
+        getByProject: (projectId: string) => Promise<InstancePreset[]>;
+        getGlobal: () => Promise<InstancePreset[]>;
+        getAll: () => Promise<InstancePreset[]>;
+        duplicate: (id: string, newName: string) => Promise<InstancePreset | null>;
       };
     };
   }

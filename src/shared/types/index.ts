@@ -1,5 +1,6 @@
 // Instance status types
 export type InstanceStatus =
+  | 'pending' // Instance created without Claude process (for deferred structured view flow)
   | 'starting'
   | 'running'
   | 'waiting_input'
@@ -50,6 +51,16 @@ export interface AvailableShell {
 // Import cluster permissions types
 import type { ProjectClusterPermissions } from './clusterPermissions';
 
+// Agent delivery method for custom agents
+export type AgentDeliveryMethod = 'skill' | 'args';
+
+// Discovered agent from filesystem
+export interface DiscoveredAgent {
+  name: string; // Display name (e.g., "AGENT.md", "review.agent.md")
+  path: string; // Full path to the agent file
+  source: 'project' | 'global'; // Whether from project or ~/.claude/agents/
+}
+
 // Project interface
 export interface Project {
   id: string;
@@ -64,6 +75,8 @@ export interface Project {
   autoReview?: boolean; // Auto-spawn review subagent on task completion (default: true)
   clusterPermissions?: ProjectClusterPermissions; // Cluster sharing and permission settings
   agents?: CustomAgentsConfig; // Custom agents available for this project (--agents)
+  additionalDirs?: string[]; // Additional working directories for --add-dir flag
+  agentDeliveryMethod?: AgentDeliveryMethod; // How to deliver agents: 'skill' (install) or 'args' (--agents flag)
   createdAt: number;
   updatedAt: number;
 }
@@ -88,6 +101,9 @@ export interface CustomAgent {
 // Map of agent name to agent definition
 export type CustomAgentsConfig = Record<string, CustomAgent>;
 
+// View mode for displaying instance output
+export type InstanceViewMode = 'terminal' | 'structured';
+
 // Claude instance interface
 export interface ClaudeInstance {
   id: string;
@@ -104,6 +120,7 @@ export interface ClaudeInstance {
   agents?: CustomAgentsConfig; // Custom agents injected via --agents parameter
   isHidden?: boolean; // Hidden instances don't show in main tabs (e.g., Ralph background tasks)
   ralphTaskId?: string; // Associated Ralph task ID if this is a Ralph loop instance
+  viewMode?: InstanceViewMode; // View mode for this instance: 'terminal' | 'structured'
 }
 
 // Stream JSON message types from Claude CLI

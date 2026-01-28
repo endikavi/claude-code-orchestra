@@ -1,11 +1,13 @@
 import { useState, useCallback, useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInstanceInput } from '../../hooks/useInstanceInput';
+import { useInstanceStore } from '../../stores/instanceStore';
 import type { InstanceStatus } from '@shared/types';
 
 interface ChatInputProps {
   instanceId: string;
   status: InstanceStatus;
+  initialPrompt?: string; // Optional initial prompt to pre-fill (from preset)
 }
 
 const MIN_ROWS = 1;
@@ -15,16 +17,20 @@ const MAX_ROWS = 6;
  * Determines if input should be enabled based on instance status
  */
 function isInputEnabled(status: InstanceStatus): boolean {
-  return status === 'running' || status === 'waiting_input';
+  // Enable for pending (first message activates the instance)
+  // Enable for running/waiting_input (normal interaction)
+  return status === 'pending' || status === 'running' || status === 'waiting_input';
 }
 
-export function ChatInput({ instanceId, status }: ChatInputProps) {
+export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps) {
   const { t } = useTranslation();
   const { send } = useInstanceInput(instanceId);
-  const [message, setMessage] = useState('');
+  const { activatePendingInstance } = useInstanceStore();
+  const [message, setMessage] = useState(initialPrompt || '');
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const isPending = status === 'pending';
   const enabled = isInputEnabled(status);
 
   // Auto-resize textarea based on content
@@ -50,13 +56,19 @@ export function ChatInput({ instanceId, status }: ChatInputProps) {
 
     setIsSending(true);
     try {
-      // Send message with carriage return to simulate pressing Enter in terminal
-      await send(message + '\r');
+      if (isPending) {
+        // First message: activate the pending instance with this prompt
+        await activatePendingInstance(instanceId, message.trim());
+      } else {
+        // Normal message: send to existing Claude process
+        // Send message with carriage return to simulate pressing Enter in terminal
+        await send(message + '\r');
+      }
       setMessage('');
     } finally {
       setIsSending(false);
     }
-  }, [message, enabled, isSending, send]);
+  }, [message, enabled, isSending, isPending, instanceId, activatePendingInstance, send]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -83,7 +95,11 @@ export function ChatInput({ instanceId, status }: ChatInputProps) {
           onKeyDown={handleKeyDown}
           disabled={!enabled || isSending}
           placeholder={
-            enabled ? t('structuredChat.placeholder') : t('structuredChat.disabledPlaceholder')
+            isPending
+              ? t('structuredChat.pendingPlaceholder')
+              : enabled
+                ? t('structuredChat.placeholder')
+                : t('structuredChat.disabledPlaceholder')
           }
           rows={1}
           className={`

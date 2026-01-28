@@ -15,6 +15,7 @@ export interface StatusBadgeConfig {
  * Status configuration for instance tabs (solid colors)
  */
 export const STATUS_TAB_CONFIG: Record<InstanceStatus, StatusTabConfig> = {
+  pending: { color: 'bg-gray-400', pulse: false, label: 'Pending' },
   starting: { color: 'bg-yellow-500', pulse: true, label: 'Starting' },
   running: { color: 'bg-green-500', pulse: true, label: 'Running' },
   waiting_input: { color: 'bg-cyan-500', pulse: false, label: 'Waiting for Input' },
@@ -30,6 +31,7 @@ export const STATUS_TAB_CONFIG: Record<InstanceStatus, StatusTabConfig> = {
  * Status configuration for badges (semi-transparent background)
  */
 export const STATUS_BADGE_CONFIG: Record<InstanceStatus, StatusBadgeConfig> = {
+  pending: { bg: 'bg-gray-400/20', text: 'text-gray-400' },
   starting: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
   running: { bg: 'bg-green-500/20', text: 'text-green-400' },
   waiting_input: { bg: 'bg-blue-500/20', text: 'text-blue-400' },

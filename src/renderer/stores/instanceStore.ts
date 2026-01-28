@@ -10,8 +10,14 @@ import type {
   Conversation,
   ConversationMessage,
   SplitTab,
+  InstanceViewMode,
 } from '@shared/types';
+import type {
+  PermissionPromptRequest,
+  PermissionPromptResponse,
+} from '@shared/types/permissionPrompt';
 import { useConversationStore } from './conversationStore';
+import { useUIStore } from './uiStore';
 
 // Buffer limits to prevent memory issues
 const MAX_MESSAGES_PER_INSTANCE = 1000;
@@ -94,6 +100,9 @@ interface InstanceState {
   splitTabs: Map<string, SplitTab>;
   activeSplitId: string | null;
 
+  // Permission prompt state (for structured view)
+  pendingPermissions: Map<string, PermissionPromptRequest>;
+
   // Actions
   createInstance: (config: {
     projectId: string;
@@ -103,7 +112,23 @@ interface InstanceState {
     planMode?: boolean;
     verbose?: boolean;
     skipPermissions?: boolean;
+    usePermissionPromptTool?: boolean;
   }) => Promise<ClaudeInstance>;
+
+  // Create a pending instance (no Claude process yet) for structured view deferred flow
+  createPendingInstance: (config: {
+    projectId: string;
+    model: ClaudeModel;
+    mode: InstanceMode;
+    planMode?: boolean;
+    verbose?: boolean;
+    skipPermissions?: boolean;
+    usePermissionPromptTool?: boolean;
+  }) => Promise<ClaudeInstance>;
+
+  // Activate a pending instance with the first user message
+  activatePendingInstance: (id: string, prompt: string) => Promise<ClaudeInstance>;
+
   resumeConversation: (conversation: Conversation) => Promise<ClaudeInstance>;
   killInstance: (id: string) => void;
   removeInstance: (id: string) => void;
@@ -121,6 +146,7 @@ interface InstanceState {
   // Internal actions for IPC events
   updateInstanceStatus: (id: string, status: InstanceStatus) => void;
   updateTerminalTitle: (id: string, title: string) => void;
+  updateInstanceViewMode: (id: string, viewMode: InstanceViewMode) => void;
   addInstanceOutput: (id: string, message: StreamMessage) => void;
   addRawOutput: (id: string, data: string) => void;
   setInstanceError: (id: string, error: string) => void;
@@ -168,6 +194,12 @@ interface InstanceState {
   selectSplit: (splitId: string | null) => void;
   getSplitForInstance: (instanceId: string) => SplitTab | undefined;
   getActiveSplit: () => SplitTab | undefined;
+
+  // Permission prompt actions
+  addPendingPermission: (request: PermissionPromptRequest) => void;
+  removePendingPermission: (permissionId: string) => void;
+  respondToPermission: (permissionId: string, response: PermissionPromptResponse) => Promise<void>;
+  getPendingPermissionForInstance: (instanceId: string) => PermissionPromptRequest | undefined;
 }
 
 export const useInstanceStore = create<InstanceState>((set, get) => ({
@@ -191,14 +223,21 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   splitTabs: new Map(),
   activeSplitId: null,
 
+  // Permission prompt initial state
+  pendingPermissions: new Map(),
+
   createInstance: async (config) => {
     set({ isLoading: true, error: null });
     try {
       const result = await window.electronAPI.instance.create(config);
       // Result includes instance data + conversationId
-      const { conversationId, ...instance } = result as {
+      const { conversationId, ...instanceData } = result as {
         conversationId?: string;
       } & ClaudeInstance;
+
+      // Assign viewMode from uiStore (new instances use the current default viewMode)
+      const currentViewMode = useUIStore.getState().viewMode as InstanceViewMode;
+      const instance: ClaudeInstance = { ...instanceData, viewMode: currentViewMode };
 
       // Check if this is a remote instance placeholder (id: 'pending')
       // Remote instances are created on another node and will appear via cluster state updates
@@ -260,6 +299,115 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
+  createPendingInstance: async (config) => {
+    set({ isLoading: true, error: null });
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (window.electronAPI.instance as any).createPending(config);
+      const { conversationId, ...instanceData } = result as {
+        conversationId?: string;
+      } & ClaudeInstance;
+
+      // Assign viewMode from uiStore
+      const currentViewMode = useUIStore.getState().viewMode as InstanceViewMode;
+      const instance: ClaudeInstance = { ...instanceData, viewMode: currentViewMode };
+
+      // Initialize output storage
+      const outputs = new Map(get().outputs);
+      outputs.set(instance.id, {
+        instanceId: instance.id,
+        messages: [],
+        rawOutput: '',
+        conversationId,
+      });
+
+      // Map instance to conversation if we have one
+      const instanceConversations = new Map(get().instanceConversations);
+      if (conversationId) {
+        instanceConversations.set(instance.id, conversationId);
+      }
+
+      set((state) => {
+        const exists = state.instances.some((i) => i.id === instance.id);
+
+        return {
+          instances: exists ? state.instances : [...state.instances, instance],
+          outputs,
+          instanceConversations,
+          selectedInstanceId: instance.id,
+          selectedShellId: null,
+          lastSelectionTime: Date.now(),
+          isLoading: false,
+        };
+      });
+
+      return instance;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to create pending instance',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  activatePendingInstance: async (id, prompt) => {
+    set({ isLoading: true, error: null });
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (window.electronAPI.instance as any).activate(id, prompt);
+      const instance: ClaudeInstance = result;
+
+      // Update the store: replace the pending instance with the activated one
+      set((state) => {
+        // Get the old output buffer
+        const outputs = new Map(state.outputs);
+        const oldOutput = outputs.get(id);
+
+        // Transfer to new ID if different
+        if (instance.id !== id) {
+          if (oldOutput) {
+            outputs.set(instance.id, { ...oldOutput, instanceId: instance.id });
+            outputs.delete(id);
+          }
+        }
+
+        // Update conversation mapping
+        const instanceConversations = new Map(state.instanceConversations);
+        const conversationId = instanceConversations.get(id);
+        if (conversationId && instance.id !== id) {
+          instanceConversations.set(instance.id, conversationId);
+          instanceConversations.delete(id);
+        }
+
+        // Replace pending instance with activated instance
+        const instances = state.instances.map((inst) =>
+          inst.id === id ? { ...instance, viewMode: inst.viewMode } : inst
+        );
+
+        // If the ID changed, we need to update selectedInstanceId too
+        const selectedInstanceId =
+          state.selectedInstanceId === id ? instance.id : state.selectedInstanceId;
+
+        return {
+          instances,
+          outputs,
+          instanceConversations,
+          selectedInstanceId,
+          isLoading: false,
+        };
+      });
+
+      return instance;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to activate instance',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
   resumeConversation: async (conversation) => {
     set({ isLoading: true, error: null });
     try {
@@ -271,12 +419,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const previousMessages = await window.electronAPI.conversation.getMessages(conversation.id);
 
       // Resume instance with --resume flag
-      const instance = await window.electronAPI.instance.resume({
+      const instanceData = await window.electronAPI.instance.resume({
         projectId: conversation.projectId,
         sessionId: conversation.sessionId,
         model: conversation.model,
         mode: conversation.mode,
       });
+
+      // Assign viewMode from uiStore (resumed instances use the current default viewMode)
+      const currentViewMode = useUIStore.getState().viewMode as InstanceViewMode;
+      const instance: ClaudeInstance = { ...instanceData, viewMode: currentViewMode };
 
       // Initialize output storage with previous messages
       const outputs = new Map(get().outputs);
@@ -603,6 +755,15 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
+  updateInstanceViewMode: (id, viewMode) => {
+    // Ignore updates for instances being removed
+    if (get().removingInstanceIds.has(id)) return;
+
+    set((state) => ({
+      instances: state.instances.map((inst) => (inst.id === id ? { ...inst, viewMode } : inst)),
+    }));
+  },
+
   addInstanceOutput: (id, message) => {
     // Ignore output for instances being removed
     if (get().removingInstanceIds.has(id)) return;
@@ -754,6 +915,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       addShellRawOutput,
       handleShellExit,
       updateActivity,
+      addPendingPermission,
+      removePendingPermission,
     } = get();
 
     // Check if electronAPI is available (not available in Vite dev mode)
@@ -774,6 +937,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     let unsubShellRawOutput: (() => void) | undefined;
     let unsubShellStatus: (() => void) | undefined;
     let unsubShellExit: (() => void) | undefined;
+    let unsubPermissionRequest: (() => void) | undefined;
+    let unsubPermissionTimeout: (() => void) | undefined;
 
     if (hasElectronAPI) {
       unsubOutput = window.electronAPI.instance.onOutput((id, message) => {
@@ -821,6 +986,20 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       unsubShellExit = window.electronAPI.shell.onExit((id, code) => {
         handleShellExit(id, code);
       });
+
+      // Permission prompt listeners (for structured view)
+      const permissionPromptApi = window.electronAPI?.permissionPrompt;
+      if (permissionPromptApi) {
+        unsubPermissionRequest = permissionPromptApi.onRequest((request) => {
+          console.log('[instanceStore] Permission request received:', request.id, request.toolName);
+          addPendingPermission(request);
+        });
+
+        unsubPermissionTimeout = permissionPromptApi.onTimeout((request) => {
+          console.log('[instanceStore] Permission request timed out:', request.id);
+          removePendingPermission(request.id);
+        });
+      }
     }
 
     // Listen for sync:state events from web socket (for web clients)
@@ -886,6 +1065,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       window.removeEventListener('sync:state', handleSyncState);
       window.removeEventListener('hook:activity', handleHookActivity);
       unsubActivity?.();
+      unsubPermissionRequest?.();
+      unsubPermissionTimeout?.();
     };
   },
 
@@ -1168,5 +1349,43 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   getActiveSplit: () => {
     const state = get();
     return state.activeSplitId ? state.splitTabs.get(state.activeSplitId) : undefined;
+  },
+
+  // ==================== Permission Prompt Actions ====================
+
+  addPendingPermission: (request) => {
+    set((state) => {
+      const pendingPermissions = new Map(state.pendingPermissions);
+      pendingPermissions.set(request.id, request);
+      return { pendingPermissions };
+    });
+  },
+
+  removePendingPermission: (permissionId) => {
+    set((state) => {
+      const pendingPermissions = new Map(state.pendingPermissions);
+      pendingPermissions.delete(permissionId);
+      return { pendingPermissions };
+    });
+  },
+
+  respondToPermission: async (permissionId, response) => {
+    try {
+      await window.electronAPI.permissionPrompt.respond(permissionId, response);
+      // Remove from pending after successful response
+      get().removePendingPermission(permissionId);
+    } catch (error) {
+      console.error('[instanceStore] Failed to respond to permission:', error);
+    }
+  },
+
+  getPendingPermissionForInstance: (instanceId) => {
+    const state = get();
+    for (const permission of state.pendingPermissions.values()) {
+      if (permission.instanceId === instanceId) {
+        return permission;
+      }
+    }
+    return undefined;
   },
 }));
