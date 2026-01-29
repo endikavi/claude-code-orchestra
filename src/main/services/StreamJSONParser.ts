@@ -59,24 +59,115 @@ export class StreamJSONParser extends EventEmitter {
   }
 
   /**
-   * Process the buffer and extract complete JSON lines
+   * Process the buffer and extract complete JSON objects
+   * Claude CLI outputs JSON objects separated by newlines, but node-pty may fragment them
    */
   private processBuffer(): void {
-    const lines = this.buffer.split('\n');
+    // Clean ANSI codes and carriage returns from buffer
+    // eslint-disable-next-line no-control-regex
+    this.buffer = this.buffer.replace(
+      /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]|\r/g,
+      ''
+    );
 
-    // Keep the last incomplete line in the buffer
-    this.buffer = lines.pop() || '';
+    // Process complete JSON objects
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      // Find the start of a JSON object
+      const jsonStart = this.buffer.indexOf('{"type":');
+      if (jsonStart === -1) {
+        // No JSON object found, but check for partial at end
+        const partialStart = this.buffer.lastIndexOf('{');
+        if (partialStart !== -1 && partialStart > this.buffer.length - 20) {
+          // Keep potential partial JSON at end
+          this.buffer = this.buffer.slice(partialStart);
+        } else {
+          this.buffer = '';
+        }
+        return;
+      }
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
+      // Remove garbage before the JSON
+      if (jsonStart > 0) {
+        this.buffer = this.buffer.slice(jsonStart);
+      }
+
+      // Find the end of this JSON object by looking for the next object or end of buffer
+      // Look for pattern: }{"type": or }\n{"type": which marks object boundaries
+      let jsonEnd = -1;
+      const nextObjPatterns = ['}{"type":', '}\n{"type":'];
+
+      for (const pattern of nextObjPatterns) {
+        const idx = this.buffer.indexOf(pattern, 1);
+        if (idx !== -1 && (jsonEnd === -1 || idx < jsonEnd)) {
+          jsonEnd = idx;
+        }
+      }
+
+      // Also check for newline followed by { as potential boundary
+      const newlineIdx = this.buffer.indexOf('\n{', 1);
+      if (newlineIdx !== -1 && (jsonEnd === -1 || newlineIdx < jsonEnd)) {
+        jsonEnd = newlineIdx;
+      }
+
+      // If no next object found, check if buffer ends with complete JSON
+      if (jsonEnd === -1) {
+        // Check if last char is } followed by newline or end
+        const lastBrace = this.buffer.lastIndexOf('}');
+        if (lastBrace !== -1) {
+          const afterBrace = this.buffer.slice(lastBrace + 1).trim();
+          if (afterBrace === '' || afterBrace === '\n') {
+            jsonEnd = lastBrace;
+          }
+        }
+
+        if (jsonEnd === -1) {
+          // Incomplete JSON, wait for more data
+          return;
+        }
+      }
+
+      // Extract the JSON string
+      let jsonStr = this.buffer.slice(0, jsonEnd + 1).trim();
+      this.buffer = this.buffer.slice(jsonEnd + 1);
+
+      if (!jsonStr) continue;
+
+      // Clean newlines and control characters from the extracted JSON
+      // JSON strings should have \n escaped as \\n, so raw newlines are from terminal wrapping
+      // eslint-disable-next-line no-control-regex
+      jsonStr = jsonStr.replace(/[\x00-\x1f]/g, (char) => {
+        // Keep only valid JSON whitespace, remove other control chars
+        if (char === '\t') return '\\t';
+        if (char === '\n') return ''; // Remove newlines added by terminal
+        if (char === '\r') return '';
+        return '';
+      });
 
       try {
-        const message = JSON.parse(trimmed) as StreamMessage;
+        const message = JSON.parse(jsonStr) as StreamMessage;
         this.handleMessage(message);
-      } catch {
-        // Not valid JSON, emit as raw output
-        this.emit('raw', trimmed);
+      } catch (e) {
+        // Log parsing failures with hex dump around error position
+        const err = e as SyntaxError;
+        const posMatch = err.message.match(/position (\d+)/);
+        if (posMatch) {
+          const pos = parseInt(posMatch[1], 10);
+          const start = Math.max(0, pos - 10);
+          const end = Math.min(jsonStr.length, pos + 10);
+          const slice = jsonStr.slice(start, end);
+          const hexDump = Array.from(slice)
+            .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
+            .join(' ');
+          console.log(
+            `[StreamJSONParser] Failed at pos ${pos}/${jsonStr.length}: hex=[${hexDump}] text=[${slice}]`
+          );
+        } else {
+          console.log(
+            `[StreamJSONParser] Failed to parse (${jsonStr.length} bytes): ${err.message}`
+          );
+        }
+        this.emit('raw', jsonStr);
       }
     }
   }
@@ -501,11 +592,17 @@ export class StreamJSONParser extends EventEmitter {
    * Flush any remaining buffer content
    */
   flush(): void {
+    // Process any remaining complete JSON objects in the buffer
+    this.processBuffer();
+
+    // If there's still content, try to parse it
     if (this.buffer.trim()) {
+      console.log(`[StreamJSONParser] Flush: remaining buffer ${this.buffer.length} bytes`);
       try {
         const message = JSON.parse(this.buffer.trim()) as StreamMessage;
         this.handleMessage(message);
-      } catch {
+      } catch (e) {
+        console.log(`[StreamJSONParser] Flush parse failed: ${(e as Error).message}`);
         this.emit('raw', this.buffer.trim());
       }
     }

@@ -78,6 +78,7 @@ declare global {
           sessionId: string;
           model: ClaudeModel;
           mode: InstanceMode;
+          prompt?: string; // Optional prompt to send when resuming
         }) => Promise<ClaudeInstance>;
       };
       config: {

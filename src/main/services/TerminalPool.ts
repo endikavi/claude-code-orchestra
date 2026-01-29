@@ -221,9 +221,10 @@ export class TerminalPool extends EventEmitter {
     const id = randomUUID();
 
     try {
+      // Use very large terminal width to prevent line wrapping that corrupts JSON output
       const ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
-        cols: 120,
+        cols: 32767,
         rows: 30,
         // Don't set cwd - we'll cd when the terminal is acquired
         env: {

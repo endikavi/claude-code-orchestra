@@ -130,6 +130,8 @@ interface InstanceState {
   activatePendingInstance: (id: string, prompt: string) => Promise<ClaudeInstance>;
 
   resumeConversation: (conversation: Conversation) => Promise<ClaudeInstance>;
+  // Resume a completed instance with a new prompt (for structured view continuation)
+  resumeCompletedInstance: (instanceId: string, prompt: string) => Promise<ClaudeInstance>;
   killInstance: (id: string) => void;
   removeInstance: (id: string) => void;
   sendInput: (id: string, input: string) => Promise<void>;
@@ -361,16 +363,31 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       // Update the store: replace the pending instance with the activated one
       set((state) => {
-        // Get the old output buffer
+        // Get the old output buffer (from pending instance)
         const outputs = new Map(state.outputs);
         const oldOutput = outputs.get(id);
+        // Check if messages already arrived with the new ID (race condition)
+        const existingNewOutput = outputs.get(instance.id);
 
-        // Transfer to new ID if different
+        // Transfer/merge to new ID if different
         if (instance.id !== id) {
-          if (oldOutput) {
-            outputs.set(instance.id, { ...oldOutput, instanceId: instance.id });
-            outputs.delete(id);
-          }
+          // Merge old buffer with any messages that already arrived for the new ID
+          const mergedMessages = [
+            ...(oldOutput?.messages || []),
+            ...(existingNewOutput?.messages || []),
+          ];
+          const mergedRawOutput =
+            (oldOutput?.rawOutput || '') + (existingNewOutput?.rawOutput || '');
+
+          console.log(`[instanceStore] Merged messages count: ${mergedMessages.length}`);
+
+          outputs.set(instance.id, {
+            instanceId: instance.id,
+            messages: mergedMessages,
+            rawOutput: mergedRawOutput,
+            conversationId: oldOutput?.conversationId || existingNewOutput?.conversationId,
+          });
+          outputs.delete(id);
         }
 
         // Update conversation mapping
@@ -483,6 +500,74 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to resume conversation',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  resumeCompletedInstance: async (instanceId, prompt) => {
+    const state = get();
+    const instance = state.instances.find((i) => i.id === instanceId);
+
+    if (!instance) {
+      throw new Error('Instance not found');
+    }
+
+    if (!instance.sessionId) {
+      throw new Error('Cannot resume instance without sessionId');
+    }
+
+    set({ isLoading: true, error: null });
+    try {
+      // Get existing output to preserve messages
+      const existingOutput = state.outputs.get(instanceId);
+
+      // Resume instance with the new prompt
+      const newInstanceData = await window.electronAPI.instance.resume({
+        projectId: instance.projectId,
+        sessionId: instance.sessionId,
+        model: instance.model,
+        mode: instance.mode,
+        prompt,
+      });
+
+      // Assign viewMode from current instance
+      const newInstance: ClaudeInstance = {
+        ...newInstanceData,
+        viewMode: instance.viewMode,
+        sessionId: instance.sessionId, // Preserve session ID
+      };
+
+      // Initialize output storage with existing messages
+      const outputs = new Map(state.outputs);
+      outputs.set(newInstance.id, {
+        instanceId: newInstance.id,
+        messages: existingOutput?.messages || [],
+        rawOutput: '',
+        conversationId: existingOutput?.conversationId,
+      });
+
+      // Copy conversation mapping
+      const instanceConversations = new Map(state.instanceConversations);
+      const conversationId = state.instanceConversations.get(instanceId);
+      if (conversationId) {
+        instanceConversations.set(newInstance.id, conversationId);
+      }
+
+      set((s) => ({
+        // Replace old instance with new one
+        instances: s.instances.map((i) => (i.id === instanceId ? newInstance : i)),
+        outputs,
+        instanceConversations,
+        selectedInstanceId: newInstance.id,
+        isLoading: false,
+      }));
+
+      return newInstance;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to resume instance',
         isLoading: false,
       });
       throw error;
@@ -655,18 +740,27 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Apply pending statuses to server instances before merging
     // This handles the race condition where status events arrive before sync
     const pendingStatuses = new Map(currentState.pendingStatuses);
+
+    // Build a map of local instances to preserve client-only properties (like viewMode)
+    const localInstanceMap = new Map(currentState.instances.map((i) => [i.id, i]));
+
     const serverInstancesWithPendingStatus = filteredServerInstances.map((inst) => {
       const pendingStatus = pendingStatuses.get(inst.id);
+      const localInstance = localInstanceMap.get(inst.id);
+
+      // Preserve viewMode from local instance (server doesn't have this client-only property)
+      const preservedViewMode = localInstance?.viewMode;
+
       if (pendingStatus) {
         pendingStatuses.delete(inst.id);
-        return { ...inst, status: pendingStatus };
+        return { ...inst, status: pendingStatus, viewMode: preservedViewMode };
       }
-      return inst;
+      return { ...inst, viewMode: preservedViewMode };
     });
 
     // Merge: server instances (excluding removed) + preserved local instances
     const mergedInstances = [
-      ...serverInstancesWithPendingStatus, // All instances from server (excluding those being removed)
+      ...serverInstancesWithPendingStatus, // All instances from server (with preserved viewMode)
       ...preservedLocalInstances, // Local terminal instances not in server + recently created
     ];
 
@@ -794,6 +888,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       messages = messages.slice(-MAX_MESSAGES_PER_INSTANCE);
     }
 
+    // DEBUG: Log message count
+    console.log(`[instanceStore] Buffer now has ${messages.length} messages for ${id}`);
+
     outputs.set(id, {
       ...existing,
       messages,
@@ -875,6 +972,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   handleSessionId: (instanceId, sessionId) => {
     // Ignore for instances being removed
     if (get().removingInstanceIds.has(instanceId)) return;
+
+    // Update instance with sessionId for resume capability
+    set((state) => ({
+      instances: state.instances.map((inst) =>
+        inst.id === instanceId ? { ...inst, sessionId } : inst
+      ),
+    }));
 
     const conversationId = get().instanceConversations.get(instanceId);
     if (conversationId) {

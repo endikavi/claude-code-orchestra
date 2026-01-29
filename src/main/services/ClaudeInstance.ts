@@ -377,10 +377,11 @@ export class ClaudeInstance extends EventEmitter {
   private _sessionId?: string;
   private projectPath: string;
   private _hasExited: boolean = false; // Flag to prevent race conditions on resize
+  private _receivedResult: boolean = false; // Flag to detect shell prompt after result
   private idleTimer: NodeJS.Timeout | null = null;
   private pooledTerminal?: PooledTerminal; // Pre-spawned terminal from pool
   private pendingTimers: Set<NodeJS.Timeout> = new Set(); // Track pending timeouts for cleanup
-  private _dimensions: { cols: number; rows: number } = { cols: 120, rows: 30 }; // Track current dimensions for repaint
+  private _dimensions: { cols: number; rows: number } = { cols: 32767, rows: 30 }; // Track current dimensions for repaint
 
   // Time in ms without output before considering Claude is waiting for input
   private static readonly IDLE_TIMEOUT = 2000;
@@ -442,6 +443,11 @@ export class ClaudeInstance extends EventEmitter {
 
   private setupParserListeners(): void {
     this.parser.on('message', (message: StreamMessage) => {
+      // Track when we receive a result message (Claude finished processing)
+      if (message.type === 'result') {
+        this._receivedResult = true;
+      }
+
       // Capture session_id from system message (only works in stream-json mode)
       if (message.type === 'system' && message.session_id) {
         this._sessionId = message.session_id;
@@ -1004,9 +1010,12 @@ export class ClaudeInstance extends EventEmitter {
         envVars.ORCHESTRA_MCP_URL = `${apiUrl}/mcp`;
       }
 
+      // Use a very large terminal width to prevent node-pty from wrapping long lines
+      // This is critical for stream-json mode where JSON output must not be corrupted
+      // by line wrapping that can insert extra characters
       this.ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
-        cols: 120,
+        cols: 32767, // Max value to prevent line wrapping corruption in JSON output
         rows: 30,
         cwd: this.projectPath,
         env: envVars,
@@ -1019,20 +1028,8 @@ export class ClaudeInstance extends EventEmitter {
       this.setupDataHandler(this.ptyProcess);
       this.setupExitHandler(this.ptyProcess);
 
-      // For stream-json mode, send the initial prompt via stdin after a delay
-      // This allows Claude to initialize before receiving input
-      // Format: {"type":"user","message":{"role":"user","content":"<prompt>"}}
-      if (this.mode === 'stream-json' && this.prompt) {
-        const initialPrompt = this.prompt; // Capture for closure
-        const promptTimer = setTimeout(() => {
-          this.pendingTimers.delete(promptTimer);
-          if (this.ptyProcess && !this._hasExited) {
-            // Send prompt in JSON format for stream-json input mode
-            this.sendJsonMessage(initialPrompt);
-          }
-        }, 1500); // Increased delay to ensure Claude is ready
-        this.pendingTimers.add(promptTimer);
-      }
+      // Note: For stream-json mode, the initial prompt is passed as a CLI argument to -p
+      // Subsequent messages are sent via stdin in JSON format using sendJsonMessage()
     } catch (error) {
       this._status = 'error';
       this._error = error instanceof Error ? error.message : 'Failed to start process';
@@ -1139,18 +1136,8 @@ export class ClaudeInstance extends EventEmitter {
       }
 
       // Send the single combined command
+      // Note: For stream-json mode, the initial prompt is included in the command args
       pty.write(fullCommand + '\r');
-
-      // Send prompt if provided (after a delay for Claude to start)
-      if (this.mode === 'stream-json' && this.prompt) {
-        const promptTimer = setTimeout(() => {
-          this.pendingTimers.delete(promptTimer);
-          if (!this._hasExited && this.ptyProcess) {
-            pty.write(this.prompt + '\r');
-          }
-        }, 2000);
-        this.pendingTimers.add(promptTimer);
-      }
     } catch (error) {
       console.error(`[ClaudeInstance] Failed to start with pooled terminal:`, error);
       this._status = 'error';
@@ -1170,7 +1157,9 @@ export class ClaudeInstance extends EventEmitter {
     apiUrl: string,
     shellType: 'powershell' | 'cmd' | 'unix' | 'gitbash'
   ): string {
-    const argsStr = args.join(' ');
+    // Escape each argument that contains spaces or special characters
+    const escapedArgs = args.map((arg) => this.escapeShellArg(arg, shellType));
+    const argsStr = escapedArgs.join(' ');
 
     // Build environment variables
     const envVars: Record<string, string> = {
@@ -1249,6 +1238,23 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
+   * Escape a shell argument (for use in pooled terminal commands)
+   * Only escapes arguments that need escaping (contain spaces, quotes, etc.)
+   */
+  private escapeShellArg(
+    arg: string,
+    shellType: 'powershell' | 'cmd' | 'unix' | 'gitbash'
+  ): string {
+    // If the arg doesn't contain special characters, return as-is
+    if (!/[\s'"\\$`!]/.test(arg)) {
+      return arg;
+    }
+
+    // Otherwise, use the same escaping as paths
+    return this.escapeShellPath(arg, shellType);
+  }
+
+  /**
    * Build Claude CLI arguments
    */
   private buildArgs(): string[] {
@@ -1292,6 +1298,12 @@ export class ClaudeInstance extends EventEmitter {
         args.push('--permission-prompt-tool', 'mcp__orchestra__permission_prompt');
       }
 
+      // Add prompt as positional argument for resume with new message
+      // Format: claude -r "session-id" "new query"
+      if (this.prompt) {
+        args.push(this.prompt);
+      }
+
       return args;
     }
 
@@ -1304,11 +1316,10 @@ export class ClaudeInstance extends EventEmitter {
         args.push(this.prompt);
       }
     } else if (this.mode === 'stream-json') {
-      // stream-json mode: use -p with --input-format stream-json for ongoing JSON conversations
-      // This allows sending multiple JSON messages via stdin without the terminal UI
+      // stream-json mode: use -p with the prompt as argument
+      // Additional messages are sent via stdin in JSON format (--input-format stream-json)
       args.push('-p');
       args.push('--input-format', 'stream-json');
-      // Note: prompt will be sent via stdin in JSON format after process starts
     }
 
     // Always use stream-json output format to capture session_id and structured data
@@ -1348,6 +1359,13 @@ export class ClaudeInstance extends EventEmitter {
     // This routes permission prompts through the MCP tool instead of terminal
     if (this.usePermissionPromptTool && this.enableMcp) {
       args.push('--permission-prompt-tool', 'mcp__orchestra__permission_prompt');
+    }
+
+    // For stream-json mode, add the prompt as the final argument
+    // This is required because -p expects the prompt as the last argument
+    // Format: claude -p "prompt" --input-format stream-json --output-format stream-json
+    if (this.mode === 'stream-json' && this.prompt) {
+      args.push(this.prompt);
     }
 
     return args;
@@ -1458,8 +1476,32 @@ export class ClaudeInstance extends EventEmitter {
    */
   private setupDataHandler(ptyProcess: pty.IPty): void {
     ptyProcess.onData((data: string) => {
+      // DEBUG: Log raw data chunks
+      const preview = data.length > 100 ? data.substring(0, 100) + '...' : data;
+      console.log(
+        `[ClaudeInstance] onData received ${data.length} bytes: ${preview.replace(/\n/g, '\\n')}`
+      );
+
       // Emit raw data for terminal view
       this.emit('rawOutput', data);
+
+      // Detect shell prompt after result message (means Claude CLI has exited)
+      // This handles pooled terminals where the PTY doesn't exit when Claude finishes
+      if (this._receivedResult && this._status !== 'completed' && this._status !== 'error') {
+        // Check for shell prompt patterns (Windows cmd/powershell, Unix bash/zsh)
+        // Windows: C:\path\to\project> or PS C:\path>
+        // Unix: user@host:~/path$ or ~/path %
+        const shellPromptPattern = /[>$%#]\s*$/;
+        const windowsPromptPattern = /[A-Za-z]:\\[^>]*>\s*$/;
+        // eslint-disable-next-line no-control-regex
+        const cleanData = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, ''); // Strip ANSI codes
+
+        if (shellPromptPattern.test(cleanData) || windowsPromptPattern.test(cleanData)) {
+          console.log('[ClaudeInstance] Shell prompt detected after result - marking as completed');
+          this._status = 'completed';
+          this.emit('status', this._status);
+        }
+      }
 
       // Always parse JSON to capture session_id and structured messages
       // This is needed for both stream-json and interactive modes since we

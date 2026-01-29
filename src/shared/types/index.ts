@@ -121,6 +121,7 @@ export interface ClaudeInstance {
   isHidden?: boolean; // Hidden instances don't show in main tabs (e.g., Ralph background tasks)
   ralphTaskId?: string; // Associated Ralph task ID if this is a Ralph loop instance
   viewMode?: InstanceViewMode; // View mode for this instance: 'terminal' | 'structured'
+  sessionId?: string; // Session ID from Claude CLI, used for resuming conversations
 }
 
 // Stream JSON message types from Claude CLI

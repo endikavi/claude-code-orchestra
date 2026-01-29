@@ -158,8 +158,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
         ...(projectAllowsSkipPermissions && skipPermissions ? { skipPermissions: true } : {}),
         // Pass selected agent file if not auto-detect
         ...(selectedAgentFile ? { agentFile: selectedAgentFile } : {}),
-        // Enable MCP permission prompt tool for structured view
-        ...(isStructuredView ? { usePermissionPromptTool: true } : {}),
+        // Note: usePermissionPromptTool disabled - MCP tool not yet implemented
       };
 
       let instance;

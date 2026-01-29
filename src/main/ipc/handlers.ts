@@ -421,10 +421,11 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         sessionId: string;
         model: ClaudeModel;
         mode: InstanceMode;
+        prompt?: string; // Optional prompt to send when resuming
       }
     ) => {
       const validated = validators.instanceResume(config);
-      return processManager.resumeInstance(validated);
+      return processManager.resumeInstance({ ...validated, prompt: config.prompt });
     }
   );
 

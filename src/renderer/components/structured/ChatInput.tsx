@@ -16,22 +16,35 @@ const MAX_ROWS = 6;
 /**
  * Determines if input should be enabled based on instance status
  */
-function isInputEnabled(status: InstanceStatus): boolean {
+function isInputEnabled(status: InstanceStatus, hasSessionId: boolean): boolean {
   // Enable for pending (first message activates the instance)
   // Enable for running/waiting_input (normal interaction)
-  return status === 'pending' || status === 'running' || status === 'waiting_input';
+  // Enable for completed if we have a sessionId (can resume the conversation)
+  if (status === 'pending' || status === 'running' || status === 'waiting_input') {
+    return true;
+  }
+  // Allow resuming completed instances that have a session
+  if (status === 'completed' && hasSessionId) {
+    return true;
+  }
+  return false;
 }
 
 export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps) {
   const { t } = useTranslation();
   const { sendJson } = useInstanceInput(instanceId);
-  const { activatePendingInstance } = useInstanceStore();
+  const { activatePendingInstance, resumeCompletedInstance, instances } = useInstanceStore();
   const [message, setMessage] = useState(initialPrompt || '');
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Get current instance to check for sessionId
+  const instance = instances.find((i) => i.id === instanceId);
+  const hasSessionId = Boolean(instance?.sessionId);
+
   const isPending = status === 'pending';
-  const enabled = isInputEnabled(status);
+  const isCompleted = status === 'completed';
+  const enabled = isInputEnabled(status, hasSessionId);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -59,6 +72,9 @@ export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps)
       if (isPending) {
         // First message: activate the pending instance with this prompt
         await activatePendingInstance(instanceId, message.trim());
+      } else if (isCompleted && hasSessionId) {
+        // Resume completed instance with new message
+        await resumeCompletedInstance(instanceId, message.trim());
       } else {
         // Send message as JSON for stream-json mode (structured view uses non-interactive Claude)
         await sendJson(message.trim());
@@ -67,7 +83,18 @@ export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps)
     } finally {
       setIsSending(false);
     }
-  }, [message, enabled, isSending, isPending, instanceId, activatePendingInstance, sendJson]);
+  }, [
+    message,
+    enabled,
+    isSending,
+    isPending,
+    isCompleted,
+    hasSessionId,
+    instanceId,
+    activatePendingInstance,
+    resumeCompletedInstance,
+    sendJson,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {

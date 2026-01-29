@@ -491,6 +491,7 @@ export const webAPI = {
       sessionId: string;
       model: ClaudeModel;
       mode: InstanceMode;
+      prompt?: string;
     }): Promise<ClaudeInstance> => {
       const response = await apiFetch<{
         success: boolean;

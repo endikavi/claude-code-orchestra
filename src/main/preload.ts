@@ -229,6 +229,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       sessionId: string;
       model: ClaudeModel;
       mode: InstanceMode;
+      prompt?: string;
     }): Promise<ClaudeInstance> => ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_RESUME, config),
   },
 
@@ -1387,6 +1388,7 @@ declare global {
           sessionId: string;
           model: ClaudeModel;
           mode: InstanceMode;
+          prompt?: string;
         }) => Promise<ClaudeInstance>;
         onOutput: (callback: (instanceId: string, data: StreamMessage) => void) => () => void;
         onStatus: (callback: (instanceId: string, status: InstanceStatus) => void) => () => void;

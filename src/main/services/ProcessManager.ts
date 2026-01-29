@@ -225,6 +225,7 @@ export class ProcessManager extends EventEmitter {
     sessionId: string;
     model: ClaudeModel;
     mode: InstanceMode;
+    prompt?: string; // Optional prompt to send when resuming
   }): ClaudeInstanceType {
     // Get project from database
     const project = this.dataStore.getProjectById(config.projectId);
@@ -232,7 +233,7 @@ export class ProcessManager extends EventEmitter {
       throw new Error(`Project with id ${config.projectId} not found`);
     }
 
-    // Check for AGENT.md in project directory (orchestration instructions)
+    // Check for AGENT.MD in project directory (orchestration instructions)
     let agentFile: string | undefined;
     const agentMdPath = path.join(project.path, 'AGENT.md');
     if (fs.existsSync(agentMdPath)) {
@@ -247,6 +248,7 @@ export class ProcessManager extends EventEmitter {
       skipPermissions: project.skipPermissions,
       enableMcp: project.enableMcp,
       resumeSessionId: config.sessionId,
+      prompt: config.prompt, // Pass prompt to use with -r session "prompt"
       agentFile,
       agents: project.agents, // Custom agents from project settings
       additionalDirs: project.additionalDirs, // Additional directories from project

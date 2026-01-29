@@ -94,10 +94,31 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
           </div>
         )}
 
-        {/* Messages */}
-        {output.messages.map((message, index) => (
-          <MessageCard key={index} message={message} />
-        ))}
+        {/* Messages - filter out user messages that only contain tool_results */}
+        {output.messages
+          .filter((message) => {
+            // Keep all non-user messages
+            if (message.type !== 'user') return true;
+            // Filter out user messages that only contain tool_result content
+            // These are automatic responses from tool executions, not actual user input
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const content = message.message?.content as any;
+            if (!content) return false;
+            // If content is a string (plain user message from Claude CLI), show it
+            if (typeof content === 'string') return content.length > 0;
+            // If content is an array, check if all are tool_results (hide those)
+            if (Array.isArray(content)) {
+              if (content.length === 0) return false;
+              const allToolResults = content.every(
+                (block: { type: string }) => block.type === 'tool_result'
+              );
+              return !allToolResults;
+            }
+            return true;
+          })
+          .map((message, index) => (
+            <MessageCard key={index} message={message} />
+          ))}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} />
@@ -180,6 +201,11 @@ function MessageCard({ message }: { message: StreamMessage }) {
         </div>
       )}
 
+      {/* User message content */}
+      {message.type === 'user' && message.message?.content && (
+        <UserMessageContent content={message.message.content} />
+      )}
+
       {/* Result message */}
       {message.type === 'result' && (
         <div className="space-y-2">
@@ -235,6 +261,30 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
           {block.thinking}
         </div>
       </details>
+    );
+  }
+
+  return null;
+}
+
+// Handle user message content which can be string or ContentBlock[] at runtime
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function UserMessageContent({ content }: { content: any }) {
+  // String content (plain user message from Claude CLI)
+  if (typeof content === 'string') {
+    return (
+      <div className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{content}</div>
+    );
+  }
+
+  // Array content (ContentBlock[])
+  if (Array.isArray(content)) {
+    return (
+      <div className="space-y-3">
+        {content.map((block: ContentBlock, index: number) => (
+          <ContentBlockView key={index} block={block} />
+        ))}
+      </div>
     );
   }
 

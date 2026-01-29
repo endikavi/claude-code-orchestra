@@ -43,6 +43,7 @@ export function MainContent() {
     setShowInstanceModal,
     setShowSettingsModal,
     setShowLocalSettingsModal,
+    viewMode: defaultViewMode,
   } = useUIStore();
   const isMobile = useIsMobile();
 
@@ -80,8 +81,9 @@ export function MainContent() {
   const hasInstances = projectInstances.length > 0;
 
   // View mode for instances - use the instance's viewMode (set at creation time)
+  // Fallback to the global viewMode setting if the instance doesn't have one
   const selectedInstance = projectInstances.find((i) => i.id === selectedInstanceId);
-  const effectiveViewMode = selectedInstance?.viewMode ?? 'terminal';
+  const effectiveViewMode = selectedInstance?.viewMode ?? defaultViewMode;
 
   const isViewingHistory = viewingConversation !== null;
 

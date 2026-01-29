@@ -4,6 +4,7 @@ import { createServer as createHttpsServer, Server as HttpsServer } from 'https'
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import cors from 'cors';
 import { join } from 'path';
+import { existsSync } from 'fs';
 import { networkInterfaces } from 'os';
 import { EventEmitter } from 'events';
 import { getSslCertificateService } from './SslCertificateService';
@@ -185,11 +186,13 @@ export class WebServer extends EventEmitter {
     // JSON body parser
     this.app.use(express.json());
 
-    // Logging middleware (disabled for production - uncomment for debugging)
-    // this.app.use((req: Request, _res: Response, next: NextFunction) => {
-    //   console.log(`[WebServer] ${req.method} ${req.path}`);
-    //   next();
-    // });
+    // Logging middleware for debugging
+    this.app.use((req: Request, _res: Response, next: NextFunction) => {
+      if (req.path.includes('ralph-tasks')) {
+        console.log(`[WebServer] Incoming: ${req.method} ${req.path}`);
+      }
+      next();
+    });
   }
 
   /**
@@ -631,16 +634,24 @@ export class WebServer extends EventEmitter {
 
     // Complete a Ralph task (called by CLI) - NO AUTH REQUIRED for local CLI access
     this.app.post('/api/ralph-tasks/:id/complete', (req: Request, res: Response) => {
+      const taskId = String(req.params.id);
+      console.log(`[WebServer] Ralph task complete request: id=${taskId}, body=`, req.body);
       try {
-        const summary = req.body.summary || 'Task completed';
-        const task = taskLoop.completeTask(String(req.params.id), summary);
+        const summary = String(req.body?.summary || 'Task completed');
+        console.log(
+          `[WebServer] Completing task ${taskId} with summary: ${summary.substring(0, 50)}...`
+        );
+        const task = taskLoop.completeTask(taskId, summary);
         if (!task) {
+          console.log(`[WebServer] Task ${taskId} not found`);
           res.status(404).json({ success: false, error: 'Task not found' });
           return;
         }
+        console.log(`[WebServer] Task ${taskId} completed successfully`);
         res.json({ success: true, data: task });
         this.broadcastStateUpdate();
       } catch (error) {
+        console.error(`[WebServer] Error completing task ${taskId}:`, error);
         const message = error instanceof Error ? error.message : 'Unknown error';
         res.status(500).json({ success: false, error: message });
       }
@@ -687,12 +698,20 @@ export class WebServer extends EventEmitter {
       webBuildPath = join(process.resourcesPath || __dirname, 'web');
     }
 
+    // Check if web build directory exists (may not exist in dev mode with Vite)
+    const indexPath = join(webBuildPath, 'index.html');
+    if (!existsSync(indexPath)) {
+      // In dev mode, frontend is served by Vite, so skip static file setup
+      console.log('[WebServer] Web build not found, skipping static file serving (dev mode)');
+      return;
+    }
+
     // Static files protected by webAccessGuard
     this.app.use(this.webAccessGuard, express.static(webBuildPath));
 
     // SPA fallback - serve index.html for all non-API routes (protected by webAccessGuard)
     this.app.get('/{*splat}', this.webAccessGuard, (_req: Request, res: Response) => {
-      res.sendFile(join(webBuildPath, 'index.html'));
+      res.sendFile(indexPath);
     });
   }
 

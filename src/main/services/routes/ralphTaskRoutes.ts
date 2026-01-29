@@ -141,9 +141,11 @@ export function createRalphTaskRoutes(deps: RalphTaskRoutesDeps): Router {
 
   // Complete a Ralph task (called by CLI) - NO AUTH REQUIRED for CLI access
   router.post('/:id/complete', (req: Request, res: Response) => {
+    const taskId = String(req.params.id);
+    console.log(`[ralphTaskRoutes] Ralph task complete request (via router): id=${taskId}`);
     try {
-      const summary = req.body.summary || 'Task completed';
-      const task = taskLoop.completeTask(String(req.params.id), summary);
+      const summary = String(req.body?.summary || 'Task completed');
+      const task = taskLoop.completeTask(taskId, summary);
       if (!task) {
         res.status(404).json({ success: false, error: 'Task not found' });
         return;
