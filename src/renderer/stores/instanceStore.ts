@@ -749,13 +749,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const localInstance = localInstanceMap.get(inst.id);
 
       // Preserve viewMode from local instance (server doesn't have this client-only property)
+      // Only override if local instance exists and has a viewMode set
       const preservedViewMode = localInstance?.viewMode;
 
       if (pendingStatus) {
         pendingStatuses.delete(inst.id);
-        return { ...inst, status: pendingStatus, viewMode: preservedViewMode };
+        return preservedViewMode !== undefined
+          ? { ...inst, status: pendingStatus, viewMode: preservedViewMode }
+          : { ...inst, status: pendingStatus };
       }
-      return { ...inst, viewMode: preservedViewMode };
+      return preservedViewMode !== undefined ? { ...inst, viewMode: preservedViewMode } : inst;
     });
 
     // Merge: server instances (excluding removed) + preserved local instances

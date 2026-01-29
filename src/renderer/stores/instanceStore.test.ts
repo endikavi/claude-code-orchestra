@@ -19,6 +19,7 @@ const mockInstance: ClaudeInstance = {
   mode: 'stream-json',
   status: 'running',
   createdAt: Date.now(),
+  viewMode: 'terminal', // Added by instanceStore from uiStore defaults
 };
 
 const mockConversation: Conversation = {

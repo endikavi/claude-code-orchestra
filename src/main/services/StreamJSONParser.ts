@@ -64,11 +64,12 @@ export class StreamJSONParser extends EventEmitter {
    */
   private processBuffer(): void {
     // Clean ANSI codes and carriage returns from buffer
-    // eslint-disable-next-line no-control-regex
+    /* eslint-disable no-control-regex */
     this.buffer = this.buffer.replace(
       /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]|\r/g,
       ''
     );
+    /* eslint-enable no-control-regex */
 
     // Process complete JSON objects
     // eslint-disable-next-line no-constant-condition
