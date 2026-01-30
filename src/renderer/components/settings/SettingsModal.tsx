@@ -26,6 +26,11 @@ const LANGUAGES: { value: Language; label: string; flag: string }[] = [
 
 const TERMINAL_FONTS: { value: TerminalFont; label: string; fontFamily: string }[] = [
   {
+    value: 'embedded',
+    label: 'JetBrains Mono (Built-in)',
+    fontFamily: '"JetBrains Mono Embedded", monospace',
+  },
+  {
     value: 'system',
     label: 'System (Cascadia/JetBrains/Fira)',
     fontFamily: '"Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, monospace',
@@ -131,10 +136,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     {LANGUAGES.map((lang) => (
                       <label
                         key={lang.value}
-                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                        className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
                           language === lang.value
-                            ? 'bg-claude-orange/20 border border-claude-orange'
-                            : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                            ? 'bg-sky-500/20 border border-sky-500'
+                            : 'bg-white/50 dark:bg-neutral-800/50 border border-gray-200 dark:border-neutral-600 hover:bg-white/70 dark:hover:bg-neutral-800'
                         }`}
                       >
                         <input
@@ -148,7 +153,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                         <span className="text-xl">{lang.flag}</span>
                         <span className="text-sm text-gray-800 dark:text-white">{lang.label}</span>
                         {language === lang.value && (
-                          <CheckIcon className="w-4 h-4 text-claude-orange ml-auto" />
+                          <CheckIcon className="w-4 h-4 text-sky-500 ml-auto" />
                         )}
                       </label>
                     ))}
@@ -163,10 +168,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setTheme('dark')}
-                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg transition-colors ${
+                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded transition-colors ${
                         theme === 'dark'
-                          ? 'bg-claude-orange/20 border border-claude-orange'
-                          : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                          ? 'bg-sky-500/20 border border-sky-500'
+                          : 'bg-white/50 dark:bg-neutral-800/50 border border-gray-200 dark:border-neutral-600 hover:bg-white/70 dark:hover:bg-neutral-800'
                       }`}
                     >
                       <MoonIcon className="w-4 h-4" />
@@ -174,10 +179,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     </button>
                     <button
                       onClick={() => setTheme('light')}
-                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg transition-colors ${
+                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded transition-colors ${
                         theme === 'light'
-                          ? 'bg-claude-orange/20 border border-claude-orange'
-                          : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                          ? 'bg-sky-500/20 border border-sky-500'
+                          : 'bg-white/50 dark:bg-neutral-800/50 border border-gray-200 dark:border-neutral-600 hover:bg-white/70 dark:hover:bg-neutral-800'
                       }`}
                     >
                       <SunIcon className="w-4 h-4" />
@@ -196,10 +201,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   {TERMINAL_FONTS.map((font) => (
                     <label
                       key={font.value}
-                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                      className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
                         terminalFont === font.value
-                          ? 'bg-claude-orange/20 border border-claude-orange'
-                          : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                          ? 'bg-sky-500/20 border border-sky-500'
+                          : 'bg-white/50 dark:bg-neutral-800/50 border border-gray-200 dark:border-neutral-600 hover:bg-white/70 dark:hover:bg-neutral-800'
                       }`}
                     >
                       <input
@@ -217,7 +222,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                         {font.label}
                       </span>
                       {terminalFont === font.value && (
-                        <CheckIcon className="w-4 h-4 text-claude-orange" />
+                        <CheckIcon className="w-4 h-4 text-sky-500" />
                       )}
                     </label>
                   ))}
@@ -225,13 +230,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
                   {t(
                     'settings.terminalFontHint',
-                    'Fonts must be installed on your system to work.'
+                    'Built-in font is always available. Other fonts require system installation.'
                   )}
                 </p>
               </div>
 
               {/* Info */}
-              <div className="pt-4 border-t border-claude-tan/30 dark:border-gray-700">
+              <div className="pt-4 border-t border-gray-200 dark:border-neutral-700">
                 <p className="text-xs text-gray-500 dark:text-gray-500">
                   {t('settings.savedAutomatically')}
                 </p>
@@ -260,10 +265,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       </div>
 
       {/* Close Button */}
-      <div className="flex justify-end mt-4 pt-4 border-t border-claude-tan/30 dark:border-gray-700">
+      <div className="flex justify-end mt-4 pt-4 border-t border-gray-200 dark:border-neutral-700">
         <button
           onClick={onClose}
-          className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors"
+          className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors"
         >
           {t('common.done')}
         </button>

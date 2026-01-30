@@ -82,7 +82,7 @@ export function NotificationSettings() {
   if (!preferences) {
     return (
       <div className="flex items-center justify-center h-48">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-claude-orange"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
       </div>
     );
   }
@@ -123,7 +123,7 @@ export function NotificationSettings() {
       </div>
 
       {/* Sound settings */}
-      <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-neutral-700">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {t('notifications.settings.sound')}
         </h3>
@@ -150,11 +150,11 @@ export function NotificationSettings() {
                 max="100"
                 value={preferences.soundVolume}
                 onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-claude-orange"
+                className="flex-1 h-2 bg-gray-200 dark:bg-neutral-700 rounded appearance-none cursor-pointer accent-sky-500"
               />
               <button
                 onClick={() => handleTestSound('default')}
-                className="px-3 py-1 text-xs bg-claude-orange/20 hover:bg-claude-orange/30 text-claude-orange rounded transition-colors"
+                className="px-3 py-1 text-xs bg-sky-500/20 hover:bg-sky-500/30 text-sky-500 rounded transition-colors"
               >
                 {t('notifications.settings.testSound')}
               </button>
@@ -195,7 +195,7 @@ export function NotificationSettings() {
       </div>
 
       {/* Per-type settings */}
-      <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-neutral-700">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {t('notifications.settings.perType')}
         </h3>
@@ -213,7 +213,7 @@ export function NotificationSettings() {
             return (
               <div
                 key={type}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
+                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-neutral-800/50 rounded"
               >
                 <span className="text-sm text-gray-700 dark:text-gray-300">{t(labelKey)}</span>
                 <div className="flex items-center gap-3">
@@ -222,7 +222,7 @@ export function NotificationSettings() {
                       type="checkbox"
                       checked={typePrefs.enabled}
                       onChange={() => handleTypeToggle(type, 'enabled')}
-                      className="rounded text-claude-orange focus:ring-claude-orange"
+                      className="rounded text-sky-500 focus:ring-sky-500"
                       disabled={!preferences.enabled}
                     />
                     {t('notifications.settings.show')}
@@ -232,7 +232,7 @@ export function NotificationSettings() {
                       type="checkbox"
                       checked={typePrefs.native}
                       onChange={() => handleTypeToggle(type, 'native')}
-                      className="rounded text-claude-orange focus:ring-claude-orange"
+                      className="rounded text-sky-500 focus:ring-sky-500"
                       disabled={!preferences.enabled || !typePrefs.enabled}
                     />
                     {t('notifications.settings.native')}
@@ -242,7 +242,7 @@ export function NotificationSettings() {
                       type="checkbox"
                       checked={typePrefs.sound}
                       onChange={() => handleTypeToggle(type, 'sound')}
-                      className="rounded text-claude-orange focus:ring-claude-orange"
+                      className="rounded text-sky-500 focus:ring-sky-500"
                       disabled={
                         !preferences.enabled || !preferences.playSound || !typePrefs.enabled
                       }
@@ -284,8 +284,8 @@ function ToggleRow({ label, description, checked, onChange, disabled }: ToggleRo
         onClick={onChange}
         className={`
           relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
-          transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-claude-orange focus:ring-offset-2
-          ${checked ? 'bg-claude-orange' : 'bg-gray-200 dark:bg-gray-700'}
+          transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2
+          ${checked ? 'bg-sky-500' : 'bg-gray-200 dark:bg-neutral-700'}
           ${disabled ? 'cursor-not-allowed' : ''}
         `}
       >
@@ -311,7 +311,7 @@ function SoundPreviewButton({ type, label, onTest }: SoundPreviewButtonProps) {
   return (
     <button
       onClick={() => onTest(type)}
-      className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
+      className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-100 dark:bg-neutral-700 hover:bg-gray-200 dark:hover:bg-neutral-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
     >
       <SpeakerIcon className="w-3 h-3" />
       {label}

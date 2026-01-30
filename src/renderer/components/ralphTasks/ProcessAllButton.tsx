@@ -22,7 +22,7 @@ export function ProcessAllButton({ projectId, isProcessing }: ProcessAllButtonPr
     return (
       <button
         onClick={handleClick}
-        className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors flex items-center gap-1"
+        className="px-3 py-1.5 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600 transition-colors flex items-center gap-1"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
@@ -47,7 +47,7 @@ export function ProcessAllButton({ projectId, isProcessing }: ProcessAllButtonPr
     <button
       onClick={handleClick}
       disabled={!hasTodoTasks}
-      className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+      className="px-3 py-1.5 bg-green-500 text-white rounded text-sm font-medium hover:bg-green-600 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
       title={hasTodoTasks ? `Process ${todoTasks.length} tasks in sequence` : 'No tasks to process'}
     >
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

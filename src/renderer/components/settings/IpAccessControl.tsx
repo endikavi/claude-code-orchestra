@@ -97,17 +97,17 @@ export function IpAccessControl() {
 
   if (loading || !config) {
     return (
-      <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4">
+      <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-1/3 mb-4"></div>
-          <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-full"></div>
+          <div className="h-4 bg-gray-300 dark:bg-neutral-600 rounded w-1/3 mb-4"></div>
+          <div className="h-8 bg-gray-300 dark:bg-neutral-600 rounded w-full"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4 space-y-4">
+    <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4 space-y-4">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -120,7 +120,7 @@ export function IpAccessControl() {
             onChange={handleToggleEnabled}
             className="sr-only peer"
           />
-          <div className="relative w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-claude-orange"></div>
+          <div className="relative w-11 h-6 bg-gray-300 dark:bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
         </label>
       </div>
 
@@ -130,20 +130,20 @@ export function IpAccessControl() {
           <div className="flex gap-2">
             <button
               onClick={() => handleModeChange('allowlist')}
-              className={`flex-1 px-3 py-2 text-xs rounded-md transition-colors ${
+              className={`flex-1 px-3 py-2 text-xs rounded-sm transition-colors ${
                 config.ipAccess.mode === 'allowlist'
-                  ? 'bg-claude-orange text-white'
-                  : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                  ? 'bg-sky-500 text-white'
+                  : 'bg-gray-200 dark:bg-neutral-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-neutral-500'
               }`}
             >
               {t('security.ipAccess.allowlist')}
             </button>
             <button
               onClick={() => handleModeChange('denylist')}
-              className={`flex-1 px-3 py-2 text-xs rounded-md transition-colors ${
+              className={`flex-1 px-3 py-2 text-xs rounded-sm transition-colors ${
                 config.ipAccess.mode === 'denylist'
-                  ? 'bg-claude-orange text-white'
-                  : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                  ? 'bg-sky-500 text-white'
+                  : 'bg-gray-200 dark:bg-neutral-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-neutral-500'
               }`}
             >
               {t('security.ipAccess.denylist')}
@@ -163,7 +163,7 @@ export function IpAccessControl() {
               value={newRuleValue}
               onChange={(e) => setNewRuleValue(e.target.value)}
               placeholder={t('security.ipAccess.ipPlaceholder')}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400"
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white placeholder-gray-400"
             />
             <div className="flex gap-2">
               <input
@@ -171,12 +171,12 @@ export function IpAccessControl() {
                 value={newRuleDescription}
                 onChange={(e) => setNewRuleDescription(e.target.value)}
                 placeholder={t('security.ipAccess.descriptionPlaceholder')}
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white placeholder-gray-400"
               />
               <button
                 onClick={handleAddRule}
                 disabled={!newRuleValue.trim()}
-                className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t('security.ipAccess.add')}
               </button>
@@ -189,7 +189,7 @@ export function IpAccessControl() {
               {rules.map((rule) => (
                 <div
                   key={rule.id}
-                  className="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-600 rounded-md"
+                  className="flex items-center justify-between p-2 bg-gray-100 dark:bg-neutral-600 rounded-sm"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-mono text-gray-800 dark:text-white truncate">
@@ -217,7 +217,7 @@ export function IpAccessControl() {
           )}
 
           {/* Test IP */}
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+          <div className="pt-2 border-t border-gray-200 dark:border-neutral-600">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -227,12 +227,12 @@ export function IpAccessControl() {
                   setTestResult(null);
                 }}
                 placeholder={t('security.ipAccess.testPlaceholder')}
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white placeholder-gray-400"
               />
               <button
                 onClick={handleTestIp}
                 disabled={!testIp.trim()}
-                className="px-3 py-2 text-sm bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded-md transition-colors disabled:opacity-50"
+                className="px-3 py-2 text-sm bg-gray-200 dark:bg-neutral-600 hover:bg-gray-300 dark:hover:bg-neutral-500 text-gray-700 dark:text-gray-300 rounded-sm transition-colors disabled:opacity-50"
               >
                 {t('security.ipAccess.test')}
               </button>

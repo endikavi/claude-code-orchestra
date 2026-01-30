@@ -38,13 +38,13 @@ export function ConversationViewer() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-claude-cream dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-gray-100 dark:bg-neutral-950">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      <div className="flex-shrink-0 border-b border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
         <div className="flex items-center justify-between gap-4">
           <button
             onClick={closeConversationViewer}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-700 rounded transition-colors"
             title={t('common.back')}
           >
             <BackIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -70,7 +70,7 @@ export function ConversationViewer() {
             {viewingConversation.sessionId && (
               <button
                 onClick={handleResume}
-                className="flex items-center gap-2 px-4 py-2 bg-claude-orange hover:bg-claude-orange-dark text-white rounded-lg transition-colors text-sm font-medium"
+                className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-500-dark text-white rounded transition-colors text-sm font-medium"
               >
                 <PlayIcon className="w-4 h-4" />
                 {t('viewer.resume')}
@@ -84,7 +84,7 @@ export function ConversationViewer() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoadingViewer ? (
           <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-claude-orange"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
           </div>
         ) : viewingMessages.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -105,7 +105,7 @@ export function ConversationViewer() {
 function MessageCard({ message }: { message: StreamMessage }) {
   const typeColors: Record<string, string> = {
     system: 'border-blue-500/50 bg-blue-500/10',
-    assistant: 'border-claude-orange/50 bg-claude-orange/10',
+    assistant: 'border-sky-500/50 bg-sky-500/10',
     user: 'border-green-500/50 bg-green-500/10',
     result: 'border-purple-500/50 bg-purple-500/10',
     summary: 'border-yellow-500/50 bg-yellow-500/10',
@@ -184,7 +184,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
 
   return (
     <div
-      className={`rounded-lg border p-4 ${typeColors[message.type] || 'border-claude-tan/30 dark:border-gray-700 bg-white/50 dark:bg-gray-800'}`}
+      className={`rounded border p-4 ${typeColors[message.type] || 'border-gray-200 dark:border-neutral-700 bg-white/50 dark:bg-neutral-800'}`}
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
@@ -215,7 +215,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
                 {message.tools.map((tool) => (
                   <span
                     key={tool}
-                    className="px-2 py-0.5 bg-claude-tan/30 dark:bg-gray-700 rounded text-xs text-gray-700 dark:text-gray-300"
+                    className="px-2 py-0.5 bg-gray-200 dark:bg-neutral-700 rounded text-xs text-gray-700 dark:text-gray-300"
                   >
                     {tool}
                   </span>
@@ -249,7 +249,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
             <div className="text-red-500 dark:text-red-400 text-sm font-medium">Error</div>
           )}
           {message.result && (
-            <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-claude-cream dark:bg-gray-900 rounded p-3">
+            <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-100 dark:bg-neutral-950 rounded p-3">
               {message.result}
             </div>
           )}
@@ -275,7 +275,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
 
   if (block.type === 'tool_use') {
     return (
-      <div className="bg-claude-cream dark:bg-gray-900 rounded-lg p-3 border border-claude-tan/30 dark:border-gray-700">
+      <div className="bg-gray-100 dark:bg-neutral-950 rounded p-3 border border-gray-200 dark:border-neutral-700">
         <div className="flex items-center gap-2 mb-2">
           <ToolIcon className="w-4 h-4 text-blue-500 dark:text-blue-400" />
           <span className="text-sm font-medium text-blue-500 dark:text-blue-400">{block.name}</span>
@@ -289,7 +289,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
 
   if (block.type === 'thinking') {
     return (
-      <details className="bg-claude-cream dark:bg-gray-900 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+      <details className="bg-gray-100 dark:bg-neutral-950 rounded border border-gray-200 dark:border-neutral-700">
         <summary className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-300">
           Thinking...
         </summary>

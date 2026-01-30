@@ -63,7 +63,7 @@ export function TerminalPoolSettings() {
   if (loading) {
     return (
       <div className="p-4 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-claude-orange"></div>
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-sky-500"></div>
       </div>
     );
   }
@@ -94,7 +94,7 @@ export function TerminalPoolSettings() {
         <button
           onClick={handleToggleEnabled}
           className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-            config.enabled ? 'bg-claude-orange' : 'bg-gray-300 dark:bg-gray-600'
+            config.enabled ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'
           }`}
           role="switch"
           aria-checked={config.enabled}
@@ -126,7 +126,7 @@ export function TerminalPoolSettings() {
                     minPoolSize: Math.max(1, Math.min(10, parseInt(e.target.value) || 1)),
                   })
                 }
-                className="w-full px-3 py-2 text-sm border border-claude-tan/50 dark:border-gray-600 rounded-md bg-white/50 dark:bg-gray-700/50 focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded-sm bg-white/50 dark:bg-neutral-700/50 focus:outline-none focus:ring-1 focus:ring-sky-500"
               />
               <p className="text-xs text-gray-500 mt-1">
                 {t('pool.minPoolSizeDesc', 'Terminals kept ready (1-10)')}
@@ -150,7 +150,7 @@ export function TerminalPoolSettings() {
                     ),
                   })
                 }
-                className="w-full px-3 py-2 text-sm border border-claude-tan/50 dark:border-gray-600 rounded-md bg-white/50 dark:bg-gray-700/50 focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded-sm bg-white/50 dark:bg-neutral-700/50 focus:outline-none focus:ring-1 focus:ring-sky-500"
               />
               <p className="text-xs text-gray-500 mt-1">
                 {t('pool.maxPoolSizeDesc', 'Maximum terminals allowed (min-20)')}
@@ -167,7 +167,7 @@ export function TerminalPoolSettings() {
               <select
                 value={config.idleTimeoutMs}
                 onChange={(e) => handleConfigChange({ idleTimeoutMs: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 text-sm border border-claude-tan/50 dark:border-gray-600 rounded-md bg-white/50 dark:bg-gray-700/50 focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded-sm bg-white/50 dark:bg-neutral-700/50 focus:outline-none focus:ring-1 focus:ring-sky-500"
               >
                 <option value={0}>{t('pool.never', 'Never')}</option>
                 <option value={60000}>{t('pool.minutes', '{{count}} min', { count: 1 })}</option>
@@ -187,7 +187,7 @@ export function TerminalPoolSettings() {
               <select
                 value={config.replenishDelayMs}
                 onChange={(e) => handleConfigChange({ replenishDelayMs: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 text-sm border border-claude-tan/50 dark:border-gray-600 rounded-md bg-white/50 dark:bg-gray-700/50 focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded-sm bg-white/50 dark:bg-neutral-700/50 focus:outline-none focus:ring-1 focus:ring-sky-500"
               >
                 <option value={0}>{t('pool.immediately', 'Immediately')}</option>
                 <option value={500}>{t('pool.ms', '{{count}} ms', { count: 500 })}</option>
@@ -203,12 +203,12 @@ export function TerminalPoolSettings() {
       )}
 
       {/* Statistics */}
-      <div className="pt-4 border-t border-claude-tan/30 dark:border-gray-700">
+      <div className="pt-4 border-t border-gray-200 dark:border-neutral-700">
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('pool.statistics', 'Pool Statistics')}
           </h4>
-          <button onClick={handleResetStats} className="text-xs text-claude-orange hover:underline">
+          <button onClick={handleResetStats} className="text-xs text-sky-500 hover:underline">
             {t('pool.resetStats', 'Reset')}
           </button>
         </div>
@@ -233,7 +233,7 @@ export function TerminalPoolSettings() {
         </div>
 
         {stats.acquireCount > 0 && (
-          <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+          <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded">
             <div className="flex items-center gap-2">
               <SpeedIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
               <span className="text-sm text-green-700 dark:text-green-300">
@@ -247,7 +247,7 @@ export function TerminalPoolSettings() {
       </div>
 
       {/* Security Notice */}
-      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
         <div className="flex items-start gap-2">
           <ShieldIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5" />
           <div className="text-xs text-blue-700 dark:text-blue-300">
@@ -278,11 +278,11 @@ function StatCard({
     green: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
     blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
     orange: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
-    gray: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+    gray: 'bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-300',
   };
 
   return (
-    <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
+    <div className={`p-3 rounded ${colorClasses[color]}`}>
       <div className="text-2xl font-bold">{value}</div>
       <div className="text-xs opacity-80">{label}</div>
     </div>

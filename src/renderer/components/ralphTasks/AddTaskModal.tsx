@@ -49,7 +49,7 @@ export function AddTaskModal({ projectId, onClose }: AddTaskModalProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g., Implement feature X"
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             autoFocus
             required
           />
@@ -68,7 +68,7 @@ export function AddTaskModal({ projectId, onClose }: AddTaskModalProps) {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Detailed description of what needs to be done..."
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-claude-orange focus:border-transparent resize-none"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none"
           />
         </div>
 
@@ -76,14 +76,14 @@ export function AddTaskModal({ projectId, onClose }: AddTaskModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-700 rounded transition-colors"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={!name.trim() || isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-white bg-claude-orange hover:bg-claude-orange/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm font-medium text-white bg-sky-500 hover:bg-sky-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Creando...' : 'Crear tarea'}
           </button>

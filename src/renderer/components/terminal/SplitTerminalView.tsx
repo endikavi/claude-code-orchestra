@@ -37,7 +37,7 @@ export function SplitTerminalView({ split }: SplitTerminalViewProps) {
       </div>
 
       {/* Divider */}
-      <div className="w-px bg-claude-tan/50 dark:bg-gray-600 flex-shrink-0" />
+      <div className="w-px bg-gray-200 dark:bg-neutral-700 flex-shrink-0" />
 
       {/* Right panel */}
       <div className="flex-1 min-w-0 overflow-hidden">

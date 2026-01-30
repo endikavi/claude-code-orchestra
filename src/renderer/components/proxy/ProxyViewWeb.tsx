@@ -257,11 +257,11 @@ export function ProxyViewWeb({ view, onClose }: ProxyViewWebProps) {
   );
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-white dark:bg-neutral-950">
       {/* Navigation bar */}
-      <div className="flex items-center gap-2 p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+      <div className="flex items-center gap-2 p-2 border-b border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800">
         {/* Port indicator */}
-        <div className="flex items-center gap-1 px-2 py-1 rounded bg-claude-orange/10 text-claude-orange text-sm font-medium">
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-sky-500/10 text-sky-500 text-sm font-medium">
           <GlobeIcon className="w-4 h-4" />
           <span>:{view.port}</span>
         </div>
@@ -272,7 +272,7 @@ export function ProxyViewWeb({ view, onClose }: ProxyViewWebProps) {
             type="text"
             value={inputPath}
             onChange={(e) => setInputPath(e.target.value)}
-            className="flex-1 px-3 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-claude-orange/50"
+            className="flex-1 px-3 py-1 text-sm rounded border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
             placeholder="/"
           />
         </form>
@@ -284,7 +284,7 @@ export function ProxyViewWeb({ view, onClose }: ProxyViewWebProps) {
         <div className="flex items-center gap-1">
           <button
             onClick={handleRefresh}
-            className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-neutral-700 text-gray-600 dark:text-gray-400"
             title={t('proxy.refresh', 'Refresh')}
             disabled={isLoading}
           >
@@ -293,7 +293,7 @@ export function ProxyViewWeb({ view, onClose }: ProxyViewWebProps) {
 
           <button
             onClick={handleOpenExternal}
-            className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-neutral-700 text-gray-600 dark:text-gray-400"
             title={t('proxy.openExternal', 'Open in browser')}
           >
             <ExternalLinkIcon className="w-4 h-4" />
@@ -313,7 +313,7 @@ export function ProxyViewWeb({ view, onClose }: ProxyViewWebProps) {
       <div className="flex-1 relative">
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-neutral-950/80 z-10">
             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
               <RefreshIcon className="w-5 h-5 animate-spin" />
               <span>{t('common.loading', 'Loading...')}</span>
@@ -323,12 +323,12 @@ export function ProxyViewWeb({ view, onClose }: ProxyViewWebProps) {
 
         {/* Error display */}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-900 z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-neutral-950 z-10">
             <div className="text-center p-4">
               <div className="text-red-500 dark:text-red-400 mb-2">{error}</div>
               <button
                 onClick={handleRefresh}
-                className="px-4 py-2 rounded bg-claude-orange text-white hover:bg-claude-orange/90"
+                className="px-4 py-2 rounded bg-sky-500 text-white hover:bg-sky-500/90"
               >
                 {t('proxy.retry', 'Retry')}
               </button>

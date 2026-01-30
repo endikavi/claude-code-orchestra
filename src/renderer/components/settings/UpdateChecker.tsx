@@ -123,7 +123,7 @@ export function UpdateChecker() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+    <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 p-4">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <UpdateIcon className="w-5 h-5" />
         {t('settings.updates.title', 'Software Updates')}
@@ -154,8 +154,8 @@ export function UpdateChecker() {
         )}
 
         {state === 'available' && updateInfo && (
-          <div className="bg-claude-orange/10 dark:bg-claude-orange/20 rounded-lg p-3 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-claude-orange">
+          <div className="bg-sky-500/10 dark:bg-sky-500/20 rounded p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-sky-500">
               <UpdateAvailableIcon className="w-4 h-4" />
               {t('settings.updates.available', 'Update available!')}
             </div>
@@ -180,9 +180,9 @@ export function UpdateChecker() {
               </span>
               <span className="text-gray-900 dark:text-white">{Math.round(progress.percent)}%</span>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div className="w-full bg-gray-200 dark:bg-neutral-700 rounded-full h-2">
               <div
-                className="bg-claude-orange h-2 rounded-full transition-all duration-300"
+                className="bg-sky-500 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${progress.percent}%` }}
               />
             </div>
@@ -194,7 +194,7 @@ export function UpdateChecker() {
         )}
 
         {state === 'downloaded' && (
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 space-y-2">
+          <div className="bg-green-50 dark:bg-green-900/20 rounded p-3 space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
               <CheckIcon className="w-4 h-4" />
               {t('settings.updates.downloaded', 'Update downloaded!')}
@@ -209,7 +209,7 @@ export function UpdateChecker() {
         )}
 
         {state === 'error' && error && (
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+          <div className="bg-red-50 dark:bg-red-900/20 rounded p-3">
             <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
               <ErrorIcon className="w-4 h-4" />
               {error}
@@ -222,7 +222,7 @@ export function UpdateChecker() {
           {(state === 'idle' || state === 'error') && (
             <button
               onClick={checkForUpdates}
-              className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-md transition-colors"
+              className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-gray-700 dark:text-gray-300 rounded-sm transition-colors"
             >
               {t('settings.updates.checkNow', 'Check for updates')}
             </button>
@@ -232,14 +232,14 @@ export function UpdateChecker() {
             <>
               <button
                 onClick={downloadUpdate}
-                className="px-3 py-1.5 text-sm bg-claude-orange hover:bg-claude-orange/90 text-white rounded-md transition-colors"
+                className="px-3 py-1.5 text-sm bg-sky-500 hover:bg-sky-500/90 text-white rounded-sm transition-colors"
               >
                 {t('settings.updates.download', 'Download update')}
               </button>
               {updateInfo?.releaseUrl && (
                 <button
                   onClick={openReleaseUrl}
-                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-md transition-colors"
+                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-gray-700 dark:text-gray-300 rounded-sm transition-colors"
                 >
                   {t('settings.updates.viewRelease', 'View release notes')}
                 </button>
@@ -250,7 +250,7 @@ export function UpdateChecker() {
           {state === 'downloaded' && (
             <button
               onClick={installUpdate}
-              className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
+              className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-sm transition-colors"
             >
               {t('settings.updates.restartNow', 'Restart now')}
             </button>

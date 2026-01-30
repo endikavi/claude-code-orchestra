@@ -22,13 +22,13 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
     switch (status) {
       case 'pending':
         return {
-          borderColor: 'border-gray-200 dark:border-gray-700',
-          bgColor: 'bg-white dark:bg-gray-800/50',
+          borderColor: 'border-gray-200 dark:border-neutral-700',
+          bgColor: 'bg-white dark:bg-neutral-900/50',
           statusIcon: (
-            <div className="h-4 w-4 rounded-full border-2 border-gray-300 dark:border-gray-600" />
+            <div className="h-4 w-4 rounded-full border-2 border-gray-300 dark:border-neutral-600" />
           ),
           statusText: t('tasks.status.pending'),
-          statusPill: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+          statusPill: 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-gray-300',
         };
       case 'in_progress':
         return {
@@ -66,11 +66,11 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
         };
       default:
         return {
-          borderColor: 'border-gray-200 dark:border-gray-700',
-          bgColor: 'bg-white dark:bg-gray-800/50',
+          borderColor: 'border-gray-200 dark:border-neutral-700',
+          bgColor: 'bg-white dark:bg-neutral-900/50',
           statusIcon: null,
           statusText: '',
-          statusPill: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+          statusPill: 'bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300',
         };
     }
   };
@@ -83,7 +83,7 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
   return (
     <div
       className={`
-        rounded-lg border transition-all overflow-hidden
+        rounded border transition-all overflow-hidden
         ${statusConfig.borderColor} ${statusConfig.bgColor}
       `}
     >
@@ -115,7 +115,7 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
               {elapsedTime}
             </span>
             {showInstanceBadge && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-mono">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-neutral-800 text-gray-500 dark:text-gray-400 font-mono">
                 {task.parentInstanceId.slice(0, 8)}
               </span>
             )}
@@ -176,7 +176,7 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
           <div className="flex items-center gap-3 mt-2">
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-xs text-claude-orange hover:text-claude-orange/80 flex items-center gap-1 transition-colors"
+              className="text-xs text-sky-500 hover:text-sky-500/80 flex items-center gap-1 transition-colors"
             >
               <svg
                 className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -199,7 +199,7 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
 
       {/* Description Section (Collapsible) */}
       {isExpanded && hasDescription && (
-        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+        <div className="border-t border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-950/50 p-3">
           <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -211,7 +211,7 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
             </svg>
             {t('tasks.description')}
           </div>
-          <div className="max-h-48 overflow-auto rounded bg-white dark:bg-gray-800 p-2">
+          <div className="max-h-48 overflow-auto rounded bg-white dark:bg-neutral-900 p-2">
             <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">
               {task.description}
             </pre>

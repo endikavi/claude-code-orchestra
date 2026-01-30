@@ -37,7 +37,7 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
       <div className="h-full flex flex-col">
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center max-w-md px-4">
-            <ChatIcon className="w-12 h-12 mx-auto mb-4 text-claude-orange" />
+            <ChatIcon className="w-12 h-12 mx-auto mb-4 text-sky-500" />
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">
               {t('structuredChat.welcome.title')}
             </h2>
@@ -45,7 +45,7 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
               {t('structuredChat.welcome.description')}
             </p>
             {instance && (
-              <div className="text-xs text-gray-500 dark:text-gray-500 mt-4 p-3 bg-white/50 dark:bg-gray-800 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-4 p-3 bg-white/50 dark:bg-neutral-900 rounded border border-gray-200 dark:border-neutral-700">
                 <span className="font-medium">{t('instance.model')}:</span> {instance.model}
                 {instance.planMode && <span className="ml-2">&bull; {t('instance.planMode')}</span>}
               </div>
@@ -79,7 +79,7 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Instance info */}
         {instance && (
-          <div className="bg-white/50 dark:bg-gray-800 rounded-lg p-4 border border-claude-tan/30 dark:border-gray-700">
+          <div className="bg-white/50 dark:bg-neutral-900 rounded p-4 border border-gray-200 dark:border-neutral-700">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Instance</span>
               <StatusBadge status={instance.status} />
@@ -136,7 +136,7 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
 function MessageCard({ message }: { message: StreamMessage }) {
   const typeColors: Record<string, string> = {
     system: 'border-blue-500/50 bg-blue-500/10',
-    assistant: 'border-claude-orange/50 bg-claude-orange/10',
+    assistant: 'border-sky-500/50 bg-sky-500/10',
     user: 'border-green-500/50 bg-green-500/10',
     result: 'border-purple-500/50 bg-purple-500/10',
   };
@@ -150,7 +150,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
 
   return (
     <div
-      className={`rounded-lg border p-4 ${typeColors[message.type] || 'border-claude-tan/30 dark:border-gray-700 bg-white/50 dark:bg-gray-800'}`}
+      className={`rounded border p-4 ${typeColors[message.type] || 'border-gray-200 dark:border-neutral-700 bg-white/50 dark:bg-neutral-900'}`}
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
@@ -181,7 +181,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
                 {message.tools.map((tool) => (
                   <span
                     key={tool}
-                    className="px-2 py-0.5 bg-claude-tan/30 dark:bg-gray-700 rounded text-xs text-gray-700 dark:text-gray-300"
+                    className="px-2 py-0.5 bg-gray-200 dark:bg-neutral-800 rounded text-xs text-gray-700 dark:text-gray-300"
                   >
                     {tool}
                   </span>
@@ -213,7 +213,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
             <div className="text-red-500 dark:text-red-400 text-sm font-medium">Error</div>
           )}
           {message.result && (
-            <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-claude-cream dark:bg-gray-900 rounded p-3">
+            <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-100 dark:bg-neutral-950 rounded p-3">
               {message.result}
             </div>
           )}
@@ -239,7 +239,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
 
   if (block.type === 'tool_use') {
     return (
-      <div className="bg-claude-cream dark:bg-gray-900 rounded-lg p-3 border border-claude-tan/30 dark:border-gray-700">
+      <div className="bg-gray-100 dark:bg-neutral-950 rounded p-3 border border-gray-200 dark:border-neutral-700">
         <div className="flex items-center gap-2 mb-2">
           <ToolIcon className="w-4 h-4 text-blue-500 dark:text-blue-400" />
           <span className="text-sm font-medium text-blue-500 dark:text-blue-400">{block.name}</span>
@@ -253,7 +253,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
 
   if (block.type === 'thinking') {
     return (
-      <details className="bg-claude-cream dark:bg-gray-900 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+      <details className="bg-gray-100 dark:bg-neutral-950 rounded border border-gray-200 dark:border-neutral-700">
         <summary className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-300">
           Thinking...
         </summary>

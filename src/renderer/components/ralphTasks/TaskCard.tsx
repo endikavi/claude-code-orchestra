@@ -46,8 +46,8 @@ export function TaskCard({ task }: TaskCardProps) {
       draggable={!isEditing}
       onDragStart={handleDragStart}
       className={`
-        bg-white dark:bg-gray-800 rounded-lg shadow-sm border
-        ${task.isPaused ? 'border-yellow-400 dark:border-yellow-600' : 'border-gray-200 dark:border-gray-700'}
+        bg-white dark:bg-neutral-800 rounded shadow-sm border
+        ${task.isPaused ? 'border-yellow-400 dark:border-yellow-600' : 'border-gray-200 dark:border-neutral-700'}
         ${task.status === 'doing' && !task.isPaused ? 'ring-2 ring-blue-400' : ''}
         cursor-grab active:cursor-grabbing
         transition-all hover:shadow-md
@@ -59,14 +59,14 @@ export function TaskCard({ task }: TaskCardProps) {
             type="text"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
-            className="w-full px-2 py-1 text-sm border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full px-2 py-1 text-sm border rounded dark:bg-neutral-700 dark:border-neutral-600 dark:text-white"
             autoFocus
           />
           <textarea
             value={editDescription}
             onChange={(e) => setEditDescription(e.target.value)}
             placeholder="Description (optional)"
-            className="w-full px-2 py-1 text-sm border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
+            className="w-full px-2 py-1 text-sm border rounded dark:bg-neutral-700 dark:border-neutral-600 dark:text-white resize-none"
             rows={2}
           />
           <div className="flex justify-end gap-2">
@@ -78,7 +78,7 @@ export function TaskCard({ task }: TaskCardProps) {
             </button>
             <button
               onClick={handleSave}
-              className="px-2 py-1 text-xs bg-claude-orange text-white rounded hover:bg-claude-orange/90"
+              className="px-2 py-1 text-xs bg-sky-500 text-white rounded hover:bg-sky-600"
             >
               Save
             </button>
@@ -133,7 +133,7 @@ export function TaskCard({ task }: TaskCardProps) {
           {/* Status indicators */}
           <div className="mt-2 flex items-center gap-2 text-xs">
             {task.loopCount > 0 && (
-              <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+              <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-neutral-700 rounded text-gray-600 dark:text-gray-400">
                 Loop #{task.loopCount}
               </span>
             )}

@@ -351,7 +351,7 @@ export function RemoteAccessSettings() {
 
       {/* Error display */}
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-700 dark:text-red-400 text-sm">
+        <div className="p-3 rounded bg-red-500/20 border border-red-500/50 text-red-700 dark:text-red-400 text-sm">
           {error}
         </div>
       )}
@@ -369,12 +369,12 @@ export function RemoteAccessSettings() {
             placeholder={
               hasPassword ? t('remoteAccess.passwordSet') : t('remoteAccess.setPassword')
             }
-            className="flex-1 px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+            className="flex-1 px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
           <button
             onClick={handleSetPassword}
             disabled={loading || !password}
-            className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50"
           >
             {hasPassword ? t('remoteAccess.changePassword') : t('remoteAccess.setPassword')}
           </button>
@@ -398,7 +398,7 @@ export function RemoteAccessSettings() {
           disabled={status?.running}
           min={1}
           max={65535}
-          className="w-32 px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange disabled:opacity-50"
+          className="w-32 px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
         />
       </div>
 
@@ -413,7 +413,7 @@ export function RemoteAccessSettings() {
           onChange={(e) => setCustomHostname(e.target.value)}
           onBlur={handleCustomHostnameBlur}
           placeholder={t('remoteAccess.customHostnamePlaceholder')}
-          className="w-full max-w-sm px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+          className="w-full max-w-sm px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
         />
         <p className="text-xs text-gray-500 dark:text-gray-400">
           {t('remoteAccess.customHostnameDescription')}
@@ -421,7 +421,7 @@ export function RemoteAccessSettings() {
       </div>
 
       {/* Web Access Toggle */}
-      <div className="flex items-center justify-between p-4 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600">
+      <div className="flex items-center justify-between p-4 rounded bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600">
         <div>
           <p className="text-sm font-medium text-gray-800 dark:text-white">
             {t('remoteAccess.webAccess', 'Web Access')}
@@ -440,7 +440,7 @@ export function RemoteAccessSettings() {
         <button
           onClick={handleToggleWebAccess}
           disabled={loading || !hasPassword}
-          className={`px-4 py-2 text-sm rounded-md transition-colors disabled:opacity-50 ${
+          className={`px-4 py-2 text-sm rounded-sm transition-colors disabled:opacity-50 ${
             config?.webAccessEnabled
               ? 'bg-red-500 hover:bg-red-600 text-white'
               : 'bg-green-500 hover:bg-green-600 text-white'
@@ -457,7 +457,7 @@ export function RemoteAccessSettings() {
       </div>
 
       {/* Info: Server always runs for internal functionality */}
-      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+      <div className="p-3 rounded bg-blue-500/10 border border-blue-500/30">
         <p className="text-xs text-blue-700 dark:text-blue-400">
           {t(
             'remoteAccess.serverAlwaysRunning',
@@ -473,7 +473,7 @@ export function RemoteAccessSettings() {
           checked={config?.allowAnyCors ?? false}
           onChange={handleToggleAllowAnyCors}
           disabled={!hasPassword}
-          className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange disabled:opacity-50"
+          className="w-4 h-4 text-sky-500 bg-white/50 dark:bg-neutral-700/50 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500 disabled:opacity-50"
         />
         <div>
           <span className="text-sm text-gray-800 dark:text-white">
@@ -486,7 +486,7 @@ export function RemoteAccessSettings() {
       </label>
 
       {/* SSL/TLS Configuration */}
-      <div className="space-y-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+      <div className="space-y-4 p-4 rounded bg-blue-500/10 border border-blue-500/30">
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -502,7 +502,7 @@ export function RemoteAccessSettings() {
               checked={sslEnabled}
               onChange={handleToggleSsl}
               disabled={!hasPassword}
-              className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange disabled:opacity-50"
+              className="w-4 h-4 text-sky-500 bg-white/50 dark:bg-neutral-700/50 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500 disabled:opacity-50"
             />
           </label>
         </div>
@@ -533,7 +533,7 @@ export function RemoteAccessSettings() {
                     type="radio"
                     checked={sslSelfSigned && !sslLetsEncrypt}
                     onChange={() => handleSslModeChange('selfSigned')}
-                    className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                    className="w-4 h-4 text-sky-500 focus:ring-sky-500"
                   />
                   <span className="text-sm text-gray-800 dark:text-white">
                     {t('remoteAccess.sslSelfSigned', 'Self-Signed')}
@@ -544,7 +544,7 @@ export function RemoteAccessSettings() {
                     type="radio"
                     checked={!sslSelfSigned && !sslLetsEncrypt}
                     onChange={() => handleSslModeChange('custom')}
-                    className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                    className="w-4 h-4 text-sky-500 focus:ring-sky-500"
                   />
                   <span className="text-sm text-gray-800 dark:text-white">
                     {t('remoteAccess.sslCustom', 'Custom Certificate')}
@@ -558,7 +558,7 @@ export function RemoteAccessSettings() {
                     checked={sslLetsEncrypt}
                     onChange={() => handleSslModeChange('letsEncrypt')}
                     disabled={!customHostname}
-                    className="w-4 h-4 text-claude-orange focus:ring-claude-orange disabled:opacity-50"
+                    className="w-4 h-4 text-sky-500 focus:ring-sky-500 disabled:opacity-50"
                   />
                   <span className="text-sm text-gray-800 dark:text-white">
                     {t('remoteAccess.sslLetsEncrypt', "Let's Encrypt")}
@@ -587,7 +587,7 @@ export function RemoteAccessSettings() {
                 <button
                   onClick={handleGenerateSelfSigned}
                   disabled={loading}
-                  className="px-3 py-1.5 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50"
                 >
                   {t('remoteAccess.sslGenerateCert', 'Generate New Certificate')}
                 </button>
@@ -616,7 +616,7 @@ export function RemoteAccessSettings() {
                     value={acmeEmail}
                     onChange={(e) => setAcmeEmail(e.target.value)}
                     placeholder={t('remoteAccess.sslAcmeEmailPlaceholder', 'admin@example.com')}
-                    className="w-full max-w-sm px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                    className="w-full max-w-sm px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {t(
@@ -631,7 +631,7 @@ export function RemoteAccessSettings() {
                   <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">
                     {t('remoteAccess.sslDomain', 'Domain')}
                   </label>
-                  <p className="text-sm font-mono text-gray-800 dark:text-white px-3 py-2 bg-white/30 dark:bg-gray-800/30 rounded-md border border-claude-tan/30 dark:border-gray-700">
+                  <p className="text-sm font-mono text-gray-800 dark:text-white px-3 py-2 bg-white/30 dark:bg-neutral-800/30 rounded-sm border border-gray-200 dark:border-neutral-700">
                     {customHostname}
                   </p>
                 </div>
@@ -640,7 +640,7 @@ export function RemoteAccessSettings() {
                 <button
                   onClick={handleGenerateLetsEncrypt}
                   disabled={leGenerating || !customHostname}
-                  className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-sm transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {leGenerating && <LoadingSpinner />}
                   {leGenerating
@@ -669,7 +669,7 @@ export function RemoteAccessSettings() {
                     onChange={(e) => setSslCertPath(e.target.value)}
                     onBlur={handleSslPathsBlur}
                     placeholder="/path/to/certificate.crt"
-                    className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                    className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
                   />
                 </div>
                 <div>
@@ -682,13 +682,13 @@ export function RemoteAccessSettings() {
                     onChange={(e) => setSslKeyPath(e.target.value)}
                     onBlur={handleSslPathsBlur}
                     placeholder="/path/to/private.key"
-                    className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                    className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
                   />
                 </div>
                 <button
                   onClick={handleValidateCert}
                   disabled={!sslCertPath || loading}
-                  className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-neutral-700 hover:bg-gray-300 dark:hover:bg-neutral-600 rounded-sm transition-colors disabled:opacity-50"
                 >
                   {t('remoteAccess.sslValidate', 'Validate Certificate')}
                 </button>
@@ -719,7 +719,7 @@ export function RemoteAccessSettings() {
 
       {/* Connection Info (shown when web access is enabled) */}
       {config?.webAccessEnabled && status?.running && status.url && (
-        <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/50">
+        <div className="p-4 rounded bg-green-500/10 border border-green-500/50">
           <div className="flex gap-4">
             {/* QR Code */}
             {qrCode && (
@@ -735,7 +735,7 @@ export function RemoteAccessSettings() {
               </p>
               <button
                 onClick={() => status.url && navigator.clipboard.writeText(status.url)}
-                className="inline-flex items-center gap-2 px-2 py-1 text-sm bg-white/50 dark:bg-gray-700/50 rounded hover:bg-white/70 dark:hover:bg-gray-600/50 transition-colors text-left w-full"
+                className="inline-flex items-center gap-2 px-2 py-1 text-sm bg-white/50 dark:bg-neutral-700/50 rounded hover:bg-white/70 dark:hover:bg-neutral-600/50 transition-colors text-left w-full"
                 title={t('common.copy')}
               >
                 <code className="truncate flex-1">{status.url}</code>
@@ -760,7 +760,7 @@ export function RemoteAccessSettings() {
               {status.sessions.map((session: RemoteSession) => (
                 <div
                   key={session.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600"
+                  className="flex items-center justify-between p-3 rounded bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600"
                 >
                   <div>
                     <p className="text-sm text-gray-800 dark:text-white">{session.ip}</p>

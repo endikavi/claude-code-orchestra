@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS: UISettings = {
     local: false,
     clusters: {},
   },
-  terminalFont: 'system',
+  terminalFont: 'embedded',
   sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
   repaintSettings: DEFAULT_REPAINT_SETTINGS,
 };

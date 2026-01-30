@@ -75,7 +75,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
       'general-purpose': {
         bg: 'bg-gray-100',
         text: 'text-gray-700',
-        darkBg: 'dark:bg-gray-700',
+        darkBg: 'dark:bg-neutral-700',
         darkText: 'dark:text-gray-300',
         icon: (
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -94,7 +94,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
       configs[type] || {
         bg: 'bg-gray-100',
         text: 'text-gray-700',
-        darkBg: 'dark:bg-gray-700',
+        darkBg: 'dark:bg-neutral-700',
         darkText: 'dark:text-gray-300',
         icon: (
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -126,8 +126,8 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
         };
       case 'completed':
         return {
-          borderColor: 'border-gray-200 dark:border-gray-700',
-          bgColor: 'bg-white dark:bg-gray-800/50',
+          borderColor: 'border-gray-200 dark:border-neutral-700',
+          bgColor: 'bg-white dark:bg-neutral-800/50',
           statusIcon: (
             <svg
               className="h-4 w-4 text-blue-500"
@@ -170,11 +170,11 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
         };
       default:
         return {
-          borderColor: 'border-gray-200 dark:border-gray-700',
-          bgColor: 'bg-white dark:bg-gray-800/50',
+          borderColor: 'border-gray-200 dark:border-neutral-700',
+          bgColor: 'bg-white dark:bg-neutral-800/50',
           statusIcon: null,
           statusText: '',
-          statusPill: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+          statusPill: 'bg-gray-100 text-gray-700 dark:bg-neutral-700 dark:text-gray-300',
         };
     }
   };
@@ -187,7 +187,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
   return (
     <div
       className={`
-        rounded-lg border transition-all overflow-hidden
+        rounded border transition-all overflow-hidden
         ${statusConfig.borderColor} ${statusConfig.bgColor}
       `}
     >
@@ -199,7 +199,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
             {/* Type Badge with Icon */}
             <span
               className={`
-                inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium shrink-0
+                inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium shrink-0
                 ${typeConfig.bg} ${typeConfig.text} ${typeConfig.darkBg} ${typeConfig.darkText}
               `}
             >
@@ -228,7 +228,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
           {subagent.prompt && (
             <button
               onClick={() => setShowPrompt(!showPrompt)}
-              className="text-xs text-gray-500 dark:text-gray-400 hover:text-claude-orange dark:hover:text-claude-orange flex items-center gap-1 transition-colors"
+              className="text-xs text-gray-500 dark:text-gray-400 hover:text-sky-500 dark:hover:text-sky-500 flex items-center gap-1 transition-colors"
             >
               <svg
                 className={`h-3 w-3 transition-transform ${showPrompt ? 'rotate-90' : ''}`}
@@ -251,7 +251,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
           {hasContent && (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-xs text-claude-orange hover:text-claude-orange/80 flex items-center gap-1 transition-colors"
+              className="text-xs text-sky-500 hover:text-sky-500/80 flex items-center gap-1 transition-colors"
             >
               <svg
                 className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -275,7 +275,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
 
       {/* Prompt Section (Collapsible) */}
       {showPrompt && subagent.prompt && (
-        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+        <div className="border-t border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-950/50 p-3">
           <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -287,7 +287,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
             </svg>
             {t('orchestration.prompt')}
           </div>
-          <div className="max-h-32 overflow-auto rounded bg-white dark:bg-gray-800 p-2">
+          <div className="max-h-32 overflow-auto rounded bg-white dark:bg-neutral-800 p-2">
             <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">
               {subagent.prompt}
             </pre>
@@ -303,7 +303,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
             ${
               subagent.error
                 ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30'
-                : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50'
+                : 'border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-950/50'
             }
           `}
         >
@@ -342,7 +342,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
           <div
             className={`
               max-h-64 overflow-auto rounded p-2
-              ${subagent.error ? 'bg-red-100 dark:bg-red-900/40' : 'bg-white dark:bg-gray-800'}
+              ${subagent.error ? 'bg-red-100 dark:bg-red-900/40' : 'bg-white dark:bg-neutral-800'}
             `}
           >
             <pre

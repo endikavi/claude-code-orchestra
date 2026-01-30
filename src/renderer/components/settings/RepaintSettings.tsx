@@ -100,7 +100,7 @@ export function RepaintSettings() {
       </div>
 
       {/* Warning Banner */}
-      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded">
         <div className="flex items-start gap-2">
           <WarningIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-amber-700 dark:text-amber-300">
@@ -121,10 +121,10 @@ export function RepaintSettings() {
           {REPAINT_OPTIONS.map((option) => (
             <label
               key={option.mode}
-              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+              className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
                 repaintSettings.mode === option.mode
-                  ? 'bg-claude-orange/20 border border-claude-orange'
-                  : 'bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-700'
+                  ? 'bg-sky-500/20 border border-sky-500'
+                  : 'bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 hover:bg-white/70 dark:hover:bg-neutral-700'
               }`}
             >
               <input
@@ -151,7 +151,7 @@ export function RepaintSettings() {
                 </p>
               </div>
               {repaintSettings.mode === option.mode && (
-                <CheckIcon className="w-4 h-4 text-claude-orange flex-shrink-0" />
+                <CheckIcon className="w-4 h-4 text-sky-500 flex-shrink-0" />
               )}
             </label>
           ))}
@@ -172,7 +172,7 @@ export function RepaintSettings() {
               step={100}
               value={repaintSettings.intervalMs}
               onChange={(e) => handleIntervalChange(parseInt(e.target.value))}
-              className="flex-1 accent-claude-orange"
+              className="flex-1 accent-sky-500"
             />
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 text-right">
               {repaintSettings.intervalMs}ms
@@ -190,8 +190,8 @@ export function RepaintSettings() {
                 onClick={() => handleIntervalChange(ms)}
                 className={`px-2 py-1 text-xs rounded ${
                   repaintSettings.intervalMs === ms
-                    ? 'bg-claude-orange text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    ? 'bg-sky-500 text-white'
+                    : 'bg-gray-100 dark:bg-neutral-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-neutral-600'
                 }`}
               >
                 {ms}ms
@@ -203,7 +203,7 @@ export function RepaintSettings() {
 
       {/* Info about manual mode */}
       {repaintSettings.mode === 'manual' && (
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
           <div className="flex items-start gap-2">
             <InfoIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-blue-700 dark:text-blue-300">

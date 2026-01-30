@@ -213,10 +213,10 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
                   key={m.value}
                   type="button"
                   onClick={() => setModel(m.value)}
-                  className={`px-3 py-2 text-sm rounded-md border transition-colors ${
+                  className={`px-3 py-2 text-sm rounded-sm border transition-colors ${
                     model === m.value
-                      ? 'bg-claude-orange/20 border-claude-orange text-gray-800 dark:text-white'
-                      : 'bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-claude-tan dark:hover:border-gray-500'
+                      ? 'bg-sky-500/20 border-sky-500 text-gray-800 dark:text-white'
+                      : 'bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
                   }`}
                 >
                   {m.label}
@@ -234,7 +234,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
               <select
                 value={selectedAgentFile}
                 onChange={(e) => setSelectedAgentFile(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+                className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                 disabled={isLoadingAgents}
               >
                 <option value="">
@@ -264,7 +264,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
                 type="checkbox"
                 checked={planMode}
                 onChange={(e) => setPlanMode(e.target.checked)}
-                className="w-4 h-4 text-claude-orange bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange focus:ring-2"
+                className="w-4 h-4 text-sky-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500 focus:ring-2"
               />
               <div>
                 <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -282,7 +282,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
                 type="checkbox"
                 checked={verbose}
                 onChange={(e) => setVerbose(e.target.checked)}
-                className="w-4 h-4 text-claude-orange bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange focus:ring-2"
+                className="w-4 h-4 text-sky-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500 focus:ring-2"
               />
               <div>
                 <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -301,7 +301,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
                   type="checkbox"
                   checked={skipPermissions}
                   onChange={(e) => setSkipPermissions(e.target.checked)}
-                  className="w-4 h-4 text-orange-500 bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-orange-500 focus:ring-2"
+                  className="w-4 h-4 text-orange-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-orange-500 focus:ring-2"
                 />
                 <div>
                   <span className="text-sm font-medium text-orange-500 dark:text-orange-400">
@@ -317,9 +317,9 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
 
           {/* Initial Prompt (if preset has one) */}
           {initialPrompt && (
-            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 border border-claude-tan/30 dark:border-gray-600 rounded-md">
+            <div className="p-3 bg-gray-50 dark:bg-neutral-800/50 border border-gray-200 dark:border-neutral-600 rounded-sm">
               <div className="flex items-center gap-2 mb-1">
-                <PromptIcon className="w-4 h-4 text-claude-orange" />
+                <PromptIcon className="w-4 h-4 text-sky-500" />
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
                   {t('preset.initialPrompt')}
                 </span>
@@ -332,7 +332,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
 
           {/* Cluster Privacy - Only show when cluster is active */}
           {clusterIsActive && (
-            <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+            <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
               <div className="flex items-center gap-2 mb-3">
                 <GlobeIcon className="w-4 h-4 text-blue-500" />
                 <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -347,7 +347,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
                     type="checkbox"
                     checked={shareWithCluster}
                     onChange={(e) => setShareWithCluster(e.target.checked)}
-                    className="w-4 h-4 text-blue-500 bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                    className="w-4 h-4 text-blue-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-blue-500 focus:ring-2"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">
                     {t('instance.shareWithCluster')}
@@ -360,7 +360,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
                     type="checkbox"
                     checked={allowRemoteInput}
                     onChange={(e) => setAllowRemoteInput(e.target.checked)}
-                    className="w-4 h-4 text-blue-500 bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                    className="w-4 h-4 text-blue-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-blue-500 focus:ring-2"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">
                     {t('instance.allowRemoteInput')}
@@ -385,7 +385,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSubmitting ? (
                 <>

@@ -92,21 +92,21 @@ export function ImportSessionsModal({
     <Modal title={t('import.title')} onClose={onClose} width="lg">
       <div className="space-y-4">
         {/* Info banner */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
           <p className="text-sm text-blue-700 dark:text-blue-300">{t('import.description')}</p>
         </div>
 
         {/* Loading state */}
         {isLoadingSessions && (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-claude-orange"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
           </div>
         )}
 
         {/* Import result */}
         {importResult && (
           <div
-            className={`rounded-lg p-3 ${
+            className={`rounded p-3 ${
               importResult.failed > 0
                 ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
                 : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
@@ -168,13 +168,13 @@ export function ImportSessionsModal({
         {!isLoadingSessions && notImportedSessions.length > 0 && (
           <>
             {/* Select all checkbox */}
-            <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-neutral-700 pb-3">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={selectedSessions.size === notImportedSessions.length}
                   onChange={handleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-claude-orange focus:ring-claude-orange"
+                  className="w-4 h-4 rounded border-gray-300 dark:border-neutral-600 text-sky-500 focus:ring-sky-500"
                 />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {t('import.selectAll')} ({notImportedSessions.length})
@@ -191,10 +191,10 @@ export function ImportSessionsModal({
                 <div
                   key={session.sessionId}
                   onClick={() => handleToggleSession(session.sessionId)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                  className={`p-3 rounded border cursor-pointer transition-all ${
                     selectedSessions.has(session.sessionId)
-                      ? 'border-claude-orange bg-claude-orange/5 dark:bg-claude-orange/10'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      ? 'border-sky-500 bg-sky-500/5 dark:bg-sky-500/10'
+                      : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -203,7 +203,7 @@ export function ImportSessionsModal({
                       checked={selectedSessions.has(session.sessionId)}
                       onChange={() => handleToggleSession(session.sessionId)}
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-1 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-claude-orange focus:ring-claude-orange"
+                      className="mt-1 w-4 h-4 rounded border-gray-300 dark:border-neutral-600 text-sky-500 focus:ring-sky-500"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
@@ -262,7 +262,7 @@ export function ImportSessionsModal({
                 .map((session) => (
                   <div
                     key={session.sessionId}
-                    className="p-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                    className="p-2 rounded border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800"
                   >
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       {session.firstUserMessage || session.sessionId}
@@ -274,7 +274,7 @@ export function ImportSessionsModal({
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-neutral-700">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors"
@@ -284,7 +284,7 @@ export function ImportSessionsModal({
           <button
             onClick={handleImport}
             disabled={selectedSessions.size === 0 || isImporting}
-            className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-orange-dark text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-500-dark text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isImporting ? (
               <>

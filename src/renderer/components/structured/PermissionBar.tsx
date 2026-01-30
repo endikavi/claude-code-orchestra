@@ -94,7 +94,7 @@ export function PermissionBar({ instanceId }: PermissionBarProps) {
               {t('permissionPrompt.toolRequest', { tool: pendingPermission.toolName })}
             </span>
           </div>
-          <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-orange-500/20">
+          <div className="bg-white/50 dark:bg-neutral-800/50 rounded p-3 border border-orange-500/20">
             <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all font-mono overflow-x-auto max-h-32">
               {formatToolInput(pendingPermission.toolInput)}
             </pre>
@@ -113,7 +113,7 @@ export function PermissionBar({ instanceId }: PermissionBarProps) {
           onClick={handleAccept}
           disabled={isSending}
           className={`
-            flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-medium
+            flex items-center gap-2 rounded px-6 py-2.5 text-sm font-medium
             transition-colors duration-200
             ${
               isSending
@@ -129,7 +129,7 @@ export function PermissionBar({ instanceId }: PermissionBarProps) {
           onClick={handleReject}
           disabled={isSending}
           className={`
-            flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-medium
+            flex items-center gap-2 rounded px-6 py-2.5 text-sm font-medium
             transition-colors duration-200
             ${
               isSending

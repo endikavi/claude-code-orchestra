@@ -20,7 +20,7 @@ export function NotificationBadge({ onClick }: NotificationBadgeProps) {
   return (
     <button
       onClick={onClick}
-      className="relative p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
+      className="relative p-1.5 rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors flex items-center justify-center"
       title="Notifications"
     >
       <BellIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />

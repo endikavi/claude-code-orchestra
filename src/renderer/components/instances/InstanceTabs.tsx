@@ -102,9 +102,9 @@ export function InstanceTabs() {
     return ids;
   }, [splitTabs]);
 
-  // Filter instances and shells that are NOT in splits
+  // Filter instances and shells that are NOT in splits and NOT hidden (Ralph background tasks)
   const visibleInstances = useMemo(
-    () => instances.filter((i) => !idsInSplits.has(i.id)),
+    () => instances.filter((i) => !idsInSplits.has(i.id) && !i.isHidden),
     [instances, idsInSplits]
   );
 
@@ -194,7 +194,7 @@ export function InstanceTabs() {
   };
 
   return (
-    <div className="flex items-center gap-1 sm:gap-2 pt-1.5 px-1.5 sm:pt-2 sm:px-2 bg-claude-beige dark:bg-gray-800 border-b border-claude-tan/30 dark:border-gray-700 overflow-x-auto scrollbar-hide">
+    <div className="flex items-center gap-1 sm:gap-2 pt-1.5 px-1.5 sm:pt-2 sm:px-2 bg-gray-50 dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-700 overflow-x-auto scrollbar-hide">
       {/* Project name/icon - clickable to go to history */}
       {project && (
         <button
@@ -202,10 +202,10 @@ export function InstanceTabs() {
             selectInstance(null);
             selectSplit(null);
           }}
-          className={`flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 flex-shrink-0 hover:bg-claude-tan/20 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer ${
+          className={`flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 flex-shrink-0 hover:bg-gray-200 dark:hover:bg-neutral-800 rounded-sm transition-colors cursor-pointer ${
             isMobile
               ? 'p-2 min-w-[44px] min-h-[44px] justify-center'
-              : 'px-3 py-1 border-r border-claude-tan/30 dark:border-gray-700 pr-4'
+              : 'px-2 py-1 border-r border-gray-200 dark:border-neutral-700 pr-3'
           }`}
           title="View conversation history"
         >
@@ -214,7 +214,7 @@ export function InstanceTabs() {
             style={{ backgroundColor: project.color || '#6b7280' }}
           />
           {!isMobile && (
-            <span className="font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+            <span className="font-medium text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white">
               {project.name}
             </span>
           )}
@@ -288,7 +288,7 @@ export function InstanceTabs() {
       {/* View mode toggle for new instances */}
       <button
         onClick={toggleViewMode}
-        className="flex items-center gap-1 px-2 py-1.5 sm:py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-700 rounded transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center flex-shrink-0"
+        className="flex items-center gap-1 px-2 py-1.5 sm:py-1 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-neutral-800 rounded-sm transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center flex-shrink-0"
         title={
           viewMode === 'terminal'
             ? t('tabs.newInstancesTerminal', 'New instances: Terminal view')
@@ -305,7 +305,7 @@ export function InstanceTabs() {
       {/* New instance button */}
       <button
         onClick={() => setShowInstanceModal(true)}
-        className="flex items-center gap-1 px-2 py-1.5 sm:py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-700 rounded transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center flex-shrink-0"
+        className="flex items-center gap-1 px-2 py-1.5 sm:py-1 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-neutral-800 rounded-sm transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center flex-shrink-0"
         title={t('tabs.newInstance', 'New instance')}
       >
         <PlusIcon className="w-4 h-4" />
@@ -385,10 +385,10 @@ function InstanceTab({
 
   return (
     <div
-      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white rounded-t-md'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750 rounded-md'
+          ? 'bg-gray-200 dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-sm'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-sm'
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
@@ -398,7 +398,7 @@ function InstanceTab({
       <span className="text-sm truncate max-w-[100px] sm:max-w-[150px]">{truncatedText}</span>
       <button
         onClick={handleClose}
-        className={`p-1 sm:p-0.5 hover:bg-claude-tan/40 dark:hover:bg-gray-600 rounded transition-opacity ${
+        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-sm transition-opacity ${
           isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
         title="Close instance"
@@ -485,10 +485,10 @@ function ShellTab({
 
   return (
     <div
-      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white rounded-t-md'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750 rounded-md'
+          ? 'bg-gray-200 dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-sm'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-sm'
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
@@ -499,7 +499,7 @@ function ShellTab({
       <span className="text-sm truncate max-w-[100px] sm:max-w-[150px]">Shell</span>
       <button
         onClick={handleClose}
-        className={`p-1 sm:p-0.5 hover:bg-claude-tan/40 dark:hover:bg-gray-600 rounded transition-opacity ${
+        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-sm transition-opacity ${
           isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
         title="Close shell"
@@ -586,20 +586,20 @@ function SplitTabComponent({
   // Render type-specific icon
   const renderTypeIcon = (type: 'instance' | 'shell' | 'proxy') => {
     if (type === 'proxy') {
-      return <GlobeIcon className="w-3 h-3 text-claude-orange" />;
+      return <GlobeIcon className="w-3 h-3 text-sky-500" />;
     }
     if (type === 'shell') {
-      return <TerminalIcon className="w-3 h-3 text-gray-500 dark:text-gray-400" />;
+      return <TerminalIcon className="w-3 h-3 text-neutral-500 dark:text-neutral-400" />;
     }
     return null;
   };
 
   return (
     <div
-      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-claude-tan/30 dark:bg-gray-700 text-gray-800 dark:text-white rounded-t-md'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-claude-tan/20 dark:hover:bg-gray-750 rounded-md'
+          ? 'bg-gray-200 dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-sm'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-sm'
       }`}
       onClick={onSelect}
       title={`${leftTitle} | ${rightTitle}`}
@@ -614,7 +614,7 @@ function SplitTabComponent({
       )}
 
       {/* Split icon */}
-      <SplitIcon className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+      <SplitIcon className="w-3 h-3 text-neutral-500 dark:text-neutral-400" />
 
       {/* Right indicator */}
       {rightType === 'proxy' ? (
@@ -633,7 +633,7 @@ function SplitTabComponent({
       {/* Close button */}
       <button
         onClick={handleClose}
-        className={`p-1 sm:p-0.5 hover:bg-claude-tan/40 dark:hover:bg-gray-600 rounded transition-opacity ${
+        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-sm transition-opacity ${
           isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
         title="Close split"

@@ -45,7 +45,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
   // Don't show actions for completed tasks (unless we want to move them back)
   if (task.status === 'done') {
     return (
-      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-neutral-700">
         <button
           onClick={handleMoveToTodo}
           className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
@@ -57,7 +57,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
   }
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex items-center gap-2">
+    <div className="mt-2 pt-2 border-t border-gray-100 dark:border-neutral-700 flex items-center gap-2">
       {task.status === 'todo' && (
         <div className="relative" ref={menuRef}>
           <button
@@ -90,10 +90,10 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
           </button>
 
           {showStartMenu && (
-            <div className="absolute left-0 bottom-full mb-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px] z-50">
+            <div className="absolute left-0 bottom-full mb-1 bg-white dark:bg-neutral-800 rounded shadow-lg border border-gray-200 dark:border-neutral-700 py-1 min-w-[160px] z-50">
               <button
                 onClick={() => handleStart(true)}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-neutral-700 flex items-center gap-2"
               >
                 <svg
                   className="w-4 h-4 text-blue-500"
@@ -115,7 +115,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
               </button>
               <button
                 onClick={() => handleStart(false)}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-neutral-700 flex items-center gap-2"
               >
                 <svg
                   className="w-4 h-4 text-purple-500"
@@ -174,10 +174,10 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
               </button>
 
               {showStartMenu && (
-                <div className="absolute left-0 bottom-full mb-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px] z-50">
+                <div className="absolute left-0 bottom-full mb-1 bg-white dark:bg-neutral-800 rounded shadow-lg border border-gray-200 dark:border-neutral-700 py-1 min-w-[160px] z-50">
                   <button
                     onClick={() => handleStart(true)}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-neutral-700 flex items-center gap-2"
                   >
                     <svg
                       className="w-4 h-4 text-blue-500"
@@ -199,7 +199,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
                   </button>
                   <button
                     onClick={() => handleStart(false)}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-neutral-700 flex items-center gap-2"
                   >
                     <svg
                       className="w-4 h-4 text-purple-500"

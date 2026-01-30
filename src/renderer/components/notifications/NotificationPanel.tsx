@@ -95,10 +95,10 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-full mt-2 w-96 max-h-[70vh] bg-claude-beige dark:bg-gray-800 rounded-lg shadow-xl border border-claude-tan/30 dark:border-gray-700 z-50 flex flex-col overflow-hidden animate-slideIn"
+      className="absolute right-0 top-full mt-2 w-96 max-h-[70vh] bg-gray-100 dark:bg-neutral-900 rounded shadow-xl border border-gray-200 dark:border-neutral-700 z-50 flex flex-col overflow-hidden animate-slideIn"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-claude-tan/30 dark:border-gray-700 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-neutral-700 flex-shrink-0">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
             {t('notifications.title', 'Notifications')}
@@ -113,7 +113,7 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
           {stats.unread > 0 && (
             <button
               onClick={() => markAllRead()}
-              className="text-xs text-claude-orange hover:text-claude-orange/80 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
+              className="text-xs text-sky-500 hover:text-sky-500/80 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
             >
               {t('notifications.markAllRead', 'Mark all read')}
             </button>
@@ -133,7 +133,7 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-claude-orange" />
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-sky-500" />
           </div>
         ) : visibleNotifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-gray-400">
@@ -141,7 +141,7 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
             <p className="text-sm">{t('notifications.empty', 'No notifications')}</p>
           </div>
         ) : (
-          <div className="divide-y divide-claude-tan/20 dark:divide-gray-700">
+          <div className="divide-y divide-sky-600/20 dark:divide-gray-700">
             {visibleNotifications.map((notification) => (
               <NotificationItem
                 key={notification.id}
@@ -173,19 +173,19 @@ function NotificationItem({ notification, onClick, onDismiss, onDelete }: Notifi
 
   return (
     <div
-      className={`relative group px-4 py-3 hover:bg-claude-tan/10 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${
-        !notification.read ? 'bg-claude-tan/5 dark:bg-gray-700/30' : ''
+      className={`relative group px-4 py-3 hover:bg-gray-100 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors ${
+        !notification.read ? 'bg-gray-50 dark:bg-neutral-800/30' : ''
       }`}
       onClick={onClick}
     >
       {/* Unread indicator */}
       {!notification.read && (
-        <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-claude-orange" />
+        <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-sky-500" />
       )}
 
       <div className="flex items-start gap-3">
         {/* Icon */}
-        <div className={`flex-shrink-0 p-2 rounded-lg ${priorityColor}`}>{typeIcon}</div>
+        <div className={`flex-shrink-0 p-2 rounded ${priorityColor}`}>{typeIcon}</div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
@@ -206,7 +206,7 @@ function NotificationItem({ notification, onClick, onDismiss, onDelete }: Notifi
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo}</span>
             {notification.instanceId && (
-              <span className="text-xs text-claude-orange/70 dark:text-orange-400/70">
+              <span className="text-xs text-sky-500/70 dark:text-orange-400/70">
                 {t('notifications.instance', 'Instance')}
               </span>
             )}
@@ -220,7 +220,7 @@ function NotificationItem({ notification, onClick, onDismiss, onDelete }: Notifi
               e.stopPropagation();
               onDismiss();
             }}
-            className="p-1 rounded hover:bg-claude-tan/30 dark:hover:bg-gray-600 transition-colors"
+            className="p-1 rounded hover:bg-gray-200 dark:hover:bg-neutral-700 transition-colors"
             title={t('notifications.dismiss', 'Dismiss')}
           >
             <XIcon className="w-3.5 h-3.5 text-gray-400" />
@@ -272,7 +272,7 @@ function getPriorityColor(priority: string): string {
       return 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
     case 'low':
     default:
-      return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400';
+      return 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-400';
   }
 }
 

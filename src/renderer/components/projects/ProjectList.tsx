@@ -265,10 +265,10 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
 
     const projectContent = (
       <div
-        className={`p-3 rounded-lg cursor-pointer transition-all ${
+        className={`p-2 rounded cursor-pointer transition-all ${
           isSelected
-            ? 'bg-claude-tan/30 dark:bg-gray-700 border border-claude-orange/50'
-            : 'bg-white/50 dark:bg-gray-800 hover:bg-white/70 dark:hover:bg-gray-750 border border-transparent'
+            ? 'bg-gray-200 dark:bg-neutral-800 border border-sky-500/50'
+            : 'bg-white/50 dark:bg-neutral-900 hover:bg-white/70 dark:hover:bg-neutral-750 border border-transparent'
         }`}
         onClick={() => {
           selectProject(project.id);

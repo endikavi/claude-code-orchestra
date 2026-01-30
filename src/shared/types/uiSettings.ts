@@ -9,7 +9,7 @@ export interface CollapsedSections {
   clusters: Record<string, boolean>; // nodeId -> collapsed
 }
 
-export type TerminalFont = 'system' | 'cascadia' | 'jetbrains' | 'fira' | 'consolas';
+export type TerminalFont = 'embedded' | 'system' | 'cascadia' | 'jetbrains' | 'fira' | 'consolas';
 
 // Repaint method types for experimental TUI fix options
 export type RepaintMode =

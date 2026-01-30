@@ -91,7 +91,7 @@ export function MainContent() {
   const activeSplit = getActiveSplit();
 
   return (
-    <main className="flex-1 flex flex-col bg-claude-cream dark:bg-gray-900 overflow-hidden">
+    <main className="flex-1 flex flex-col bg-gray-100 dark:bg-neutral-950 overflow-hidden">
       {selectedProjectId ? (
         <>
           {/* Header with tabs */}

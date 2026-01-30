@@ -48,8 +48,8 @@ export function InspectorToolbar({ viewId }: InspectorToolbarProps) {
           p-1.5 rounded transition-colors
           ${
             devToolsState.inspectorEnabled
-              ? 'bg-claude-orange text-white'
-              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              ? 'bg-sky-500 text-white'
+              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-neutral-700'
           }
         `}
         title={t(
@@ -67,8 +67,8 @@ export function InspectorToolbar({ viewId }: InspectorToolbarProps) {
           relative p-1.5 rounded transition-colors
           ${
             devToolsState.consolePanelOpen
-              ? 'bg-claude-orange text-white'
-              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              ? 'bg-sky-500 text-white'
+              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-neutral-700'
           }
         `}
         title={t(

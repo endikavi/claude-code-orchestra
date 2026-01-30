@@ -45,7 +45,7 @@ export function ConfigViewer() {
   return (
     <div className="h-full flex flex-col">
       {/* Tabs */}
-      <div className="flex border-b border-claude-tan/30 dark:border-gray-700">
+      <div className="flex border-b border-gray-200 dark:border-neutral-700">
         <TabButton active={activeTab === 'mcp'} onClick={() => setActiveTab('mcp')}>
           MCP Servers ({mcpServers.length})
         </TabButton>
@@ -81,7 +81,7 @@ function TabButton({
       onClick={onClick}
       className={`px-4 py-2 text-sm font-medium transition-colors ${
         active
-          ? 'text-claude-orange border-b-2 border-claude-orange'
+          ? 'text-sky-500 border-b-2 border-sky-500'
           : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white'
       }`}
     >
@@ -104,7 +104,7 @@ function McpServersView({ servers }: { servers: McpServer[] }) {
       {servers.map((server) => (
         <div
           key={server.name}
-          className="bg-white/50 dark:bg-gray-800 rounded-lg p-4 border border-claude-tan/30 dark:border-gray-700"
+          className="bg-white/50 dark:bg-neutral-800 rounded p-4 border border-gray-200 dark:border-neutral-700"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -120,7 +120,7 @@ function McpServersView({ servers }: { servers: McpServer[] }) {
                 {server.tools.map((tool) => (
                   <span
                     key={tool}
-                    className="px-2 py-0.5 bg-claude-tan/30 dark:bg-gray-700 rounded text-xs text-gray-700 dark:text-gray-300"
+                    className="px-2 py-0.5 bg-gray-200 dark:bg-neutral-700 rounded text-xs text-gray-700 dark:text-gray-300"
                   >
                     {tool}
                   </span>
@@ -150,7 +150,7 @@ function ToolsView({ settings }: { settings: ClaudeSettings }) {
       {tools.map((tool) => (
         <div
           key={tool.name}
-          className="flex items-center justify-between bg-white/50 dark:bg-gray-800 rounded-lg p-3 border border-claude-tan/30 dark:border-gray-700"
+          className="flex items-center justify-between bg-white/50 dark:bg-neutral-800 rounded p-3 border border-gray-200 dark:border-neutral-700"
         >
           <div className="flex items-center gap-2">
             <ToolIcon className="w-4 h-4 text-green-500 dark:text-green-400" />
@@ -160,7 +160,7 @@ function ToolsView({ settings }: { settings: ClaudeSettings }) {
             className={`text-xs px-2 py-0.5 rounded ${
               tool.enabled
                 ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                : 'bg-claude-tan/30 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                : 'bg-gray-200 dark:bg-neutral-700 text-gray-600 dark:text-gray-400'
             }`}
           >
             {tool.enabled ? 'Enabled' : 'Disabled'}
@@ -185,13 +185,13 @@ function HooksView({ settings }: { settings: ClaudeSettings }) {
       {hooks.map((hook, index) => (
         <div
           key={index}
-          className="bg-white/50 dark:bg-gray-800 rounded-lg p-3 border border-claude-tan/30 dark:border-gray-700"
+          className="bg-white/50 dark:bg-neutral-800 rounded p-3 border border-gray-200 dark:border-neutral-700"
         >
           <div className="flex items-center gap-2 mb-1">
             <HookIcon className="w-4 h-4 text-purple-500 dark:text-purple-400" />
             <span className="text-sm font-medium text-gray-800 dark:text-white">{hook.event}</span>
           </div>
-          <code className="text-xs text-gray-600 dark:text-gray-400 block mt-1 bg-claude-cream dark:bg-gray-900 p-2 rounded">
+          <code className="text-xs text-gray-600 dark:text-gray-400 block mt-1 bg-gray-100 dark:bg-neutral-950 p-2 rounded">
             {hook.command}
           </code>
         </div>

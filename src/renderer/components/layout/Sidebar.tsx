@@ -52,13 +52,13 @@ export function Sidebar() {
   // Collapsed sidebar (icons only)
   if (isCollapsed) {
     return (
-      <aside className="w-12 bg-claude-beige dark:bg-gray-800 border-r border-claude-tan/30 dark:border-gray-700 flex flex-col transition-all duration-300 overflow-x-hidden">
+      <aside className="w-12 bg-gray-50 dark:bg-neutral-900 border-r border-gray-200 dark:border-neutral-700 flex flex-col transition-all duration-300 overflow-x-hidden">
         {/* Collapsed Header */}
-        <div className="p-2 border-b border-claude-tan/30 dark:border-gray-700 flex flex-col items-center gap-2">
+        <div className="p-2 border-b border-gray-200 dark:border-neutral-700 flex flex-col items-center gap-2">
           {isElectron && (
             <button
               onClick={() => setShowProjectModal(true)}
-              className="p-1.5 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
+              className="p-1 rounded-sm bg-sky-500 hover:bg-sky-600 transition-colors flex items-center justify-center"
               title={t('sidebar.addProject')}
             >
               <PlusIcon className="w-3.5 h-3.5 text-white" />
@@ -70,7 +70,7 @@ export function Sidebar() {
               title={t('sidebar.running', { count: runningCount })}
             >
               <div className="w-2 h-2 rounded-full bg-green-500 status-pulse" />
-              <span className="text-xs text-gray-600 dark:text-gray-400">{runningCount}</span>
+              <span className="text-xs text-neutral-600 dark:text-neutral-400">{runningCount}</span>
             </div>
           )}
         </div>
@@ -98,7 +98,7 @@ export function Sidebar() {
 
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-72 bg-claude-beige dark:bg-gray-800 border-r border-claude-tan/30 dark:border-gray-700 flex flex-col transition-transform duration-300 ease-in-out ${
+          className={`fixed inset-y-0 left-0 z-50 w-72 bg-gray-50 dark:bg-neutral-900 border-r border-gray-200 dark:border-neutral-700 flex flex-col transition-transform duration-300 ease-in-out ${
             sidebarMobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -116,7 +116,7 @@ export function Sidebar() {
 
   // Desktop/Tablet expanded sidebar
   return (
-    <aside className="w-72 bg-claude-beige dark:bg-gray-800 border-r border-claude-tan/30 dark:border-gray-700 flex flex-col transition-all duration-300">
+    <aside className="w-72 bg-gray-50 dark:bg-neutral-900 border-r border-gray-200 dark:border-neutral-700 flex flex-col transition-all duration-300">
       <SidebarContent
         t={t}
         projects={projects}
@@ -145,15 +145,15 @@ function SidebarContent({
   return (
     <>
       {/* Header */}
-      <div className="p-4 border-b border-claude-tan/30 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+      <div className="p-3 border-b border-gray-200 dark:border-neutral-700">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
             {t('sidebar.projects')}
           </h2>
           {isElectron && (
             <button
               onClick={() => setShowProjectModal(true)}
-              className="p-1.5 rounded-md bg-claude-orange hover:bg-claude-tan transition-colors flex items-center justify-center"
+              className="p-1 rounded-sm bg-sky-500 hover:bg-sky-600 transition-colors flex items-center justify-center"
               title={t('sidebar.addProject')}
             >
               <PlusIcon className="w-4 h-4 text-white" />
@@ -162,17 +162,17 @@ function SidebarContent({
         </div>
 
         {/* Stats */}
-        <div className="flex gap-4 text-xs">
+        <div className="flex gap-3 text-xs">
           <div className="flex items-center gap-1.5">
-            <FolderIcon className="w-3.5 h-3.5 text-gray-500 dark:text-gray-500" />
-            <span className="text-gray-600 dark:text-gray-400">
+            <FolderIcon className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-500" />
+            <span className="text-neutral-600 dark:text-neutral-400">
               {t('sidebar.projectsCount', { count: projects.length })}
             </span>
           </div>
           {runningCount > 0 && (
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-green-500 status-pulse" />
-              <span className="text-gray-600 dark:text-gray-400">
+              <span className="text-neutral-600 dark:text-neutral-400">
                 {t('sidebar.running', { count: runningCount })}
               </span>
             </div>

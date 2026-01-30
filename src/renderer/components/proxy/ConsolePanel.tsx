@@ -52,9 +52,9 @@ interface ConsolePanelProps {
 
 const LEVEL_COLORS: Record<ConsoleLevel, { bg: string; text: string; border: string }> = {
   log: {
-    bg: 'bg-gray-100 dark:bg-gray-800',
+    bg: 'bg-gray-100 dark:bg-neutral-800',
     text: 'text-gray-700 dark:text-gray-300',
-    border: 'border-gray-200 dark:border-gray-700',
+    border: 'border-gray-200 dark:border-neutral-700',
   },
   info: {
     bg: 'bg-blue-50 dark:bg-blue-900/20',
@@ -156,14 +156,14 @@ export function ConsolePanel({ viewId }: ConsolePanelProps) {
   return (
     <div
       className={`
-        border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900
+        border-t border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-950
         transition-all duration-200 flex flex-col
         ${isOpen ? 'h-48' : 'h-8'}
       `}
     >
       {/* Header / Toggle bar */}
       <div
-        className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 cursor-pointer select-none"
+        className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-neutral-800 border-b border-gray-200 dark:border-neutral-700 cursor-pointer select-none"
         onClick={() => toggleConsolePanel(viewId)}
       >
         <div className="flex items-center gap-2">
@@ -209,8 +209,8 @@ export function ConsolePanel({ viewId }: ConsolePanelProps) {
                     px-1.5 py-0.5 text-xs rounded transition-colors
                     ${
                       devToolsState.consoleFilter === opt.level
-                        ? 'bg-claude-orange text-white'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        ? 'bg-sky-500 text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-neutral-700'
                     }
                   `}
                 >
@@ -225,7 +225,7 @@ export function ConsolePanel({ viewId }: ConsolePanelProps) {
             {/* Clear button */}
             <button
               onClick={() => clearConsoleEntries(viewId)}
-              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-neutral-700 text-gray-500 dark:text-gray-400"
               title={t('devtools.console.clear', 'Clear console')}
             >
               <TrashIcon className="w-3.5 h-3.5" />

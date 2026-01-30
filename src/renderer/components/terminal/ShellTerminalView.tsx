@@ -12,20 +12,20 @@ import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
 const darkTerminalTheme: ITheme = {
-  background: '#1a1a2e',
-  foreground: '#e4e4e7',
-  cursor: '#da7756',
-  cursorAccent: '#1a1a2e',
-  selectionBackground: 'rgba(218, 119, 86, 0.3)',
-  black: '#1a1a2e',
+  background: '#0a0a0a', // neutral-950
+  foreground: '#e5e5e5', // neutral-200
+  cursor: '#0ea5e9', // sky-500
+  cursorAccent: '#0a0a0a',
+  selectionBackground: 'rgba(14, 165, 233, 0.3)', // sky-500
+  black: '#0a0a0a',
   red: '#ef4444',
   green: '#22c55e',
   yellow: '#f59e0b',
   blue: '#3b82f6',
   magenta: '#a855f7',
   cyan: '#06b6d4',
-  white: '#e4e4e7',
-  brightBlack: '#4a4a6a',
+  white: '#e5e5e5',
+  brightBlack: '#525252', // neutral-600
   brightRed: '#f87171',
   brightGreen: '#4ade80',
   brightYellow: '#fbbf24',
@@ -36,11 +36,11 @@ const darkTerminalTheme: ITheme = {
 };
 
 const lightTerminalTheme: ITheme = {
-  background: '#e8dcd0', // claude-cream
-  foreground: '#374151', // gray-700
-  cursor: '#da7756', // claude-orange
-  cursorAccent: '#e8dcd0',
-  selectionBackground: 'rgba(212, 162, 127, 0.3)', // claude-tan with opacity
+  background: '#fafafa', // neutral-50
+  foreground: '#262626', // neutral-800
+  cursor: '#0ea5e9', // sky-500
+  cursorAccent: '#fafafa',
+  selectionBackground: 'rgba(14, 165, 233, 0.3)', // sky-500
   black: '#1f2937',
   red: '#dc2626',
   green: '#16a34a',
@@ -48,7 +48,7 @@ const lightTerminalTheme: ITheme = {
   blue: '#2563eb',
   magenta: '#9333ea',
   cyan: '#0891b2',
-  white: '#e8dcd0',
+  white: '#fafafa',
   brightBlack: '#6b7280',
   brightRed: '#ef4444',
   brightGreen: '#22c55e',
@@ -56,7 +56,7 @@ const lightTerminalTheme: ITheme = {
   brightBlue: '#3b82f6',
   brightMagenta: '#a855f7',
   brightCyan: '#06b6d4',
-  brightWhite: '#f5f0e8', // claude-beige
+  brightWhite: '#f5f5f5', // gray-100
 };
 
 interface ShellTerminalViewProps {
@@ -393,7 +393,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   }, [theme]);
 
   return (
-    <div className="h-full flex flex-col bg-claude-cream dark:bg-[#1a1a2e]">
+    <div className="h-full flex flex-col bg-neutral-50 dark:bg-neutral-950">
       <div
         ref={terminalRef}
         className="flex-1 p-2"

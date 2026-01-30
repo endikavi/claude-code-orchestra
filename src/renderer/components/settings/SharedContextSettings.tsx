@@ -21,7 +21,7 @@ export function SharedContextSettings() {
       </div>
 
       {/* Enable/Disable */}
-      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-neutral-800/50 rounded border border-gray-200 dark:border-neutral-700">
         <div>
           <h4 className="text-sm font-medium text-gray-800 dark:text-white">
             {t('settings.context.enabled', 'Enable Shared Context')}
@@ -40,7 +40,7 @@ export function SharedContextSettings() {
       </div>
 
       {/* Auto-publish */}
-      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-neutral-800/50 rounded border border-gray-200 dark:border-neutral-700">
         <div>
           <h4 className="text-sm font-medium text-gray-800 dark:text-white">
             {t('settings.context.autoPublish', 'Auto-publish Context')}
@@ -60,7 +60,7 @@ export function SharedContextSettings() {
       </div>
 
       {/* Inject on Start */}
-      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-neutral-800/50 rounded border border-gray-200 dark:border-neutral-700">
         <div>
           <h4 className="text-sm font-medium text-gray-800 dark:text-white">
             {t('settings.context.injectOnStart', 'Inject Context on Start')}
@@ -80,7 +80,7 @@ export function SharedContextSettings() {
       </div>
 
       {/* Show Panel */}
-      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-neutral-800/50 rounded border border-gray-200 dark:border-neutral-700">
         <div>
           <h4 className="text-sm font-medium text-gray-800 dark:text-white">
             {t('settings.context.showPanel', 'Show Context Panel')}
@@ -100,7 +100,7 @@ export function SharedContextSettings() {
       </div>
 
       {/* Retention Days */}
-      <div className="p-4 bg-white/50 dark:bg-gray-800/50 rounded-lg border border-claude-tan/30 dark:border-gray-700">
+      <div className="p-4 bg-white/50 dark:bg-neutral-800/50 rounded border border-gray-200 dark:border-neutral-700">
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-sm font-medium text-gray-800 dark:text-white">
@@ -125,7 +125,7 @@ export function SharedContextSettings() {
                 })
               }
               disabled={!sharedContext.enabled}
-              className="w-20 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white disabled:opacity-50"
+              className="w-20 px-3 py-1.5 text-sm bg-white dark:bg-neutral-700 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white disabled:opacity-50"
             />
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {t('settings.context.days', 'days')}
@@ -135,7 +135,7 @@ export function SharedContextSettings() {
       </div>
 
       {/* Info box */}
-      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
         <div className="flex gap-3">
           <InfoIcon className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
           <div>
@@ -169,9 +169,9 @@ function ToggleSwitch({ checked, onChange, disabled }: ToggleSwitchProps) {
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-claude-orange focus:ring-offset-2 ${
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-      } ${checked ? 'bg-claude-orange' : 'bg-gray-300 dark:bg-gray-600'}`}
+      } ${checked ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'}`}
     >
       <span
         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${

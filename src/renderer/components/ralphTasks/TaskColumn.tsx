@@ -9,7 +9,7 @@ interface TaskColumnProps {
 }
 
 const STATUS_COLORS: Record<RalphTaskStatus, string> = {
-  todo: 'bg-gray-100 dark:bg-gray-800',
+  todo: 'bg-gray-100 dark:bg-neutral-800',
   doing: 'bg-blue-50 dark:bg-blue-900/20',
   done: 'bg-green-50 dark:bg-green-900/20',
 };
@@ -46,13 +46,13 @@ export function TaskColumn({ status, title, projectId: _projectId }: TaskColumnP
 
   return (
     <div
-      className={`flex flex-col w-80 min-w-80 rounded-lg ${STATUS_COLORS[status]}`}
+      className={`flex flex-col w-80 min-w-80 rounded ${STATUS_COLORS[status]}`}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
       {/* Header */}
       <div
-        className={`px-3 py-2 font-medium ${HEADER_COLORS[status]} border-b border-gray-200 dark:border-gray-700`}
+        className={`px-3 py-2 font-medium ${HEADER_COLORS[status]} border-b border-gray-200 dark:border-neutral-700`}
       >
         <div className="flex items-center justify-between">
           <span>{title}</span>

@@ -40,6 +40,7 @@ export class RalphTaskLoop extends EventEmitter {
    * Set the ProcessManager instance (must be called during initialization)
    */
   setProcessManager(pm: ProcessManagerType): void {
+    console.log('[RalphTaskLoop] setProcessManager called');
     this.processManager = pm;
     this.setupProcessManagerListeners();
   }
@@ -50,8 +51,13 @@ export class RalphTaskLoop extends EventEmitter {
   private setupProcessManagerListeners(): void {
     if (!this.processManager) return;
 
+    console.log('[RalphTaskLoop] Setting up ProcessManager listeners');
+
     // Listen for instance exit events
     this.processManager.on('instanceExited', (instanceId: string, exitCode: number) => {
+      console.log(
+        `[RalphTaskLoop] Received instanceExited event: instanceId=${instanceId}, exitCode=${exitCode}`
+      );
       this.handleInstanceExit(instanceId, exitCode);
     });
   }
@@ -62,6 +68,9 @@ export class RalphTaskLoop extends EventEmitter {
    * @param isInteractive - If true, shows terminal UI; if false, runs in background (default: use task's isInteractive setting)
    */
   startTask(taskId: string, isInteractive?: boolean): RalphTask | null {
+    console.log(
+      `[RalphTaskLoop] startTask called: taskId=${taskId}, isInteractive=${isInteractive}`
+    );
     const task = this.taskManager.getTaskById(taskId);
     if (!task) {
       console.error(`[RalphTaskLoop] Task ${taskId} not found`);
@@ -122,9 +131,14 @@ export class RalphTaskLoop extends EventEmitter {
    * Complete a task (called by CLI via API)
    */
   completeTask(taskId: string, summary: string): RalphTask | null {
+    console.log(`[RalphTaskLoop] completeTask called: taskId=${taskId}, summary="${summary}"`);
+
     const running = Array.from(this.runningTasks.values()).find((r) => r.taskId === taskId);
 
     if (running) {
+      console.log(
+        `[RalphTaskLoop] completeTask: removing from runningTasks, instanceId=${running.instanceId}`
+      );
       this.runningTasks.delete(running.instanceId);
     }
 
@@ -132,6 +146,7 @@ export class RalphTaskLoop extends EventEmitter {
     const task = this.taskManager.completeTask(taskId, summary);
 
     if (task) {
+      console.log(`[RalphTaskLoop] completeTask success: task moved to done`);
       this.emit('taskCompleted', task);
 
       // Check if we're processing all tasks
@@ -259,6 +274,10 @@ export class RalphTaskLoop extends EventEmitter {
    * Run the loop for a task
    */
   private runLoop(task: RalphTask): void {
+    console.log(
+      `[RalphTaskLoop] runLoop called: taskId=${task.id}, status=${task.status}, isPaused=${task.isPaused}, loopCount=${task.loopCount}`
+    );
+
     if (!this.processManager) {
       console.error('[RalphTaskLoop] ProcessManager not set');
       return;
@@ -266,11 +285,15 @@ export class RalphTaskLoop extends EventEmitter {
 
     // Check if task is already done or paused
     if (task.status === 'done' || task.isPaused) {
+      console.log(
+        `[RalphTaskLoop] runLoop early return: task.status=${task.status}, task.isPaused=${task.isPaused}`
+      );
       return;
     }
 
     // Check loop limit
     if (task.loopCount >= MAX_LOOP_ITERATIONS) {
+      console.log(`[RalphTaskLoop] runLoop MAX_LOOP_ITERATIONS reached: ${task.loopCount}`);
       console.warn(
         `[RalphTaskLoop] Task ${task.id} reached max iterations (${MAX_LOOP_ITERATIONS})`
       );
@@ -304,6 +327,7 @@ export class RalphTaskLoop extends EventEmitter {
       };
 
       const instance = this.processManager.createInstance(instanceConfig);
+      console.log(`[RalphTaskLoop] Instance created: instanceId=${instance.id}, taskId=${task.id}`);
 
       // Track the running task
       this.runningTasks.set(instance.id, { taskId: task.id, instanceId: instance.id });
@@ -327,8 +351,15 @@ export class RalphTaskLoop extends EventEmitter {
    * Handle instance exit - determine if loop should continue
    */
   private handleInstanceExit(instanceId: string, exitCode: number): void {
+    console.log(
+      `[RalphTaskLoop] handleInstanceExit: instanceId=${instanceId}, exitCode=${exitCode}`
+    );
+
     const running = this.runningTasks.get(instanceId);
     if (!running) {
+      console.log(
+        `[RalphTaskLoop] handleInstanceExit: instanceId=${instanceId} not found in runningTasks (not a Ralph task)`
+      );
       return; // Not a Ralph task instance
     }
 
@@ -336,14 +367,24 @@ export class RalphTaskLoop extends EventEmitter {
 
     const task = this.taskManager.getTaskById(running.taskId);
     if (!task) {
+      console.log(
+        `[RalphTaskLoop] handleInstanceExit: task ${running.taskId} not found in database`
+      );
       return;
     }
+
+    console.log(
+      `[RalphTaskLoop] handleInstanceExit: taskId=${task.id}, status=${task.status}, isPaused=${task.isPaused}`
+    );
 
     // Clear instance ID
     this.taskManager.setTaskInstance(task.id, null);
 
     // If task is done or paused, don't restart
     if (task.status === 'done' || task.isPaused) {
+      console.log(
+        `[RalphTaskLoop] handleInstanceExit: NOT restarting - status=${task.status}, isPaused=${task.isPaused}`
+      );
       this.emit('loopCompleted', task.id);
       return;
     }
@@ -356,6 +397,9 @@ export class RalphTaskLoop extends EventEmitter {
     // Restart the loop after a delay
     console.log(
       `[RalphTaskLoop] Restarting loop for task ${task.id} (iteration ${task.loopCount + 1})`
+    );
+    console.log(
+      `[RalphTaskLoop] handleInstanceExit: scheduling loop restart in ${LOOP_RESTART_DELAY_MS}ms for task ${task.id}`
     );
 
     setTimeout(() => {
@@ -373,6 +417,13 @@ export class RalphTaskLoop extends EventEmitter {
     const contextFilePath =
       task.contextFilePath || this.taskManager.getContextFilePath(task, project.path);
 
+    // Get the API configuration (port and SSL)
+    const remoteConfig = this.dataStore.getRemoteConfig();
+    const apiPort = remoteConfig.port;
+    const protocol = remoteConfig.ssl?.enabled ? 'https' : 'http';
+    // For HTTPS with self-signed certs, we need -k flag to skip certificate verification
+    const curlFlags = remoteConfig.ssl?.enabled ? '-k ' : '';
+
     const prompt = `You are working on a task in a Ralph Loop. This is an automated system that will keep running you in a loop until the task is complete.
 
 ## Task: ${task.name}
@@ -387,13 +438,16 @@ This file contains the task description and notes from previous iterations.
 ## Important Instructions
 
 1. **Complete the task** described above step by step
-2. **When finished**, call the complete endpoint to mark the task as done:
-   - Make a POST request to: http://localhost:3847/api/ralph-tasks/${task.id}/complete
-   - Body: { "summary": "Brief description of what you accomplished" }
-3. **If you need human help**, pause and ask:
-   - Make a POST request to: http://localhost:3847/api/ralph-tasks/${task.id}/help
-   - Body: { "reason": "Your question or what you need help with" }
+2. **When finished**, mark the task as done by running this curl command:
+   \`\`\`bash
+   curl ${curlFlags}-X POST ${protocol}://localhost:${apiPort}/api/ralph-tasks/${task.id}/complete -H "Content-Type: application/json" -d "{\\"summary\\": \\"Brief description of what you accomplished\\"}"
+   \`\`\`
+3. **If you need human help**, pause and request help by running:
+   \`\`\`bash
+   curl ${curlFlags}-X POST ${protocol}://localhost:${apiPort}/api/ralph-tasks/${task.id}/help -H "Content-Type: application/json" -d "{\\"reason\\": \\"Your question or what you need help with\\"}"
+   \`\`\`
 4. **Update the context file** with your progress notes after each significant step
+5. **CRITICAL**: You MUST call the complete endpoint when finished, or the loop will keep running indefinitely
 
 ## Current Status
 

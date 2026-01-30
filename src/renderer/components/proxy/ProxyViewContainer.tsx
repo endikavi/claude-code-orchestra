@@ -55,7 +55,7 @@ export function ProxyViewContainer({ instanceId }: ProxyViewContainerProps) {
 
   if (views.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-100 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
+      <div className="flex-1 flex items-center justify-center bg-gray-100 dark:bg-neutral-950 text-gray-500 dark:text-gray-400">
         <div className="text-center">
           <GlobeIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p>{t('proxy.noViews', 'No preview views open')}</p>
@@ -71,7 +71,7 @@ export function ProxyViewContainer({ instanceId }: ProxyViewContainerProps) {
     <div className="flex flex-col h-full">
       {/* Tabs (only show if multiple views) */}
       {views.length > 1 && (
-        <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+        <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-neutral-800 border-b border-gray-200 dark:border-neutral-700 overflow-x-auto">
           {views.map((view) => (
             <button
               key={view.id}
@@ -80,8 +80,8 @@ export function ProxyViewContainer({ instanceId }: ProxyViewContainerProps) {
                 flex items-center gap-1.5 px-3 py-1.5 rounded text-sm whitespace-nowrap
                 ${
                   view.id === activeView?.id
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-neutral-700'
                 }
               `}
             >
@@ -92,7 +92,7 @@ export function ProxyViewContainer({ instanceId }: ProxyViewContainerProps) {
                   e.stopPropagation();
                   closeProxyView(view.id);
                 }}
-                className="ml-1 p-0.5 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                className="ml-1 p-0.5 rounded hover:bg-gray-300 dark:hover:bg-neutral-600"
               >
                 <XIcon className="w-3 h-3" />
               </button>

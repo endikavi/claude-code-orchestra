@@ -112,7 +112,7 @@ export function AgentFormModal({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             placeholder="my-agent"
             autoFocus
             disabled={isEditing}
@@ -131,7 +131,7 @@ export function AgentFormModal({
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             placeholder={t(
               'agent.descriptionPlaceholder',
               'A short description of what this agent does'
@@ -147,7 +147,7 @@ export function AgentFormModal({
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent resize-none font-mono text-sm"
+            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none font-mono text-sm"
             placeholder={t('agent.promptPlaceholder', 'Instructions for the agent...')}
             rows={6}
           />
@@ -161,7 +161,7 @@ export function AgentFormModal({
           <select
             value={model}
             onChange={(e) => setModel(e.target.value as ClaudeModel | '')}
-            className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
           >
             <option value="">{t('agent.useDefaultModel', 'Use default model')}</option>
             <option value="sonnet">Sonnet</option>
@@ -181,10 +181,10 @@ export function AgentFormModal({
                 key={tool}
                 type="button"
                 onClick={() => handleToolToggle(tool)}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                className={`px-3 py-1 text-sm rounded-sm transition-colors ${
                   tools.includes(tool)
-                    ? 'bg-claude-orange text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    ? 'bg-sky-500 text-white'
+                    : 'bg-gray-200 dark:bg-neutral-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-neutral-700'
                 }`}
               >
                 {tool}
@@ -206,7 +206,7 @@ export function AgentFormModal({
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 pt-4 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 dark:border-neutral-700">
           <button
             type="button"
             onClick={onClose}
@@ -216,7 +216,7 @@ export function AgentFormModal({
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-claude-orange hover:bg-claude-orange-dark text-white rounded-md transition-colors"
+            className="px-4 py-2 bg-sky-500 hover:bg-sky-500-dark text-white rounded-sm transition-colors"
           >
             {isEditing ? t('common.save', 'Save') : t('common.add', 'Add')}
           </button>

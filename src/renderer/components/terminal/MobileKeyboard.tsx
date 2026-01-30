@@ -48,7 +48,7 @@ export function MobileKeyboard({ instanceId }: MobileKeyboardProps) {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 right-4 z-50 w-12 h-12 rounded-full bg-claude-orange hover:bg-claude-tan text-white shadow-lg flex items-center justify-center transition-colors"
+        className="fixed bottom-20 right-4 z-50 w-12 h-12 rounded-full bg-sky-500 hover:bg-sky-600 text-white shadow-lg flex items-center justify-center transition-colors"
         title={t('mobileKeyboard.open')}
       >
         <KeyboardIcon className="w-6 h-6" />
@@ -57,12 +57,12 @@ export function MobileKeyboard({ instanceId }: MobileKeyboardProps) {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-claude-beige dark:bg-gray-800 border-t border-claude-tan/30 dark:border-gray-700 p-2 pb-safe">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-100 dark:bg-neutral-900 border-t border-gray-200 dark:border-neutral-700 p-2 pb-safe">
       {/* Close button */}
       <div className="flex justify-end mb-2">
         <button
           onClick={() => setIsOpen(false)}
-          className="p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors"
+          className="p-1.5 rounded-sm hover:bg-sky-600/20 dark:hover:bg-neutral-800 transition-colors"
           title={t('mobileKeyboard.close')}
         >
           <CloseIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -95,7 +95,7 @@ export function MobileKeyboard({ instanceId }: MobileKeyboardProps) {
         <KeyButton
           onClick={() => handleKey(KEYS.ENTER)}
           label="Enter"
-          className="bg-claude-orange/20 hover:bg-claude-orange/30 text-claude-orange"
+          className="bg-sky-500/20 hover:bg-sky-500/30 text-sky-500"
         />
       </div>
 
@@ -122,7 +122,7 @@ function KeyButton({ onClick, label, className = '', title }: KeyButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`h-12 rounded-lg bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium text-sm flex items-center justify-center transition-colors active:scale-95 ${className}`}
+      className={`h-12 rounded bg-white dark:bg-neutral-800 hover:bg-gray-100 dark:hover:bg-neutral-700 text-gray-800 dark:text-gray-200 font-medium text-sm flex items-center justify-center transition-colors active:scale-95 ${className}`}
       title={title}
     >
       {label}

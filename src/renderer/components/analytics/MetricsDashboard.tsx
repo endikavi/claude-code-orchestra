@@ -41,12 +41,12 @@ export function MetricsDashboard() {
         </div>
 
         {/* Period selector */}
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+        <div className="flex gap-1 bg-gray-100 dark:bg-neutral-700 rounded p-1">
           {(['day', 'week', 'month', 'all'] as MetricsPeriod[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${
                 period === p
                   ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white shadow-sm'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
@@ -91,7 +91,7 @@ export function MetricsDashboard() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Tool Usage */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-claude-tan/30 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 p-4">
           <h3 className="text-sm font-medium text-gray-800 dark:text-white mb-4">
             {t('analytics.toolUsage', 'Tool Usage')}
           </h3>
@@ -99,7 +99,7 @@ export function MetricsDashboard() {
         </div>
 
         {/* Cost Breakdown */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-claude-tan/30 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 p-4">
           <h3 className="text-sm font-medium text-gray-800 dark:text-white mb-4">
             {t('analytics.costBreakdown', 'Cost Breakdown')}
           </h3>
@@ -115,7 +115,7 @@ export function MetricsDashboard() {
 
       {/* Trends */}
       {usageTrends && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-claude-tan/30 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 p-4">
           <h3 className="text-sm font-medium text-gray-800 dark:text-white mb-4">
             {t('analytics.usageTrends', 'Usage Trends')}
           </h3>
@@ -143,9 +143,9 @@ function SummaryCard({ title, value, icon, color }: SummaryCardProps) {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-claude-tan/30 dark:border-gray-700 p-4">
+    <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 p-4">
       <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>{icon}</div>
+        <div className={`p-2 rounded ${colorClasses[color]}`}>{icon}</div>
         <div>
           <p className="text-2xl font-bold text-gray-800 dark:text-white">{value}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">{title}</p>
@@ -216,12 +216,12 @@ function CostBreakdownChart({ data }: CostBreakdownChartProps) {
       )}
 
       {/* Total */}
-      <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+      <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('analytics.total', 'Total')}
           </span>
-          <span className="text-lg font-bold text-claude-orange">${data.total.toFixed(4)}</span>
+          <span className="text-lg font-bold text-sky-500">${data.total.toFixed(4)}</span>
         </div>
       </div>
     </div>
@@ -280,7 +280,7 @@ function TrendItem({ label, change, current, previous, isCurrency }: TrendItemPr
   };
 
   return (
-    <div className="text-center bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+    <div className="text-center bg-gray-50 dark:bg-neutral-800/50 rounded p-3">
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</p>
       <p className="text-lg font-bold text-gray-800 dark:text-white mb-1">{formatValue(current)}</p>
       <div
@@ -307,7 +307,7 @@ function TrendItem({ label, change, current, previous, isCurrency }: TrendItemPr
 function LoadingSpinner() {
   return (
     <div className="flex items-center justify-center py-8">
-      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-claude-orange" />
+      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-sky-500" />
     </div>
   );
 }

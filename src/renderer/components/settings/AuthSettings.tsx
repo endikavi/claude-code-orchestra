@@ -37,17 +37,17 @@ export function AuthSettings() {
 
   if (loading || !config) {
     return (
-      <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4">
+      <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-1/3 mb-4"></div>
-          <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-full"></div>
+          <div className="h-4 bg-gray-300 dark:bg-neutral-600 rounded w-1/3 mb-4"></div>
+          <div className="h-8 bg-gray-300 dark:bg-neutral-600 rounded w-full"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4 space-y-4">
+    <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4 space-y-4">
       <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
         {t('security.auth.title')}
       </h4>
@@ -66,7 +66,7 @@ export function AuthSettings() {
             onChange={(e) =>
               handleUpdateAuth({ tokenExpirationHours: parseInt(e.target.value, 10) || 24 })
             }
-            className="w-20 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            className="w-20 px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
           />
           <span className="text-sm text-gray-600 dark:text-gray-400">
             {t('security.auth.hours')}
@@ -91,7 +91,7 @@ export function AuthSettings() {
             onChange={(e) =>
               handleUpdateAuth({ maxConcurrentSessions: parseInt(e.target.value, 10) || 0 })
             }
-            className="w-20 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            className="w-20 px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
           />
           <span className="text-sm text-gray-600 dark:text-gray-400">
             {config.auth.maxConcurrentSessions === 0
@@ -118,7 +118,7 @@ export function AuthSettings() {
             onChange={(e) =>
               handleUpdateAuth({ inactivityTimeoutMinutes: parseInt(e.target.value, 10) || 0 })
             }
-            className="w-20 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            className="w-20 px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
           />
           <span className="text-sm text-gray-600 dark:text-gray-400">
             {config.auth.inactivityTimeoutMinutes === 0

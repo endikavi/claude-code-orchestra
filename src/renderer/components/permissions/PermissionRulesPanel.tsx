@@ -59,7 +59,7 @@ export function PermissionRulesPanel() {
   if (isLoading && !config) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-claude-orange" />
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-sky-500" />
       </div>
     );
   }
@@ -91,7 +91,7 @@ export function PermissionRulesPanel() {
             />
             <div
               className={`w-10 h-6 rounded-full transition-colors ${
-                config?.enabled ? 'bg-claude-orange' : 'bg-gray-300 dark:bg-gray-600'
+                config?.enabled ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'
               }`}
             >
               <div
@@ -107,7 +107,7 @@ export function PermissionRulesPanel() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-3 gap-4">
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
+          <div className="bg-green-50 dark:bg-green-900/20 rounded p-3">
             <div className="text-2xl font-bold text-green-600 dark:text-green-400">
               {stats.allowed}
             </div>
@@ -115,13 +115,13 @@ export function PermissionRulesPanel() {
               {t('permissions.allowed', 'Allowed')}
             </div>
           </div>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+          <div className="bg-red-50 dark:bg-red-900/20 rounded p-3">
             <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.denied}</div>
             <div className="text-xs text-red-600 dark:text-red-400">
               {t('permissions.denied', 'Denied')}
             </div>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+          <div className="bg-gray-50 dark:bg-neutral-800 rounded p-3">
             <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
               {stats.totalChecks}
             </div>
@@ -133,12 +133,12 @@ export function PermissionRulesPanel() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-claude-tan/30 dark:border-gray-700">
+      <div className="flex border-b border-gray-200 dark:border-neutral-700">
         <button
           onClick={() => setActiveTab('rules')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'rules'
-              ? 'text-claude-orange border-b-2 border-claude-orange'
+              ? 'text-sky-500 border-b-2 border-sky-500'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
           }`}
         >
@@ -148,7 +148,7 @@ export function PermissionRulesPanel() {
           onClick={() => setActiveTab('log')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'log'
-              ? 'text-claude-orange border-b-2 border-claude-orange'
+              ? 'text-sky-500 border-b-2 border-sky-500'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
           }`}
         >
@@ -162,7 +162,7 @@ export function PermissionRulesPanel() {
           {/* Add Rule Button */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-claude-tan/50 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:border-claude-orange hover:text-claude-orange transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-200 dark:border-neutral-600 rounded text-gray-600 dark:text-gray-400 hover:border-sky-500 hover:text-sky-500 transition-colors"
           >
             <PlusIcon className="w-4 h-4" />
             {t('permissions.addRule', 'Add Rule')}
@@ -257,7 +257,7 @@ function RuleCard({ rule, onToggle, onEdit, onDelete }: RuleCardProps) {
       ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
       : rule.decision === 'deny'
         ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
-        : 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700';
+        : 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-neutral-700';
 
   // Extract tool name and conditions for display
   const toolName = rule.toolName || rule.toolCategory || '*';
@@ -265,10 +265,10 @@ function RuleCard({ rule, onToggle, onEdit, onDelete }: RuleCardProps) {
 
   return (
     <div
-      className={`p-3 rounded-lg border ${
+      className={`p-3 rounded border ${
         rule.enabled
-          ? 'border-claude-tan/30 dark:border-gray-700 bg-white dark:bg-gray-800'
-          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 opacity-60'
+          ? 'border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800'
+          : 'border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800/50 opacity-60'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -285,12 +285,12 @@ function RuleCard({ rule, onToggle, onEdit, onDelete }: RuleCardProps) {
           <div className="flex flex-wrap gap-2 mt-2">
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {t('permissions.tool', 'Tool')}:{' '}
-              <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">{toolName}</code>
+              <code className="bg-gray-100 dark:bg-neutral-700 px-1 rounded">{toolName}</code>
             </span>
             {pathCondition && (
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 {t('permissions.path', 'Path')}:{' '}
-                <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                <code className="bg-gray-100 dark:bg-neutral-700 px-1 rounded">
                   {pathCondition.value}
                 </code>
               </span>
@@ -303,7 +303,7 @@ function RuleCard({ rule, onToggle, onEdit, onDelete }: RuleCardProps) {
         <div className="flex items-center gap-1">
           <button
             onClick={onToggle}
-            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors"
             title={
               rule.enabled ? t('permissions.disable', 'Disable') : t('permissions.enable', 'Enable')
             }
@@ -316,7 +316,7 @@ function RuleCard({ rule, onToggle, onEdit, onDelete }: RuleCardProps) {
           </button>
           <button
             onClick={onEdit}
-            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors"
             title={t('permissions.edit', 'Edit')}
           >
             <EditIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
@@ -346,7 +346,7 @@ function LogEntry({ entry }: { entry: PermissionLogEntry }) {
   const timeAgo = getTimeAgo(entry.timestamp);
 
   return (
-    <div className="px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-sm">
+    <div className="px-3 py-2 rounded bg-gray-50 dark:bg-neutral-800/50 text-sm">
       <div className="flex items-center gap-2">
         <span className={`font-medium ${decisionColor}`}>{entry.decision.toUpperCase()}</span>
         <span className="text-gray-800 dark:text-white">{entry.toolName}</span>
@@ -413,8 +413,8 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-claude-beige dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-claude-tan/30 dark:border-gray-700">
+      <div className="bg-gray-50 dark:bg-neutral-800 rounded shadow-xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-neutral-700">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
             {rule ? t('permissions.editRule', 'Edit Rule') : t('permissions.addRule', 'Add Rule')}
           </h3>
@@ -436,7 +436,7 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-700 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder={t('permissions.ruleNamePlaceholder', 'e.g., Allow Read in src')}
               required
             />
@@ -451,7 +451,7 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-700 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder={t('permissions.ruleDescriptionPlaceholder', 'Optional description')}
             />
           </div>
@@ -465,7 +465,7 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
               type="text"
               value={toolName}
               onChange={(e) => setToolName(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-claude-orange"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-700 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="Read, Bash, etc."
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -482,7 +482,7 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
               type="text"
               value={pathPattern}
               onChange={(e) => setPathPattern(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-claude-orange"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-700 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="src/**, *.ts, etc."
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -547,7 +547,7 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
               type="number"
               value={priority}
               onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-700 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               {t('permissions.priorityHelp', 'Higher priority rules are evaluated first')}
@@ -561,7 +561,7 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
               id="rule-enabled"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-              className="w-4 h-4 rounded text-claude-orange focus:ring-claude-orange"
+              className="w-4 h-4 rounded text-sky-500 focus:ring-sky-500"
             />
             <label htmlFor="rule-enabled" className="text-sm text-gray-700 dark:text-gray-300">
               {t('permissions.enableRule', 'Enable this rule')}
@@ -580,7 +580,7 @@ function RuleModal({ rule, onClose, onSave }: RuleModalProps) {
             <button
               type="submit"
               disabled={isSubmitting || !name.trim()}
-              className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? t('common.saving', 'Saving...') : t('common.save', 'Save')}
             </button>

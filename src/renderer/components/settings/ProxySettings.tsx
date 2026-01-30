@@ -58,13 +58,13 @@ export function ProxySettings() {
     <div className="space-y-6">
       {/* Error display */}
       {error && (
-        <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm">
+        <div className="p-3 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm">
           {error}
         </div>
       )}
 
       {/* Enable/Disable Toggle */}
-      <div className="flex items-center justify-between p-4 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600">
+      <div className="flex items-center justify-between p-4 rounded bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600">
         <div>
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('proxy.enable', 'Enable Web Preview Proxy')}
@@ -80,7 +80,7 @@ export function ProxySettings() {
           onClick={handleToggleEnabled}
           disabled={isLoading}
           className={`relative w-12 h-6 rounded-full transition-colors ${
-            config.enabled ? 'bg-claude-orange' : 'bg-gray-300 dark:bg-gray-600'
+            config.enabled ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'
           }`}
         >
           <div
@@ -112,7 +112,7 @@ export function ProxySettings() {
             value={newPort}
             onChange={(e) => setNewPort(e.target.value)}
             placeholder={t('proxy.portPlaceholder', 'Port (e.g., 3000)')}
-            className="w-32 px-3 py-2 text-sm rounded-md border border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-claude-orange/50"
+            className="w-32 px-3 py-2 text-sm rounded-sm border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
             min="1024"
             max="65535"
           />
@@ -121,12 +121,12 @@ export function ProxySettings() {
             value={newPortDescription}
             onChange={(e) => setNewPortDescription(e.target.value)}
             placeholder={t('proxy.descriptionPlaceholder', 'Description (optional)')}
-            className="flex-1 min-w-[150px] px-3 py-2 text-sm rounded-md border border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-claude-orange/50"
+            className="flex-1 min-w-[150px] px-3 py-2 text-sm rounded-sm border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
           />
           <button
             onClick={handleAddPort}
             disabled={isLoading || !newPort}
-            className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('proxy.addPort', 'Add')}
           </button>
@@ -140,12 +140,10 @@ export function ProxySettings() {
             {allowedPorts.map((port) => (
               <div
                 key={port.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600"
+                className="flex items-center justify-between p-3 rounded bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600"
               >
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm text-claude-orange font-medium">
-                    :{port.port}
-                  </span>
+                  <span className="font-mono text-sm text-sky-500 font-medium">:{port.port}</span>
                   {port.description && (
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       {port.description}
@@ -182,10 +180,10 @@ export function ProxySettings() {
                 key={port}
                 onClick={() => handleAddCommonPort(port, description)}
                 disabled={isAdded}
-                className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                className={`px-3 py-1.5 text-sm rounded-sm border transition-colors ${
                   isAdded
-                    ? 'bg-claude-orange/20 border-claude-orange text-claude-orange cursor-default'
-                    : 'bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700'
+                    ? 'bg-sky-500/20 border-sky-500 text-sky-500 cursor-default'
+                    : 'bg-white/50 dark:bg-neutral-700/50 border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-neutral-700'
                 }`}
                 title={description}
               >
@@ -213,7 +211,7 @@ export function ProxySettings() {
               onChange={(e) =>
                 void updateConfig({ maxConcurrentTunnels: parseInt(e.target.value, 10) || 5 })
               }
-              className="w-full px-3 py-2 text-sm rounded-md border border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-claude-orange/50"
+              className="w-full px-3 py-2 text-sm rounded-sm border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
               min="1"
               max="20"
             />
@@ -228,7 +226,7 @@ export function ProxySettings() {
               onChange={(e) =>
                 void updateConfig({ rateLimitPerMinute: parseInt(e.target.value, 10) || 100 })
               }
-              className="w-full px-3 py-2 text-sm rounded-md border border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-claude-orange/50"
+              className="w-full px-3 py-2 text-sm rounded-sm border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
               min="10"
               max="1000"
             />
@@ -237,7 +235,7 @@ export function ProxySettings() {
       </div>
 
       {/* Security Info */}
-      <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+      <div className="p-4 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
         <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
           {t('proxy.securityInfo', 'Security Information')}
         </h4>

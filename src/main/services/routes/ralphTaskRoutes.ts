@@ -160,6 +160,10 @@ export function createRalphTaskRoutes(deps: RalphTaskRoutesDeps): Router {
 
   // Request help for a Ralph task (called by CLI) - NO AUTH REQUIRED for CLI access
   router.post('/:id/help', (req: Request, res: Response) => {
+    const taskId = String(req.params.id);
+    console.log(
+      `[ralphTaskRoutes] Ralph task help request: id=${taskId}, reason="${req.body.reason}"`
+    );
     try {
       const reason = req.body.reason || 'Help requested';
       const task = taskLoop.requestHelp(String(req.params.id), reason);

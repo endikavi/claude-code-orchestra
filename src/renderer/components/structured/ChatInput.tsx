@@ -112,7 +112,7 @@ export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps)
   }, []);
 
   return (
-    <div className="border-t border-claude-tan/30 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 p-3">
+    <div className="border-t border-gray-200 dark:border-neutral-700 bg-white/50 dark:bg-neutral-900/50 p-3">
       <div className="flex gap-2 items-end">
         <textarea
           ref={textareaRef}
@@ -129,12 +129,12 @@ export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps)
           }
           rows={1}
           className={`
-            flex-1 resize-none rounded-lg border px-3 py-2 text-sm
+            flex-1 resize-none rounded border px-3 py-2 text-sm
             transition-colors duration-200
             ${
               enabled
-                ? 'border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-claude-orange dark:focus:border-claude-orange focus:outline-none focus:ring-1 focus:ring-claude-orange/50'
-                : 'border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                ? 'border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-950 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-sky-500 dark:focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500/50'
+                : 'border-gray-200 dark:border-neutral-700 bg-gray-100 dark:bg-neutral-900 text-gray-400 dark:text-gray-500 cursor-not-allowed'
             }
           `}
         />
@@ -142,12 +142,12 @@ export function ChatInput({ instanceId, status, initialPrompt }: ChatInputProps)
           onClick={handleSend}
           disabled={!enabled || !message.trim() || isSending}
           className={`
-            shrink-0 rounded-lg px-4 py-2 text-sm font-medium
+            shrink-0 rounded px-4 py-2 text-sm font-medium
             transition-colors duration-200
             ${
               enabled && message.trim() && !isSending
-                ? 'bg-claude-orange text-white hover:bg-claude-orange/90 active:bg-claude-orange/80'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                ? 'bg-sky-500 text-white hover:bg-sky-500/90 active:bg-sky-500/80'
+                : 'bg-gray-200 dark:bg-neutral-800 text-gray-400 dark:text-gray-500 cursor-not-allowed'
             }
           `}
         >

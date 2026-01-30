@@ -185,12 +185,12 @@ export function DevToolsContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-48 py-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+      className="fixed z-50 min-w-48 py-1 bg-white dark:bg-neutral-800 rounded shadow-lg border border-gray-200 dark:border-neutral-700"
       style={{ left: displayPos.x, top: displayPos.y }}
     >
       {/* Element label */}
       {elementLabel && (
-        <div className="px-3 py-1.5 text-xs font-mono text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 truncate">
+        <div className="px-3 py-1.5 text-xs font-mono text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-neutral-700 truncate">
           {elementLabel}
         </div>
       )}
@@ -199,7 +199,7 @@ export function DevToolsContextMenu({
       {menuItems.map((item, index) => (
         <div key={item.action}>
           {item.divider && index > 0 && (
-            <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+            <div className="my-1 border-t border-gray-200 dark:border-neutral-700" />
           )}
           <button
             onClick={() => handleAction(item.action)}
@@ -209,7 +209,7 @@ export function DevToolsContextMenu({
               ${
                 item.disabled
                   ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-700'
               }
             `}
           >

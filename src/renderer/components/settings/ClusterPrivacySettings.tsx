@@ -231,7 +231,7 @@ export function ClusterPrivacySettings({ className = '' }: ClusterPrivacySetting
             {remoteNodes.map((node) => (
               <div
                 key={node.id}
-                className="flex items-center justify-between p-2 bg-muted/50 rounded-md"
+                className="flex items-center justify-between p-2 bg-muted/50 rounded-sm"
               >
                 <div className="flex items-center gap-2">
                   <div

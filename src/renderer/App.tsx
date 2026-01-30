@@ -96,7 +96,7 @@ function App() {
   return (
     <ErrorBoundary>
       <TimerProvider>
-        <div className="flex flex-col h-screen bg-claude-cream dark:bg-gray-900 text-gray-800 dark:text-white overflow-hidden">
+        <div className="flex flex-col h-screen bg-gray-100 dark:bg-neutral-950 text-neutral-800 dark:text-white overflow-hidden">
           <TitleBar />
           <div className="flex flex-1 overflow-hidden">
             <ErrorBoundary>

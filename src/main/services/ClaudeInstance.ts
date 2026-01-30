@@ -799,7 +799,7 @@ export class ClaudeInstance extends EventEmitter {
   }
 
   /**
-   * Cleanup the hook script file for this instance
+   * Cleanup the hook script file for this instance and remove from settings.local.json
    */
   private cleanupHookScript(): void {
     try {
@@ -807,6 +807,42 @@ export class ClaudeInstance extends EventEmitter {
       if (fs.existsSync(hookScriptPath)) {
         fs.unlinkSync(hookScriptPath);
         console.log(`[ClaudeInstance] Cleaned up hook script: ${hookScriptPath}`);
+      }
+
+      // Also cleanup the hook configuration from settings.local.json
+      // This prevents stale hooks pointing to deleted scripts
+      const localSettingsPath = path.join(this.projectPath, '.claude', 'settings.local.json');
+      if (fs.existsSync(localSettingsPath)) {
+        try {
+          const settings = JSON.parse(fs.readFileSync(localSettingsPath, 'utf-8')) as Record<
+            string,
+            unknown
+          >;
+          const hooks = settings.hooks as Record<string, unknown> | undefined;
+          if (hooks?.SessionStart) {
+            // Check if the hook references this instance's script
+            const sessionStartHooks = hooks.SessionStart as Array<{
+              hooks: Array<{ command?: string }>;
+            }>;
+            const hookRefersToThisInstance = sessionStartHooks.some((h) =>
+              h.hooks?.some((innerHook) =>
+                innerHook.command?.includes(`session-start-hook-${this.id}`)
+              )
+            );
+            if (hookRefersToThisInstance) {
+              // Remove the SessionStart hook entirely since our script is being cleaned up
+              delete hooks.SessionStart;
+              if (Object.keys(hooks).length === 0) {
+                settings.hooks = {};
+              }
+              fs.writeFileSync(localSettingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+              console.log(`[ClaudeInstance] Cleaned up hook config from settings.local.json`);
+            }
+          }
+        } catch (parseError) {
+          // Non-critical, just log
+          console.error('[ClaudeInstance] Failed to cleanup hook config:', parseError);
+        }
       }
     } catch (error) {
       // Non-critical error, just log it
@@ -1261,18 +1297,19 @@ export class ClaudeInstance extends EventEmitter {
     const args: string[] = [];
 
     // When resuming a session, use --resume to specify the session ID
-    // Don't use -p (print mode) because we want interactive conversation
     if (this.resumeSessionId) {
       // Use --resume to resume a specific session by its ID
       // Note: --continue (without session ID) resumes the LAST session, which is NOT what we want
       args.push('--resume', this.resumeSessionId);
 
-      // Always use stream-json to capture structured data
-      args.push('--output-format', 'stream-json');
-
-      // Always add --verbose when using stream-json (required for proper parsing)
-      // Note: --output-format stream-json requires --verbose to work correctly
-      args.push('--verbose');
+      // Only use stream-json flags for structured view mode
+      // In interactive/terminal mode, resume normally without stream-json
+      if (this.mode === 'stream-json') {
+        args.push('--output-format', 'stream-json');
+        args.push('--input-format', 'stream-json');
+        // --verbose is required for stream-json to work correctly
+        args.push('--verbose');
+      }
 
       // Add model
       args.push('--model', this.model);
@@ -1308,7 +1345,7 @@ export class ClaudeInstance extends EventEmitter {
     }
 
     // For new conversations:
-    // Add print mode flag for print mode (one-shot) and stream-json mode (ongoing JSON conversation)
+    // Build args based on mode - stream-json flags only work with -p (print mode)
     if (this.mode === 'print') {
       args.push('-p');
       // Add prompt at the end for print mode
@@ -1316,20 +1353,16 @@ export class ClaudeInstance extends EventEmitter {
         args.push(this.prompt);
       }
     } else if (this.mode === 'stream-json') {
-      // stream-json mode: use -p with the prompt as argument
-      // Additional messages are sent via stdin in JSON format (--input-format stream-json)
+      // stream-json mode (structured view): use -p with stream-json input/output
+      // This enables JSON-based communication for the structured UI
       args.push('-p');
       args.push('--input-format', 'stream-json');
+      args.push('--output-format', 'stream-json');
+      // --verbose is required for stream-json to work correctly
+      args.push('--verbose');
     }
-
-    // Always use stream-json output format to capture session_id and structured data
-    // This is required for both 'stream-json' and 'interactive' modes
-    // The rawOutput event provides terminal-compatible output for display
-    args.push('--output-format', 'stream-json');
-
-    // Always add --verbose when using stream-json (required for proper parsing)
-    // Note: --output-format stream-json requires --verbose to work correctly
-    args.push('--verbose');
+    // For 'interactive' mode (terminal): no special flags needed
+    // Claude CLI runs in normal TUI mode
 
     // Add model
     args.push('--model', this.model);
@@ -1476,11 +1509,11 @@ export class ClaudeInstance extends EventEmitter {
    */
   private setupDataHandler(ptyProcess: pty.IPty): void {
     ptyProcess.onData((data: string) => {
-      // DEBUG: Log raw data chunks
-      const preview = data.length > 100 ? data.substring(0, 100) + '...' : data;
-      console.log(
-        `[ClaudeInstance] onData received ${data.length} bytes: ${preview.replace(/\n/g, '\\n')}`
-      );
+      // DEBUG: Log raw data chunks (disabled - too noisy)
+      // const preview = data.length > 100 ? data.substring(0, 100) + '...' : data;
+      // console.log(
+      //   `[ClaudeInstance] onData received ${data.length} bytes: ${preview.replace(/\n/g, '\\n')}`
+      // );
 
       // Emit raw data for terminal view
       this.emit('rawOutput', data);
@@ -1500,13 +1533,23 @@ export class ClaudeInstance extends EventEmitter {
           console.log('[ClaudeInstance] Shell prompt detected after result - marking as completed');
           this._status = 'completed';
           this.emit('status', this._status);
+          // Emit exit event for pooled terminals (PTY doesn't actually exit)
+          // This allows RalphTaskLoop and other listeners to know the instance finished
+          // Only emit if we haven't already emitted exit (prevents double emit)
+          if (!this._hasExited) {
+            this._hasExited = true;
+            console.log('[ClaudeInstance] Emitting exit event for pooled terminal completion');
+            this.emit('exit', 0);
+          }
         }
       }
 
-      // Always parse JSON to capture session_id and structured messages
-      // This is needed for both stream-json and interactive modes since we
-      // always use --output-format stream-json to capture the session_id
-      this.parser.process(data);
+      // Parse JSON for stream-json mode to capture session_id and structured messages
+      // In interactive mode, this will mostly be a no-op since output is not JSON
+      // The session_id in interactive mode comes from the SessionStart hook instead
+      if (this.mode === 'stream-json') {
+        this.parser.process(data);
+      }
 
       // For interactive mode, also handle status transitions based on activity
       if (this.mode !== 'stream-json') {

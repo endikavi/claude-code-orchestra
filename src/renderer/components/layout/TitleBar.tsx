@@ -41,43 +41,43 @@ export function TitleBar() {
   };
 
   return (
-    <div className="h-10 bg-claude-beige dark:bg-gray-800 border-b border-claude-tan/30 dark:border-gray-700 flex items-center justify-between px-2 sm:px-4 drag-region">
+    <div className="h-10 bg-gray-50 dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-700 flex items-center justify-between px-2 sm:px-3 drag-region">
       {/* Logo and title */}
-      <div className="flex items-center gap-2 sm:gap-3 no-drag">
+      <div className="flex items-center gap-2 sm:gap-2 no-drag">
         {/* Hamburger menu for mobile */}
         {isMobile && (
           <button
             onClick={() => setSidebarMobileOpen(true)}
-            className="p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
+            className="p-1 rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors flex items-center justify-center"
             title={t('sidebar.openMenu')}
           >
-            <MenuIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <MenuIcon className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
           </button>
         )}
         {/* Sidebar toggle for desktop/tablet */}
         {!isMobile && (
           <button
             onClick={toggleSidebar}
-            className="p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
+            className="p-1 rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors flex items-center justify-center"
             title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
           >
             <SidebarIcon
-              className="w-5 h-5 text-gray-600 dark:text-gray-400"
+              className="w-5 h-5 text-neutral-600 dark:text-neutral-400"
               collapsed={sidebarCollapsed}
             />
           </button>
         )}
-        <img src="/favicon.png" alt="Logo" className="w-6 h-6 rounded-md" />
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 hidden sm:inline">
+        <img src="/favicon.png" alt="Logo" className="w-6 h-6 rounded-sm" />
+        <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hidden sm:inline">
           {t('titleBar.title')}
         </span>
         {/* Home button - always visible */}
         <button
           onClick={handleGoHome}
-          className="ml-2 p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
+          className="ml-2 p-1 rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors flex items-center justify-center"
           title={t('titleBar.home')}
         >
-          <HomeIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          <HomeIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
         </button>
       </div>
 
@@ -86,13 +86,13 @@ export function TitleBar() {
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
+          className="p-1 rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors flex items-center justify-center"
           title={theme === 'dark' ? t('titleBar.switchToLight') : t('titleBar.switchToDark')}
         >
           {theme === 'dark' ? (
-            <SunIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            <SunIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
           ) : (
-            <MoonIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            <MoonIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
           )}
         </button>
 
@@ -108,10 +108,10 @@ export function TitleBar() {
         {/* Settings button */}
         <button
           onClick={() => setShowSettingsModal(true)}
-          className="p-1.5 rounded-md hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors flex items-center justify-center"
+          className="p-1 rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors flex items-center justify-center"
           title={t('titleBar.settings')}
         >
-          <SettingsIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          <SettingsIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
         </button>
       </div>
 
@@ -120,7 +120,7 @@ export function TitleBar() {
         {isWebMode ? (
           <button
             onClick={handleLogout}
-            className="px-3 py-1.5 text-xs font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md transition-colors flex items-center gap-1.5"
+            className="px-2 py-1 text-xs font-medium bg-gray-200 dark:bg-neutral-800 hover:bg-gray-300 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded-sm transition-colors flex items-center gap-1.5"
             title={t('titleBar.logout')}
           >
             <LogoutIcon className="w-4 h-4" />
@@ -130,21 +130,21 @@ export function TitleBar() {
           <>
             <button
               onClick={handleMinimize}
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors"
             >
-              <MinimizeIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              <MinimizeIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
             </button>
             <button
               onClick={handleMaximize}
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-claude-tan/20 dark:hover:bg-gray-700 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-800 transition-colors"
             >
-              <MaximizeIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              <MaximizeIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
             </button>
             <button
               onClick={handleClose}
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-600 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-sm hover:bg-red-600 transition-colors"
             >
-              <CloseIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              <CloseIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
             </button>
           </>
         )}

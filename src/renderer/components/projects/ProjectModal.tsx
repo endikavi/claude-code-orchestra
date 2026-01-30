@@ -322,7 +322,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             placeholder={t('project.namePlaceholder')}
             autoFocus
           />
@@ -338,13 +338,13 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
               type="text"
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              className="flex-1 px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+              className="flex-1 px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
               placeholder={t('project.pathPlaceholder')}
             />
             <button
               type="button"
               onClick={handleSelectDirectory}
-              className="px-3 py-2 bg-claude-tan/30 dark:bg-gray-600 hover:bg-claude-tan/50 dark:hover:bg-gray-500 rounded-md text-gray-800 dark:text-white transition-colors"
+              className="px-3 py-2 bg-gray-200 dark:bg-neutral-700 hover:bg-gray-200 dark:hover:bg-neutral-600 rounded-sm text-gray-800 dark:text-white transition-colors"
             >
               {t('common.browse')}
             </button>
@@ -359,7 +359,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent resize-none"
+            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none"
             placeholder={t('project.descriptionPlaceholder')}
             rows={2}
           />
@@ -378,7 +378,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                 onClick={() => setColor(c)}
                 className={`w-8 h-8 rounded-full transition-transform ${
                   color === c
-                    ? 'ring-2 ring-gray-800 dark:ring-white ring-offset-2 ring-offset-claude-beige dark:ring-offset-gray-800 scale-110'
+                    ? 'ring-2 ring-gray-800 dark:ring-white ring-offset-2 ring-offset-gray-50 dark:ring-offset-gray-800 scale-110'
                     : ''
                 }`}
                 style={{ backgroundColor: c }}
@@ -388,7 +388,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         </div>
 
         {/* Preferred Shell */}
-        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             {t('project.preferredShell')}
           </label>
@@ -417,7 +417,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
               <select
                 value={preferredShell}
                 onChange={(e) => setPreferredShell(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+                className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
               >
                 {availableShells.map((shell) => (
                   <option key={shell.id} value={shell.path}>
@@ -435,13 +435,13 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         </div>
 
         {/* Skip Permissions */}
-        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={skipPermissions}
               onChange={(e) => setSkipPermissions(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-orange-500 focus:ring-orange-500 focus:ring-offset-claude-beige dark:focus:ring-offset-gray-800"
+              className="mt-0.5 w-4 h-4 rounded border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-orange-500 focus:ring-orange-500 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-800"
             />
             <div>
               <span className="text-sm font-medium text-orange-500 dark:text-orange-400">
@@ -455,13 +455,13 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         </div>
 
         {/* MCP Server Integration */}
-        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={enableMcp}
               onChange={(e) => setEnableMcp(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-claude-beige dark:focus:ring-offset-gray-800"
+              className="mt-0.5 w-4 h-4 rounded border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-800"
             />
             <div>
               <span className="text-sm font-medium text-purple-500 dark:text-purple-400">
@@ -478,13 +478,13 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         </div>
 
         {/* Auto Review on Task Completion */}
-        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={autoReview}
               onChange={(e) => setAutoReview(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-green-500 focus:ring-green-500 focus:ring-offset-claude-beige dark:focus:ring-offset-gray-800"
+              className="mt-0.5 w-4 h-4 rounded border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-green-500 focus:ring-green-500 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-800"
             />
             <div>
               <span className="text-sm font-medium text-green-500 dark:text-green-400">
@@ -501,7 +501,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         </div>
 
         {/* Additional Working Directories */}
-        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
           <button
             type="button"
             onClick={() => setShowDirsSection(!showDirsSection)}
@@ -533,7 +533,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                     type="text"
                     value={dir}
                     readOnly
-                    className="flex-1 px-2 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300"
+                    className="flex-1 px-2 py-1.5 text-sm bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-700 dark:text-gray-300"
                   />
                   <button
                     type="button"
@@ -549,7 +549,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
               <button
                 type="button"
                 onClick={handleAddAdditionalDir}
-                className="flex items-center gap-1 text-sm text-claude-orange hover:text-claude-orange-dark transition-colors"
+                className="flex items-center gap-1 text-sm text-sky-500 hover:text-sky-500-dark transition-colors"
               >
                 <PlusIcon className="w-4 h-4" />
                 {t('project.addDirectory', 'Add directory')}
@@ -559,7 +559,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         </div>
 
         {/* Custom Agents */}
-        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
           <button
             type="button"
             onClick={() => setShowAgentsSection(!showAgentsSection)}
@@ -589,7 +589,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                 <select
                   value={agentDeliveryMethod}
                   onChange={(e) => setAgentDeliveryMethod(e.target.value as AgentDeliveryMethod)}
-                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
                   <option value="skill">
                     {t('project.deliverAsSkills', 'Install as Skills (recommended)')}
@@ -610,7 +610,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                   {Object.entries(agents).map(([agentName, agent]) => (
                     <div
                       key={agentName}
-                      className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-md"
+                      className="flex items-center justify-between p-2 bg-gray-50 dark:bg-neutral-900 rounded-sm"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -667,13 +667,13 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
         </div>
 
         {/* Dashboard Hooks Integration */}
-        <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={enableHooksIntegration}
               onChange={(e) => setEnableHooksIntegration(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-claude-tan/50 dark:border-gray-600 bg-white dark:bg-gray-700 text-claude-orange focus:ring-claude-orange focus:ring-offset-claude-beige dark:focus:ring-offset-gray-800"
+              className="mt-0.5 w-4 h-4 rounded border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sky-500 focus:ring-sky-500 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-800"
             />
             <div className="flex-1">
               <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -710,7 +710,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                   <select
                     value={selectedHookTemplate}
                     onChange={(e) => setSelectedHookTemplate(e.target.value as HookTemplateType)}
-                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                   >
                     {hookTemplates.map((template) => (
                       <option key={template.id} value={template.id}>
@@ -730,7 +730,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
 
           {/* Warning about existing hooks */}
           {isEditing && hasExistingHooks && !enableHooksIntegration && (
-            <div className="mt-2 ml-7 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+            <div className="mt-2 ml-7 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-sm">
               <p className="text-xs text-yellow-700 dark:text-yellow-300">
                 {t(
                   'project.hooksWillBeRemoved',
@@ -743,7 +743,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
 
         {/* Cluster Sharing - Only show when cluster is enabled and not standalone */}
         {isClusterEnabled() && clusterConfig?.role !== 'standalone' && (
-          <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
             <div className="flex items-center gap-2 mb-3">
               <GlobeIcon className="w-4 h-4 text-blue-500" />
               <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -770,7 +770,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                     else if (e.target.value === 'share') setClusterShareWithCluster(true);
                     else setClusterShareWithCluster(false);
                   }}
-                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="default">{t('project.useNodeDefault')}</option>
                   <option value="share">{t('project.shareWithCluster')}</option>
@@ -796,7 +796,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
                     else if (e.target.value === 'yes') setClusterAllowRemoteCreation(true);
                     else setClusterAllowRemoteCreation(false);
                   }}
-                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="default">{t('project.useNodeDefault')}</option>
                   <option value="yes">{t('common.yes', 'Yes')}</option>
@@ -806,7 +806,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
 
               {/* Privacy indicator */}
               {clusterShareWithCluster === false && (
-                <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+                <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-neutral-900 rounded-sm">
                   <LockIcon className="w-4 h-4 text-gray-500" />
                   <span className="text-xs text-gray-600 dark:text-gray-400">
                     {t(
@@ -822,11 +822,11 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
 
         {/* Load Session History - Only show when editing */}
         {isEditing && existingProject && (
-          <div className="pt-2 border-t border-claude-tan/30 dark:border-gray-700">
+          <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
             <button
               type="button"
               onClick={() => setShowImportModal(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-lg transition-colors text-sm"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors text-sm"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -859,7 +859,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting
               ? t('common.saving')

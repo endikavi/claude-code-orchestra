@@ -104,10 +104,10 @@ export function AuditLogSettings() {
 
   if (loading || !config) {
     return (
-      <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4">
+      <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-1/3 mb-4"></div>
-          <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-full"></div>
+          <div className="h-4 bg-gray-300 dark:bg-neutral-600 rounded w-1/3 mb-4"></div>
+          <div className="h-8 bg-gray-300 dark:bg-neutral-600 rounded w-full"></div>
         </div>
       </div>
     );
@@ -124,7 +124,7 @@ export function AuditLogSettings() {
   };
 
   return (
-    <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4 space-y-4">
+    <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4 space-y-4">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -137,7 +137,7 @@ export function AuditLogSettings() {
             onChange={handleToggleEnabled}
             className="sr-only peer"
           />
-          <div className="relative w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-claude-orange"></div>
+          <div className="relative w-11 h-6 bg-gray-300 dark:bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
         </label>
       </div>
 
@@ -156,7 +156,7 @@ export function AuditLogSettings() {
               onChange={(e) =>
                 handleUpdateAuditLog({ retentionDays: parseInt(e.target.value, 10) || 30 })
               }
-              className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
             />
             <span className="text-xs text-gray-600 dark:text-gray-400">
               {t('security.auditLog.days')}
@@ -175,7 +175,7 @@ export function AuditLogSettings() {
                     type="checkbox"
                     checked={config.auditLog.logEvents[event]}
                     onChange={() => handleToggleEvent(event)}
-                    className="w-4 h-4 text-claude-orange bg-gray-100 border-gray-300 rounded focus:ring-claude-orange dark:focus:ring-claude-orange dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    className="w-4 h-4 text-sky-500 bg-gray-100 border-gray-300 rounded focus:ring-sky-500 dark:focus:ring-sky-500 dark:ring-offset-gray-800 focus:ring-2 dark:bg-neutral-700 dark:border-neutral-600"
                   />
                   <span className="text-xs text-gray-700 dark:text-gray-300">
                     {eventLabels[event]}
@@ -186,7 +186,7 @@ export function AuditLogSettings() {
           </div>
 
           {/* Log count and actions */}
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+          <div className="pt-2 border-t border-gray-200 dark:border-neutral-600">
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-600 dark:text-gray-400">
                 {t('security.auditLog.totalEntries', { count: logCount })}
@@ -194,7 +194,7 @@ export function AuditLogSettings() {
               <div className="flex gap-2">
                 <button
                   onClick={handleShowLogs}
-                  className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded transition-colors"
+                  className="px-2 py-1 text-xs bg-gray-200 dark:bg-neutral-600 hover:bg-gray-300 dark:hover:bg-neutral-500 text-gray-700 dark:text-gray-300 rounded transition-colors"
                 >
                   {showLogs ? t('security.auditLog.hideLogs') : t('security.auditLog.viewLogs')}
                 </button>
@@ -218,7 +218,9 @@ export function AuditLogSettings() {
                   <div
                     key={log.id}
                     className={`text-xs p-2 rounded ${
-                      log.success ? 'bg-gray-100 dark:bg-gray-600' : 'bg-red-50 dark:bg-red-900/20'
+                      log.success
+                        ? 'bg-gray-100 dark:bg-neutral-600'
+                        : 'bg-red-50 dark:bg-red-900/20'
                     }`}
                   >
                     <div className="flex items-center justify-between">

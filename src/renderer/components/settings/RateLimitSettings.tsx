@@ -84,17 +84,17 @@ export function RateLimitSettings() {
 
   if (loading || !config) {
     return (
-      <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4">
+      <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-1/3 mb-4"></div>
-          <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-full"></div>
+          <div className="h-4 bg-gray-300 dark:bg-neutral-600 rounded w-1/3 mb-4"></div>
+          <div className="h-8 bg-gray-300 dark:bg-neutral-600 rounded w-full"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white/50 dark:bg-gray-700/50 rounded-lg p-4 space-y-4">
+    <div className="bg-white/50 dark:bg-neutral-700/50 rounded p-4 space-y-4">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -107,7 +107,7 @@ export function RateLimitSettings() {
             onChange={handleToggleEnabled}
             className="sr-only peer"
           />
-          <div className="relative w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-claude-orange"></div>
+          <div className="relative w-11 h-6 bg-gray-300 dark:bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
         </label>
       </div>
 
@@ -127,7 +127,7 @@ export function RateLimitSettings() {
                 onChange={(e) =>
                   handleUpdateRateLimit({ maxAttempts: parseInt(e.target.value, 10) || 5 })
                 }
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
               />
             </div>
             <div>
@@ -142,7 +142,7 @@ export function RateLimitSettings() {
                 onChange={(e) =>
                   handleUpdateRateLimit({ windowMinutes: parseInt(e.target.value, 10) || 1 })
                 }
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
               />
             </div>
           </div>
@@ -155,7 +155,7 @@ export function RateLimitSettings() {
           </p>
 
           {/* Lockout settings */}
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+          <div className="pt-2 border-t border-gray-200 dark:border-neutral-600">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-gray-600 dark:text-gray-400">
                 {t('security.rateLimit.lockout')}
@@ -167,7 +167,7 @@ export function RateLimitSettings() {
                   onChange={handleToggleLockout}
                   className="sr-only peer"
                 />
-                <div className="relative w-9 h-5 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-claude-orange"></div>
+                <div className="relative w-9 h-5 bg-gray-300 dark:bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-500"></div>
               </label>
             </div>
 
@@ -184,7 +184,7 @@ export function RateLimitSettings() {
                   onChange={(e) =>
                     handleUpdateRateLimit({ lockoutMinutes: parseInt(e.target.value, 10) || 15 })
                   }
-                  className="w-24 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  className="w-24 px-3 py-2 text-sm border border-gray-300 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
                 />
               </div>
             )}
@@ -192,7 +192,7 @@ export function RateLimitSettings() {
 
           {/* Active lockouts */}
           {lockouts.length > 0 && (
-            <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+            <div className="pt-2 border-t border-gray-200 dark:border-neutral-600">
               <h5 className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
                 {t('security.rateLimit.activeLockouts')}
               </h5>
@@ -204,7 +204,7 @@ export function RateLimitSettings() {
                   return (
                     <div
                       key={lockout.ip}
-                      className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-900/20 rounded-md text-xs"
+                      className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-900/20 rounded-sm text-xs"
                     >
                       <div>
                         <span className="font-mono text-red-700 dark:text-red-400">

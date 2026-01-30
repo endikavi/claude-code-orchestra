@@ -207,10 +207,14 @@ export class RalphTaskManager extends EventEmitter {
    * Mark a task as completed
    */
   completeTask(id: string, summary: string): RalphTask | null {
+    console.log(`[RalphTaskManager] completeTask: id=${id}, summary="${summary}"`);
     const task = this.getTaskById(id);
-    if (!task) return null;
+    if (!task) {
+      console.log(`[RalphTaskManager] completeTask: task ${id} not found`);
+      return null;
+    }
 
-    return this.updateTask(id, {
+    const result = this.updateTask(id, {
       status: 'done',
       isPaused: false,
       pauseReason: null,
@@ -218,12 +222,15 @@ export class RalphTaskManager extends EventEmitter {
       completedAt: Date.now(),
       instanceId: null,
     });
+    console.log(`[RalphTaskManager] completeTask result: ${result ? 'success' : 'failed'}`);
+    return result;
   }
 
   /**
    * Pause a task with a reason (e.g., help request)
    */
   pauseTask(id: string, reason: string): RalphTask | null {
+    console.log(`[RalphTaskManager] pauseTask: id=${id}, reason="${reason}"`);
     return this.updateTask(id, {
       isPaused: true,
       pauseReason: reason,
@@ -247,6 +254,9 @@ export class RalphTaskManager extends EventEmitter {
     const task = this.getTaskById(id);
     if (!task) return null;
 
+    console.log(
+      `[RalphTaskManager] incrementLoopCount: id=${id}, ${task.loopCount} -> ${task.loopCount + 1}`
+    );
     return this.updateTask(id, {
       loopCount: task.loopCount + 1,
     });

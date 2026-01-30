@@ -42,10 +42,10 @@ export function ToolUsageChart({ data, maxItems = 10 }: ToolUsageChartProps) {
                 {item.count} {t('analytics.uses', 'uses')}
               </span>
             </div>
-            <div className="relative h-6 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div className="relative h-6 bg-gray-100 dark:bg-neutral-700 rounded-full overflow-hidden">
               {/* Total bar */}
               <div
-                className="absolute inset-y-0 left-0 bg-claude-tan/50 dark:bg-gray-600 transition-all duration-500"
+                className="absolute inset-y-0 left-0 bg-gray-200 dark:bg-gray-600 transition-all duration-500"
                 style={{ width: `${percentage}%` }}
               />
               {/* Success portion */}

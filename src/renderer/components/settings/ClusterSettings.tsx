@@ -211,7 +211,7 @@ export function ClusterSettings() {
 
       {/* Error display */}
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-700 dark:text-red-400 text-sm">
+        <div className="p-3 rounded bg-red-500/20 border border-red-500/50 text-red-700 dark:text-red-400 text-sm">
           {error}
         </div>
       )}
@@ -227,12 +227,12 @@ export function ClusterSettings() {
             value={nodeName}
             onChange={(e) => setNodeName(e.target.value)}
             placeholder={t('cluster.nodeNamePlaceholder', 'My Computer')}
-            className="flex-1 px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+            className="flex-1 px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
           <button
             onClick={handleUpdateNodeName}
             disabled={isLoading || !nodeName.trim()}
-            className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50"
           >
             {t('common.save', 'Save')}
           </button>
@@ -245,12 +245,12 @@ export function ClusterSettings() {
           {t('cluster.nodeId', 'Node ID')}
         </label>
         <div className="flex gap-2">
-          <code className="flex-1 px-3 py-2 text-xs bg-gray-100 dark:bg-gray-800 rounded-md font-mono overflow-x-auto">
+          <code className="flex-1 px-3 py-2 text-xs bg-gray-100 dark:bg-neutral-800 rounded-sm font-mono overflow-x-auto">
             {config?.nodeId || '...'}
           </code>
           <button
             onClick={() => copyToClipboard(config?.nodeId || '')}
-            className="px-3 py-2 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md transition-colors"
+            className="px-3 py-2 text-sm bg-gray-200 dark:bg-neutral-700 hover:bg-gray-300 dark:hover:bg-neutral-600 rounded-sm transition-colors"
             title={t('common.copy', 'Copy')}
           >
             <ClipboardIcon className="w-4 h-4" />
@@ -267,10 +267,10 @@ export function ClusterSettings() {
           {roleOptions.map((option) => (
             <label
               key={option.value}
-              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${
+              className={`flex items-start gap-3 p-3 rounded cursor-pointer border transition-colors ${
                 config?.role === option.value
-                  ? 'bg-claude-orange/10 border-claude-orange/50'
-                  : 'bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 hover:bg-white/70 dark:hover:bg-gray-600/50'
+                  ? 'bg-sky-500/10 border-sky-500/50'
+                  : 'bg-white/50 dark:bg-neutral-700/50 border-gray-200 dark:border-neutral-600 hover:bg-white/70 dark:hover:bg-neutral-600/50'
               }`}
             >
               <input
@@ -280,7 +280,7 @@ export function ClusterSettings() {
                 checked={config?.role === option.value}
                 onChange={() => handleUpdateRole(option.value)}
                 disabled={isConnected && config?.role !== 'standalone'}
-                className="mt-1 w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                className="mt-1 w-4 h-4 text-sky-500 focus:ring-sky-500"
               />
               <div>
                 <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -295,7 +295,7 @@ export function ClusterSettings() {
 
       {/* Primary Node Settings */}
       {config?.role === 'primary' && (
-        <div className="space-y-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+        <div className="space-y-4 p-4 rounded bg-blue-500/10 border border-blue-500/30">
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('cluster.primarySettings', 'Primary Node Settings')}
           </h4>
@@ -314,12 +314,12 @@ export function ClusterSettings() {
                 disabled={isConnected}
                 min={1}
                 max={65535}
-                className="w-32 px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange disabled:opacity-50"
+                className="w-32 px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
               />
               <button
                 onClick={handleUpdateClusterPort}
                 disabled={isLoading || isConnected}
-                className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50"
               >
                 {t('common.save', 'Save')}
               </button>
@@ -343,7 +343,7 @@ export function ClusterSettings() {
                   type={showSecret ? 'text' : 'password'}
                   value={config?.sharedSecret || ''}
                   readOnly
-                  className="w-full px-3 py-2 pr-10 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-mono"
+                  className="w-full px-3 py-2 pr-10 text-sm bg-gray-100 dark:bg-neutral-800 border border-gray-300 dark:border-neutral-600 rounded-sm font-mono"
                 />
                 <button
                   onClick={() => setShowSecret(!showSecret)}
@@ -359,7 +359,7 @@ export function ClusterSettings() {
               <button
                 onClick={() => copyToClipboard(config?.sharedSecret || '')}
                 disabled={!hasSecret}
-                className="px-3 py-2 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md transition-colors disabled:opacity-50"
+                className="px-3 py-2 text-sm bg-gray-200 dark:bg-neutral-700 hover:bg-gray-300 dark:hover:bg-neutral-600 rounded-sm transition-colors disabled:opacity-50"
                 title={t('common.copy', 'Copy')}
               >
                 <ClipboardIcon className="w-4 h-4" />
@@ -367,7 +367,7 @@ export function ClusterSettings() {
               <button
                 onClick={handleGenerateSecret}
                 disabled={isLoading}
-                className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50"
               >
                 {hasSecret
                   ? t('cluster.regenerateSecret', 'Regenerate')
@@ -397,7 +397,7 @@ export function ClusterSettings() {
                 type="checkbox"
                 checked={sslEnabled}
                 onChange={handleToggleSsl}
-                className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange"
+                className="w-4 h-4 text-sky-500 bg-white/50 dark:bg-neutral-700/50 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500"
               />
             </div>
 
@@ -422,7 +422,7 @@ export function ClusterSettings() {
                       type="radio"
                       checked={sslSelfSigned}
                       onChange={() => handleSslTypeChange(true)}
-                      className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                      className="w-4 h-4 text-sky-500 focus:ring-sky-500"
                     />
                     <span className="text-sm text-gray-800 dark:text-white">
                       {t('cluster.sslSelfSigned', 'Self-Signed')}
@@ -433,7 +433,7 @@ export function ClusterSettings() {
                       type="radio"
                       checked={!sslSelfSigned}
                       onChange={() => handleSslTypeChange(false)}
-                      className="w-4 h-4 text-claude-orange focus:ring-claude-orange"
+                      className="w-4 h-4 text-sky-500 focus:ring-sky-500"
                     />
                     <span className="text-sm text-gray-800 dark:text-white">
                       {t('cluster.sslCustom', 'Custom')}
@@ -449,7 +449,7 @@ export function ClusterSettings() {
                       onChange={(e) => setSslCertPath(e.target.value)}
                       onBlur={handleSslPathsBlur}
                       placeholder={t('cluster.sslCertPath', 'Certificate path (.crt/.pem)')}
-                      className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                      className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
                     />
                     <input
                       type="text"
@@ -457,7 +457,7 @@ export function ClusterSettings() {
                       onChange={(e) => setSslKeyPath(e.target.value)}
                       onBlur={handleSslPathsBlur}
                       placeholder={t('cluster.sslKeyPath', 'Private key path (.key)')}
-                      className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange"
+                      className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
                     />
                   </div>
                 )}
@@ -471,7 +471,7 @@ export function ClusterSettings() {
 
       {/* Secondary Node Settings */}
       {config?.role === 'secondary' && (
-        <div className="space-y-4 p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
+        <div className="space-y-4 p-4 rounded bg-purple-500/10 border border-purple-500/30">
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('cluster.secondarySettings', 'Secondary Node Settings')}
           </h4>
@@ -488,7 +488,7 @@ export function ClusterSettings() {
                 onChange={(e) => setPrimaryHost(e.target.value)}
                 placeholder="192.168.1.100 or hostname.local"
                 disabled={isConnected}
-                className="flex-1 px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange disabled:opacity-50"
+                className="flex-1 px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
               />
               <input
                 type="number"
@@ -498,12 +498,12 @@ export function ClusterSettings() {
                 disabled={isConnected}
                 min={1}
                 max={65535}
-                className="w-24 px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange disabled:opacity-50"
+                className="w-24 px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
               />
               <button
                 onClick={handleUpdatePrimaryHost}
                 disabled={isLoading || isConnected}
-                className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50"
               >
                 {t('common.save', 'Save')}
               </button>
@@ -521,7 +521,7 @@ export function ClusterSettings() {
               onChange={(e) => updateConfig({ sharedSecret: e.target.value })}
               placeholder={t('cluster.enterSharedSecret', 'Enter shared secret from primary node')}
               disabled={isConnected}
-              className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-claude-orange disabled:opacity-50"
+              className="w-full px-3 py-2 text-sm bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600 rounded-sm focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
             />
           </div>
 
@@ -540,7 +540,7 @@ export function ClusterSettings() {
                 type="checkbox"
                 checked={sslEnabled}
                 onChange={handleToggleSsl}
-                className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange"
+                className="w-4 h-4 text-sky-500 bg-white/50 dark:bg-neutral-700/50 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500"
               />
             </div>
 
@@ -564,7 +564,7 @@ export function ClusterSettings() {
                     type="checkbox"
                     checked={sslSelfSigned}
                     onChange={(e) => handleSslTypeChange(e.target.checked)}
-                    className="w-4 h-4 text-claude-orange bg-white/50 dark:bg-gray-700/50 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange"
+                    className="w-4 h-4 text-sky-500 bg-white/50 dark:bg-neutral-700/50 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500"
                   />
                   <span className="text-sm text-gray-800 dark:text-white">
                     {t('cluster.sslAllowSelfSigned', 'Allow self-signed certificates')}
@@ -586,7 +586,7 @@ export function ClusterSettings() {
 
       {/* Connection Toggle */}
       {config?.role !== 'standalone' && (
-        <div className="flex items-center justify-between p-4 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600">
+        <div className="flex items-center justify-between p-4 rounded bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600">
           <div>
             <p className="text-sm font-medium text-gray-800 dark:text-white">
               {t('cluster.status', 'Cluster Status')}
@@ -602,7 +602,7 @@ export function ClusterSettings() {
           <button
             onClick={handleToggleCluster}
             disabled={isLoading || (config?.role === 'secondary' && !hasSecret)}
-            className={`px-4 py-2 text-sm rounded-md transition-colors disabled:opacity-50 ${
+            className={`px-4 py-2 text-sm rounded-sm transition-colors disabled:opacity-50 ${
               isConnected
                 ? 'bg-red-500 hover:bg-red-600 text-white'
                 : 'bg-green-500 hover:bg-green-600 text-white'
@@ -629,7 +629,7 @@ export function ClusterSettings() {
             {nodes.map((node: ClusterNode) => (
               <div
                 key={node.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-white/50 dark:bg-gray-700/50 border border-claude-tan/50 dark:border-gray-600"
+                className="flex items-center justify-between p-3 rounded bg-white/50 dark:bg-neutral-700/50 border border-gray-200 dark:border-neutral-600"
               >
                 <div className="flex items-center gap-3">
                   <div
@@ -645,7 +645,7 @@ export function ClusterSettings() {
                     <p className="text-sm font-medium text-gray-800 dark:text-white">
                       {node.name}
                       {node.id === config?.nodeId && (
-                        <span className="ml-2 text-xs text-claude-orange">
+                        <span className="ml-2 text-xs text-sky-500">
                           ({t('cluster.thisNode', 'This node')})
                         </span>
                       )}
@@ -675,7 +675,7 @@ export function ClusterSettings() {
 
       {/* Privacy Settings - only show when cluster is enabled */}
       {config?.role !== 'standalone' && (
-        <div className="pt-4 border-t border-claude-tan/30 dark:border-gray-600">
+        <div className="pt-4 border-t border-gray-200 dark:border-neutral-600">
           <ClusterPrivacySettings />
         </div>
       )}

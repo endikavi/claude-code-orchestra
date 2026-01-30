@@ -54,10 +54,10 @@ export function PresetSelector({
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           disabled={disabled}
-          className={`flex-1 flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-left ${
+          className={`flex-1 flex items-center justify-between px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-left ${
             disabled
               ? 'opacity-50 cursor-not-allowed'
-              : 'hover:border-claude-tan dark:hover:border-gray-500'
+              : 'hover:border-sky-600 dark:hover:border-neutral-600'
           }`}
         >
           <span
@@ -73,7 +73,7 @@ export function PresetSelector({
           type="button"
           onClick={onSaveNew}
           disabled={disabled}
-          className="px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:border-claude-tan dark:hover:border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-2 text-sm bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-700 dark:text-gray-300 hover:border-sky-600 dark:hover:border-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
           title={t('preset.saveAsPreset')}
         >
           <SaveIcon className="w-4 h-4" />
@@ -82,15 +82,13 @@ export function PresetSelector({
 
       {/* Dropdown menu */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-claude-tan/50 dark:border-gray-600 rounded-md shadow-lg max-h-80 overflow-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-600 rounded-sm shadow-lg max-h-80 overflow-auto">
           {/* No preset option */}
           <button
             type="button"
             onClick={() => handleSelect(null)}
-            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
-              !selectedId
-                ? 'bg-claude-orange/10 text-claude-orange'
-                : 'text-gray-700 dark:text-gray-300'
+            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-neutral-800 ${
+              !selectedId ? 'bg-sky-500/10 text-sky-500' : 'text-gray-700 dark:text-gray-300'
             }`}
           >
             {t('preset.noPreset')}
@@ -99,7 +97,7 @@ export function PresetSelector({
           {/* Global presets section */}
           {globalPresets.length > 0 && (
             <>
-              <div className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 border-t border-claude-tan/30 dark:border-gray-600">
+              <div className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-neutral-800/50 border-t border-gray-200 dark:border-neutral-600">
                 {t('preset.globalPresets')}
               </div>
               {globalPresets.map((preset) => (
@@ -118,7 +116,7 @@ export function PresetSelector({
           {/* Project presets section */}
           {projectPresets.length > 0 && (
             <>
-              <div className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 border-t border-claude-tan/30 dark:border-gray-600">
+              <div className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-neutral-800/50 border-t border-gray-200 dark:border-neutral-600">
                 {t('preset.projectPresets')}
               </div>
               {projectPresets.map((preset) => (
@@ -164,13 +162,13 @@ function PresetOption({ preset, isSelected, onClick, onHover, onLeave }: PresetO
       onClick={onClick}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
-      className={`w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 ${
-        isSelected ? 'bg-claude-orange/10' : ''
+      className={`w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-neutral-800 ${
+        isSelected ? 'bg-sky-500/10' : ''
       }`}
     >
       <div className="flex items-center justify-between">
         <span
-          className={`text-sm ${isSelected ? 'text-claude-orange font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+          className={`text-sm ${isSelected ? 'text-sky-500 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
         >
           {preset.name}
         </span>
@@ -193,7 +191,7 @@ function PresetTooltip({ preset }: PresetTooltipProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="absolute left-full ml-2 top-0 z-50 w-64 p-3 bg-white dark:bg-gray-800 border border-claude-tan/50 dark:border-gray-600 rounded-md shadow-lg">
+    <div className="absolute left-full ml-2 top-0 z-50 w-64 p-3 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-600 rounded-sm shadow-lg">
       <h4 className="font-medium text-gray-800 dark:text-white text-sm">{preset.name}</h4>
       {preset.description && (
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{preset.description}</p>
@@ -245,7 +243,7 @@ function PresetTooltip({ preset }: PresetTooltipProps) {
             {preset.tags.map((tag) => (
               <span
                 key={tag}
-                className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded"
+                className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-300 rounded"
               >
                 {tag}
               </span>

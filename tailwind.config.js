@@ -7,15 +7,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        claude: {
-          orange: '#da7756',
-          tan: '#d4a27f',
-          cream: '#e8dcd0',
-          beige: '#f5f0e8',
-        },
-        gray: {
-          750: '#2d2d3a',
-          850: '#1f1f2e',
+        neutral: {
+          750: '#333333',
+          850: '#1a1a1a',
         },
       },
       animation: {

@@ -165,7 +165,7 @@ export function OrchestraView() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-4 border-claude-orange border-t-transparent rounded-full mx-auto mb-3" />
+          <div className="animate-spin h-8 w-8 border-4 border-sky-500 border-t-transparent rounded-full mx-auto mb-3" />
           <p className="text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
         </div>
       </div>
@@ -208,7 +208,7 @@ export function OrchestraView() {
       {/* Main Content - Projects & Instances */}
       <div className="flex flex-col h-full overflow-hidden w-full">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-950 shrink-0">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
               {t('orchestration.orchestraView')}
@@ -228,7 +228,7 @@ export function OrchestraView() {
                   <span className="sm:hidden">{totalRunning}</span>
                 </span>
               )}
-              <span className="hidden sm:inline-flex px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded-full">
+              <span className="hidden sm:inline-flex px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-gray-400 rounded-full">
                 {totalSubagents} {t('orchestration.totalSubagents')}
               </span>
             </div>
@@ -239,23 +239,23 @@ export function OrchestraView() {
             {/* Expand/Collapse - hidden on mobile */}
             <button
               onClick={expandAllProjects}
-              className="hidden sm:block px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+              className="hidden sm:block px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-sm transition-colors"
             >
               {t('orchestration.expandAll')}
             </button>
             <button
               onClick={collapseAllProjects}
-              className="hidden sm:block px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+              className="hidden sm:block px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-sm transition-colors"
             >
               {t('orchestration.collapseAll')}
             </button>
             {/* Toggle Tasks Panel */}
             <button
               onClick={() => setShowTasksPanel(!showTasksPanel)}
-              className={`p-2 sm:px-3 sm:py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+              className={`p-2 sm:px-3 sm:py-1.5 text-xs font-medium rounded-sm transition-colors flex items-center gap-1.5 ${
                 showTasksPanel
-                  ? 'bg-claude-orange/10 text-claude-orange'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  ? 'bg-sky-500/10 text-sky-500'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800'
               }`}
               title={t('tasks.title')}
             >
@@ -273,7 +273,7 @@ export function OrchestraView() {
                 />
               </svg>
               {totalTasks > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold bg-claude-orange text-white rounded-full">
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold bg-sky-500 text-white rounded-full">
                   {tasksInProgress > 0 ? tasksInProgress : totalTasks}
                 </span>
               )}
@@ -306,7 +306,7 @@ export function OrchestraView() {
             onClick={() => setShowTasksPanel(false)}
           />
           {/* Panel */}
-          <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto md:w-80 md:shrink-0 md:border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 md:bg-gray-50 md:dark:bg-gray-900/50">
+          <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto md:w-80 md:shrink-0 md:border-l border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-950 md:bg-gray-50 md:dark:bg-neutral-950/50">
             <TasksPanel onClose={() => setShowTasksPanel(false)} />
           </div>
         </>
@@ -353,11 +353,11 @@ function ProjectGroupCard({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 shadow-sm overflow-hidden">
       {/* Project Header */}
       <button
         onClick={onToggleProject}
-        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors"
       >
         <div className="flex items-center gap-3">
           {/* Project Color Indicator */}
@@ -384,7 +384,7 @@ function ProjectGroupCard({
                 {group.totalRunning}
               </span>
             )}
-            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 rounded-full">
+            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-neutral-700 dark:text-gray-400 rounded-full">
               {group.totalCompleted} {t('orchestration.completed')}
             </span>
           </div>
@@ -403,14 +403,14 @@ function ProjectGroupCard({
 
       {/* Instances */}
       {isExpanded && (
-        <div className="border-t border-gray-200 dark:border-gray-700">
+        <div className="border-t border-gray-200 dark:border-neutral-700">
           {group.instances.map((inst, idx) => (
             <div
               key={inst.instanceId}
-              className={`${idx !== 0 ? 'border-t border-gray-100 dark:border-gray-700/50' : ''}`}
+              className={`${idx !== 0 ? 'border-t border-gray-100 dark:border-neutral-700/50' : ''}`}
             >
               {/* Instance Header */}
-              <div className="flex items-center justify-between p-3 pl-8 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+              <div className="flex items-center justify-between p-3 pl-8 hover:bg-gray-50 dark:hover:bg-neutral-700/30 transition-colors">
                 <button
                   onClick={() => inst.subagents.length > 0 && onToggleInstance(inst.instanceId)}
                   className="flex items-center gap-3 flex-1 text-left"
@@ -439,7 +439,7 @@ function ProjectGroupCard({
                       e.stopPropagation();
                       onNavigateToInstance(group.projectId, inst.instanceId);
                     }}
-                    className="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    className="p-1.5 rounded-sm hover:bg-gray-200 dark:hover:bg-neutral-600 transition-colors"
                     title={t('orchestration.goToInstance')}
                   >
                     <svg

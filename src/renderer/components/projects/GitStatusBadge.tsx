@@ -108,7 +108,7 @@ function FullBadge({ status, t }: BadgeProps) {
   };
 
   return (
-    <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
+    <div className="bg-white/50 dark:bg-neutral-800/50 rounded p-3 space-y-2">
       {/* Branch and remote status */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -164,7 +164,7 @@ function FullBadge({ status, t }: BadgeProps) {
           )}
           {status.untracked > 0 && (
             <div
-              className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-1 rounded"
+              className="flex items-center gap-1 bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-400 px-2 py-1 rounded"
               title={t('git.untracked')}
             >
               <QuestionIcon className="w-3 h-3" />

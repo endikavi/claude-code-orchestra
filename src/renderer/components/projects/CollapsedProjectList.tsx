@@ -90,9 +90,9 @@ export function CollapsedProjectList() {
       <div key={project.id} className="relative group">
         <button
           onClick={() => selectProject(project.id)}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-all ${
+          className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium transition-all ${
             isSelected
-              ? 'ring-2 ring-claude-orange ring-offset-2 ring-offset-claude-beige dark:ring-offset-gray-800'
+              ? 'ring-2 ring-sky-500 ring-offset-2 ring-offset-gray-50 dark:ring-offset-neutral-900'
               : 'hover:scale-105'
           }`}
           style={{ backgroundColor: project.color || '#6b7280' }}

@@ -94,17 +94,17 @@ export function SharedContextPanel({ className = '', onClose }: SharedContextPan
   return (
     <div className={`flex flex-col h-full ${className}`}>
       {/* Header */}
-      <div className="sticky top-0 bg-white dark:bg-gray-900 z-10 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="sticky top-0 bg-white dark:bg-neutral-950 z-10 px-4 py-3 border-b border-gray-200 dark:border-neutral-700">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-            <NetworkIcon className="h-5 w-5 text-claude-orange" />
+            <NetworkIcon className="h-5 w-5 text-sky-500" />
             {t('context.title', 'Shared Context')}
           </h2>
           <div className="flex items-center gap-2">
             <button
               onClick={() => projectId && refreshContext(projectId)}
               disabled={isLoading || !projectId}
-              className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+              className="p-1.5 rounded-sm hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
               title={t('context.refresh', 'Refresh')}
             >
               <RefreshIcon className={`h-4 w-4 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
@@ -112,7 +112,7 @@ export function SharedContextPanel({ className = '', onClose }: SharedContextPan
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-1.5 rounded-sm hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors"
                 aria-label={t('common.close', 'Close')}
               >
                 <XIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
@@ -140,7 +140,7 @@ export function SharedContextPanel({ className = '', onClose }: SharedContextPan
           />
         ) : isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-claude-orange" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500" />
           </div>
         ) : (
           <>
@@ -177,7 +177,7 @@ export function SharedContextPanel({ className = '', onClose }: SharedContextPan
               <>
                 {/* Architecture */}
                 {knowledge.architectureSummary && (
-                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="mt-4 p-3 bg-gray-50 dark:bg-neutral-800 rounded">
                     <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase mb-2">
                       {t('context.architecture', 'Architecture')}
                     </h4>
@@ -219,7 +219,10 @@ export function SharedContextPanel({ className = '', onClose }: SharedContextPan
                   >
                     <div className="space-y-2">
                       {knowledge.conventions.map((conv, idx) => (
-                        <div key={idx} className="p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm">
+                        <div
+                          key={idx}
+                          className="p-2 bg-gray-50 dark:bg-neutral-800 rounded text-sm"
+                        >
                           <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                             {conv.type}
                           </span>
@@ -275,7 +278,10 @@ export function SharedContextPanel({ className = '', onClose }: SharedContextPan
                   >
                     <div className="space-y-1">
                       {knowledge.importantFiles.map((file, idx) => (
-                        <div key={idx} className="p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm">
+                        <div
+                          key={idx}
+                          className="p-2 bg-gray-50 dark:bg-neutral-800 rounded text-sm"
+                        >
                           <code className="text-xs text-purple-600 dark:text-purple-400">
                             {file.path}
                           </code>
@@ -335,7 +341,7 @@ function CollapsibleSection({
     <div className={className}>
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors"
       >
         <div className="flex items-center gap-2">
           <span className={colorClass}>{icon}</span>
@@ -369,7 +375,7 @@ function InstanceContextCard({
   formatTimeAgo,
 }: InstanceContextCardProps) {
   return (
-    <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="p-3 bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -411,7 +417,7 @@ function InstanceContextCard({
             {context.currentFiles.slice(0, 3).map((file, idx) => (
               <code
                 key={idx}
-                className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded truncate max-w-[150px]"
+                className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-400 rounded truncate max-w-[150px]"
               >
                 {file.split('/').pop()}
               </code>

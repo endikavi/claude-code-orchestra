@@ -62,7 +62,7 @@ export function TasksPanel({ className = '', onClose }: TasksPanelProps) {
         {/* Section Header */}
         <button
           onClick={() => toggleSection(status)}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-neutral-900 transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className={colorClasses}>{icon}</span>
@@ -98,11 +98,11 @@ export function TasksPanel({ className = '', onClose }: TasksPanelProps) {
   return (
     <div className={`flex flex-col h-full ${className}`}>
       {/* Header */}
-      <div className="sticky top-0 bg-white dark:bg-gray-900 z-10 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="sticky top-0 bg-white dark:bg-neutral-950 z-10 px-4 py-3 border-b border-gray-200 dark:border-neutral-700">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
             <svg
-              className="h-5 w-5 text-claude-orange"
+              className="h-5 w-5 text-sky-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -123,7 +123,7 @@ export function TasksPanel({ className = '', onClose }: TasksPanelProps) {
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-1.5 rounded-sm hover:bg-gray-100 dark:hover:bg-neutral-900 transition-colors"
                 aria-label={t('common.close')}
               >
                 <svg
@@ -157,7 +157,7 @@ export function TasksPanel({ className = '', onClose }: TasksPanelProps) {
             )}
             {pendingCount > 0 && (
               <div className="flex items-center gap-1.5 text-xs">
-                <div className="h-3 w-3 rounded-full border-2 border-gray-300 dark:border-gray-600" />
+                <div className="h-3 w-3 rounded-full border-2 border-gray-300 dark:border-neutral-600" />
                 <span className="text-gray-600 dark:text-gray-400 font-medium">{pendingCount}</span>
               </div>
             )}

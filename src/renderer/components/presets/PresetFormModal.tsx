@@ -157,7 +157,7 @@ export function PresetFormModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('preset.namePlaceholder')}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             />
           </div>
 
@@ -171,7 +171,7 @@ export function PresetFormModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t('preset.descriptionPlaceholder')}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             />
           </div>
 
@@ -183,7 +183,7 @@ export function PresetFormModal({
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as PresetCategory | '')}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+              className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             >
               <option value="">-</option>
               {PRESET_CATEGORIES.map((cat) => (
@@ -203,7 +203,7 @@ export function PresetFormModal({
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-claude-orange/10 text-claude-orange text-xs rounded"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-sky-500/10 text-sky-500 text-xs rounded"
                 >
                   {tag}
                   <button
@@ -223,12 +223,12 @@ export function PresetFormModal({
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagInputKeyDown}
                 placeholder={t('preset.tagsPlaceholder')}
-                className="flex-1 px-3 py-1.5 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+                className="flex-1 px-3 py-1.5 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
               />
               <button
                 type="button"
                 onClick={handleAddTag}
-                className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-500"
               >
                 {t('common.add')}
               </button>
@@ -241,7 +241,7 @@ export function PresetFormModal({
               type="checkbox"
               checked={isGlobal}
               onChange={(e) => setIsGlobal(e.target.checked)}
-              className="w-4 h-4 text-claude-orange bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange focus:ring-2"
+              className="w-4 h-4 text-sky-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500 focus:ring-2"
             />
             <div>
               <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -253,7 +253,7 @@ export function PresetFormModal({
         </div>
 
         {/* Separator */}
-        <div className="border-t border-claude-tan/30 dark:border-gray-700" />
+        <div className="border-t border-gray-200 dark:border-neutral-700" />
 
         {/* Instance Configuration Section */}
         <div className="space-y-3">
@@ -268,10 +268,10 @@ export function PresetFormModal({
                 key={m.value}
                 type="button"
                 onClick={() => setModel(m.value)}
-                className={`px-3 py-2 text-sm rounded-md border transition-colors ${
+                className={`px-3 py-2 text-sm rounded-sm border transition-colors ${
                   model === m.value
-                    ? 'bg-claude-orange/20 border-claude-orange text-gray-800 dark:text-white'
-                    : 'bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-claude-tan dark:hover:border-gray-500'
+                    ? 'bg-sky-500/20 border-sky-500 text-gray-800 dark:text-white'
+                    : 'bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-gray-300 hover:border-sky-600 dark:hover:border-neutral-600'
                 }`}
               >
                 {m.label}
@@ -288,7 +288,7 @@ export function PresetFormModal({
               <select
                 value={agentFile}
                 onChange={(e) => setAgentFile(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+                className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
               >
                 <option value="">{t('instance.autoDetectAgent')}</option>
                 {availableAgents.map((agent) => (
@@ -307,7 +307,7 @@ export function PresetFormModal({
               type="checkbox"
               checked={planMode}
               onChange={(e) => setPlanMode(e.target.checked)}
-              className="w-4 h-4 text-claude-orange bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange focus:ring-2"
+              className="w-4 h-4 text-sky-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500 focus:ring-2"
             />
             <div>
               <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -325,7 +325,7 @@ export function PresetFormModal({
               type="checkbox"
               checked={verbose}
               onChange={(e) => setVerbose(e.target.checked)}
-              className="w-4 h-4 text-claude-orange bg-white dark:bg-gray-700 border-claude-tan/50 dark:border-gray-600 rounded focus:ring-claude-orange focus:ring-2"
+              className="w-4 h-4 text-sky-500 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 rounded focus:ring-sky-500 focus:ring-2"
             />
             <div>
               <span className="text-sm font-medium text-gray-800 dark:text-white">
@@ -339,7 +339,7 @@ export function PresetFormModal({
         </div>
 
         {/* Separator */}
-        <div className="border-t border-claude-tan/30 dark:border-gray-700" />
+        <div className="border-t border-gray-200 dark:border-neutral-700" />
 
         {/* Initial Prompt Section */}
         <div>
@@ -351,7 +351,7 @@ export function PresetFormModal({
             onChange={(e) => setInitialPrompt(e.target.value)}
             placeholder={t('preset.initialPromptPlaceholder')}
             rows={3}
-            className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-claude-tan/50 dark:border-gray-600 rounded-md text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent resize-none"
+            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none"
           />
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {t('preset.initialPromptDesc')}
@@ -373,7 +373,7 @@ export function PresetFormModal({
           <button
             type="submit"
             disabled={isSaving}
-            className="px-4 py-2 text-sm bg-claude-orange hover:bg-claude-tan text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm bg-sky-500 hover:bg-sky-600 text-white rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? t('common.saving') : t('common.save')}
           </button>

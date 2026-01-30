@@ -35,7 +35,7 @@ export function TaskBoardView({ projectId }: TaskBoardViewProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-claude-orange"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
       </div>
     );
   }
@@ -60,7 +60,7 @@ export function TaskBoardView({ projectId }: TaskBoardViewProps) {
           <ProcessAllButton projectId={projectId} isProcessing={isProcessingAll} />
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-3 py-1.5 bg-claude-orange text-white rounded-lg text-sm font-medium hover:bg-claude-orange/90 transition-colors flex items-center gap-1"
+            className="px-3 py-1.5 bg-sky-500 text-white rounded text-sm font-medium hover:bg-sky-600 transition-colors flex items-center gap-1"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
