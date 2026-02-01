@@ -9,6 +9,7 @@ jobs:
   build:
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     permissions:
       contents: write
     strategy:
@@ -18,9 +19,13 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             build-cmd: npm run electron:build:linux
+            electron-cache: ~/.cache/electron
+            electron-builder-cache: ~/.cache/electron-builder
           - os: windows-latest
             platform: windows
             build-cmd: npm run electron:build:win
+            electron-cache: ~/AppData/Local/electron/Cache
+            electron-builder-cache: ~/AppData/Local/electron-builder/Cache
 
     steps:
       - name: Checkout repository
@@ -32,6 +37,16 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache Electron
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ matrix.electron-cache }}
+            ${{ matrix.electron-builder-cache }}
+          key: electron-${{ matrix.platform }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-${{ matrix.platform }}-
+
       - name: Install dependencies
         run: npm ci
 
@@ -39,6 +54,7 @@ jobs:
         run: ${{ matrix.build-cmd }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEBUG: electron-builder
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

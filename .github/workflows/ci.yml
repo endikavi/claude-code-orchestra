@@ -80,6 +80,7 @@ jobs:
     name: Build
     runs-on: ${{ matrix.os }}
     needs: [lint, typecheck, test]
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -87,10 +88,16 @@ jobs:
         include:
           - os: ubuntu-latest
             build-cmd: npm run electron:build:linux
+            electron-cache: ~/.cache/electron
+            electron-builder-cache: ~/.cache/electron-builder
           - os: windows-latest
             build-cmd: npm run electron:build:win
+            electron-cache: ~/AppData/Local/electron/Cache
+            electron-builder-cache: ~/AppData/Local/electron-builder/Cache
           - os: macos-latest
             build-cmd: npm run electron:build:mac
+            electron-cache: ~/Library/Caches/electron
+            electron-builder-cache: ~/Library/Caches/electron-builder
 
     steps:
       - name: Checkout repository
@@ -102,6 +109,16 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache Electron
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ matrix.electron-cache }}
+            ${{ matrix.electron-builder-cache }}
+          key: electron-${{ matrix.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-${{ matrix.os }}-
+
       - name: Install dependencies
         run: npm ci
 
@@ -109,6 +126,7 @@ jobs:
         run: ${{ matrix.build-cmd }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEBUG: electron-builder
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

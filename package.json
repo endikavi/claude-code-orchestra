@@ -42,7 +42,7 @@
     "electron:build:linux": "npm run build:vite && npm run build:web && electron-builder --linux",
     "electron:build:win": "npm run build:vite && npm run build:web && electron-builder --win",
     "electron:build:mac": "npm run build:vite && npm run build:web && electron-builder --mac",
-    "rebuild": "electron-rebuild",
+    "rebuild": "npx @electron/rebuild",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx --report-unused-disable-directives",
     "lint:strict": "eslint src --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
