@@ -127,10 +127,14 @@ do_update() {
   local filename=""
   case "$os" in
     linux)
-      filename="Orchestra-${version}-${arch}.AppImage"
+      filename="Orchestra-${version}.AppImage"
       ;;
     macos)
-      filename="Orchestra-${version}-${arch}.dmg"
+      if [ "$arch" = "arm64" ]; then
+        filename="Orchestra-${version}-arm64.dmg"
+      else
+        filename="Orchestra-${version}.dmg"
+      fi
       ;;
   esac
 

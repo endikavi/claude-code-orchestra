@@ -337,6 +337,7 @@ export const IPC_CHANNELS = {
   JIRA_TRANSITION_ISSUE: 'jira:transitionIssue',
   JIRA_ASSIGN_ISSUE: 'jira:assignIssue',
   JIRA_GET_CURRENT_USER: 'jira:getCurrentUser',
+  JIRA_GET_IMPORTED_KEYS: 'jira:getImportedKeys',
 
   // Vector search operations
   VECTOR_INDEX_START: 'vector:indexStart',

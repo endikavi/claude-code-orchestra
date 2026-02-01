@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as fs from 'fs';
 import { DataStore } from './DataStore';
+import { getJiraService } from './JiraService';
 import type {
   RalphTask,
   RalphTaskStatus,
@@ -92,8 +93,54 @@ export class RalphTaskManager extends EventEmitter {
     const task = this.dataStore.moveRalphTask(input.id, input.newStatus, input.newOrderIndex);
     if (task) {
       this.emit('taskUpdated', task);
+
+      // Sync with Jira if moving to "done" and task has Jira key
+      if (input.newStatus === 'done' && task.jiraIssueKey) {
+        void this.syncJiraOnDone(task);
+      }
     }
     return task;
+  }
+
+  /**
+   * Sync with Jira when task moves to "done" (for manual drag-drop)
+   */
+  private async syncJiraOnDone(task: RalphTask): Promise<void> {
+    if (!task.jiraIssueKey) {
+      return;
+    }
+
+    const project = this.dataStore.getProjectById(task.projectId);
+    if (!project?.jiraConfig?.enabled) {
+      return;
+    }
+
+    const jiraConfig = project.jiraConfig;
+    const jiraService = getJiraService();
+
+    try {
+      // Transition to "done" status if configured
+      if (jiraConfig.statusMapping?.done) {
+        const success = await jiraService.transitionIssueToStatus(
+          task.jiraIssueKey,
+          jiraConfig.statusMapping.done
+        );
+        if (success) {
+          console.log(
+            `[RalphTaskManager] Jira issue ${task.jiraIssueKey} transitioned to "done" status`
+          );
+        } else {
+          console.warn(
+            `[RalphTaskManager] Could not transition Jira issue ${task.jiraIssueKey} to "done" status`
+          );
+        }
+      }
+
+      // Update last sync timestamp
+      this.updateTask(task.id, { jiraLastSyncAt: Date.now() });
+    } catch (error) {
+      console.error(`[RalphTaskManager] Failed to sync Jira on done:`, error);
+    }
   }
 
   /**

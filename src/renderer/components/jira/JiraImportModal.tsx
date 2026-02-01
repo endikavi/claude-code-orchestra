@@ -4,6 +4,8 @@ import { Modal } from '../common/Modal';
 import type { JiraIssue } from '@shared/types/jira';
 import type { Project } from '@shared/types';
 
+type StatusFilterType = 'all' | 'todo' | 'in_progress' | 'done';
+
 interface JiraImportModalProps {
   project: Project;
   onClose: () => void;
@@ -17,6 +19,8 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
+  const [importedKeys, setImportedKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<{
     imported: string[];
@@ -24,6 +28,18 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
   } | null>(null);
 
   const projectKey = project.jiraConfig?.projectKey;
+
+  // Load imported keys for this project
+  const loadImportedKeys = useCallback(async () => {
+    try {
+      const result = await window.electronAPI.jira.getImportedKeys(project.id);
+      if (result.success && result.keys) {
+        setImportedKeys(new Set(result.keys));
+      }
+    } catch (err) {
+      console.error('Failed to load imported keys:', err);
+    }
+  }, [project.id]);
 
   const loadIssues = useCallback(async () => {
     if (!projectKey) {
@@ -38,7 +54,8 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
     try {
       const result = await window.electronAPI.jira.searchIssues(
         projectKey,
-        project.jiraConfig?.importFilter || 'mine'
+        project.jiraConfig?.importFilter || 'mine',
+        statusFilter
       );
 
       if (result.success && result.issues) {
@@ -51,7 +68,11 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
     } finally {
       setLoading(false);
     }
-  }, [projectKey, project.jiraConfig?.importFilter]);
+  }, [projectKey, project.jiraConfig?.importFilter, statusFilter]);
+
+  useEffect(() => {
+    void loadImportedKeys();
+  }, [loadImportedKeys]);
 
   useEffect(() => {
     void loadIssues();
@@ -66,7 +87,16 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
     );
   });
 
+  // Get issues that can be selected (not already imported)
+  const selectableIssues = filteredIssues.filter((issue) => !importedKeys.has(issue.key));
+
   const toggleSelect = (issueId: string) => {
+    // Find the issue and check if it's already imported
+    const issue = issues.find((i) => i.id === issueId);
+    if (issue && importedKeys.has(issue.key)) {
+      return; // Don't allow selecting imported issues
+    }
+
     const newSelected = new Set(selectedIds);
     if (newSelected.has(issueId)) {
       newSelected.delete(issueId);
@@ -77,10 +107,11 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredIssues.length) {
+    // Only toggle selectable (non-imported) issues
+    if (selectedIds.size === selectableIssues.length && selectableIssues.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredIssues.map((i) => i.id)));
+      setSelectedIds(new Set(selectableIssues.map((i) => i.id)));
     }
   };
 
@@ -103,6 +134,10 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
 
         if (result.imported && result.imported.length > 0) {
           onImported(result.imported.length);
+          // Reload imported keys to update the UI
+          void loadImportedKeys();
+          // Clear selection
+          setSelectedIds(new Set());
         }
       } else {
         setError(result.error || 'Failed to import issues');
@@ -160,15 +195,29 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
         </div>
 
         {/* Search/Filter */}
-        <div className="relative">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder={t('jira.import.searchPlaceholder', 'Search issues...')}
-            className="w-full pl-10 pr-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
-          />
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder={t('jira.import.searchPlaceholder', 'Search issues...')}
+              className="w-full pl-10 pr-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilterType)}
+            className="px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded-sm bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+          >
+            <option value="all">{t('jira.import.statusFilter.all', 'All Statuses')}</option>
+            <option value="todo">{t('jira.import.statusFilter.todo', 'To Do')}</option>
+            <option value="in_progress">
+              {t('jira.import.statusFilter.inProgress', 'In Progress')}
+            </option>
+            <option value="done">{t('jira.import.statusFilter.done', 'Done')}</option>
+          </select>
         </div>
 
         {/* Error Message */}
@@ -234,71 +283,97 @@ export function JiraImportModal({ project, onClose, onImported }: JiraImportModa
               <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-neutral-800 border-b border-gray-200 dark:border-neutral-600">
                 <input
                   type="checkbox"
-                  checked={selectedIds.size === filteredIssues.length && filteredIssues.length > 0}
+                  checked={
+                    selectedIds.size === selectableIssues.length && selectableIssues.length > 0
+                  }
                   onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sky-500 focus:ring-sky-500"
+                  disabled={selectableIssues.length === 0}
+                  className="w-4 h-4 rounded border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sky-500 focus:ring-sky-500 disabled:opacity-50"
                 />
                 <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   {selectedIds.size > 0
                     ? t('jira.import.selectedCount', '{{count}} selected', {
                         count: selectedIds.size,
                       })
-                    : t('jira.import.selectAll', 'Select all')}
+                    : selectableIssues.length < filteredIssues.length
+                      ? t('jira.import.selectAllAvailable', 'Select all ({{count}} available)', {
+                          count: selectableIssues.length,
+                        })
+                      : t('jira.import.selectAll', 'Select all')}
                 </span>
+                {importedKeys.size > 0 && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    ({filteredIssues.length - selectableIssues.length}{' '}
+                    {t('jira.import.alreadyImported', 'already imported')})
+                  </span>
+                )}
               </div>
 
               {/* Issues */}
               <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-neutral-700">
-                {filteredIssues.map((issue) => (
-                  <label
-                    key={issue.id}
-                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors ${
-                      selectedIds.has(issue.id) ? 'bg-sky-50 dark:bg-sky-900/10' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(issue.id)}
-                      onChange={() => toggleSelect(issue.id)}
-                      className="mt-1 w-4 h-4 rounded border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sky-500 focus:ring-sky-500"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-mono font-medium text-blue-600 dark:text-blue-400">
-                          {issue.key}
-                        </span>
-                        {issue.fields.issuetype?.name && (
-                          <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-400 rounded">
-                            {issue.fields.issuetype.name}
+                {filteredIssues.map((issue) => {
+                  const isImported = importedKeys.has(issue.key);
+                  return (
+                    <label
+                      key={issue.id}
+                      className={`flex items-start gap-3 px-4 py-3 transition-colors ${
+                        isImported
+                          ? 'opacity-60 cursor-not-allowed bg-gray-50 dark:bg-neutral-800/50'
+                          : `cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800 ${
+                              selectedIds.has(issue.id) ? 'bg-sky-50 dark:bg-sky-900/10' : ''
+                            }`
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(issue.id)}
+                        onChange={() => toggleSelect(issue.id)}
+                        disabled={isImported}
+                        className="mt-1 w-4 h-4 rounded border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sky-500 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-mono font-medium text-blue-600 dark:text-blue-400">
+                            {issue.key}
                           </span>
-                        )}
-                        {issue.fields.priority?.name && (
-                          <span
-                            className={`text-xs font-medium ${getPriorityColor(issue.fields.priority.name)}`}
-                          >
-                            {issue.fields.priority.name}
-                          </span>
-                        )}
-                        {issue.fields.status?.name && (
-                          <span
-                            className={`text-xs px-1.5 py-0.5 rounded ${getStatusColor(issue.fields.status.statusCategory?.name)}`}
-                          >
-                            {issue.fields.status.name}
-                          </span>
+                          {isImported && (
+                            <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded font-medium">
+                              {t('jira.import.imported', 'Imported')}
+                            </span>
+                          )}
+                          {issue.fields.issuetype?.name && (
+                            <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-400 rounded">
+                              {issue.fields.issuetype.name}
+                            </span>
+                          )}
+                          {issue.fields.priority?.name && (
+                            <span
+                              className={`text-xs font-medium ${getPriorityColor(issue.fields.priority.name)}`}
+                            >
+                              {issue.fields.priority.name}
+                            </span>
+                          )}
+                          {issue.fields.status?.name && (
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded ${getStatusColor(issue.fields.status.statusCategory?.name)}`}
+                            >
+                              {issue.fields.status.name}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-800 dark:text-white mt-1 line-clamp-2">
+                          {issue.fields.summary}
+                        </p>
+                        {issue.fields.assignee && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('jira.import.assignee', 'Assignee')}:{' '}
+                            {issue.fields.assignee.displayName}
+                          </p>
                         )}
                       </div>
-                      <p className="text-sm text-gray-800 dark:text-white mt-1 line-clamp-2">
-                        {issue.fields.summary}
-                      </p>
-                      {issue.fields.assignee && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {t('jira.import.assignee', 'Assignee')}:{' '}
-                          {issue.fields.assignee.displayName}
-                        </p>
-                      )}
-                    </div>
-                  </label>
-                ))}
+                    </label>
+                  );
+                })}
               </div>
             </>
           )}

@@ -21,6 +21,13 @@ import type {
   ReorderRalphTasksInput,
   RalphTaskHelpRequest,
 } from '@shared/types';
+import type {
+  JiraGlobalConfig,
+  JiraBoard,
+  JiraStatus,
+  JiraIssue,
+  JiraUser,
+} from '@shared/types/jira';
 
 declare global {
   interface Window {
@@ -143,6 +150,40 @@ declare global {
         onProcessAllStarted: (callback: (projectId: string) => void) => () => void;
         onProcessAllCompleted: (callback: (projectId: string) => void) => () => void;
         onProcessAllStopped: (callback: (projectId: string) => void) => () => void;
+      };
+      jira: {
+        getGlobalConfig: () => Promise<JiraGlobalConfig>;
+        updateGlobalConfig: (config: Partial<JiraGlobalConfig>) => Promise<JiraGlobalConfig>;
+        validateCredentials: () => Promise<{
+          valid: boolean;
+          user?: JiraUser;
+          error?: string;
+        }>;
+        getBoards: () => Promise<{ success: boolean; boards?: JiraBoard[]; error?: string }>;
+        getStatuses: (
+          projectKey: string
+        ) => Promise<{ success: boolean; statuses?: JiraStatus[]; error?: string }>;
+        searchIssues: (
+          projectKey: string,
+          filter?: 'mine' | 'all',
+          statusFilter?: 'all' | 'todo' | 'in_progress' | 'done'
+        ) => Promise<{ success: boolean; issues?: JiraIssue[]; error?: string }>;
+        importIssues: (
+          projectId: string,
+          issues: JiraIssue[]
+        ) => Promise<{ success: boolean; imported?: string[]; errors?: string[]; error?: string }>;
+        transitionIssue: (
+          issueKey: string,
+          targetStatusId: string
+        ) => Promise<{ success: boolean; error?: string }>;
+        assignIssue: (
+          issueKey: string,
+          accountId: string
+        ) => Promise<{ success: boolean; error?: string }>;
+        getCurrentUser: () => Promise<{ success: boolean; user?: JiraUser; error?: string }>;
+        getImportedKeys: (
+          projectId: string
+        ) => Promise<{ success: boolean; keys?: string[]; error?: string }>;
       };
     };
   }

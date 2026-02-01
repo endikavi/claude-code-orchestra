@@ -191,10 +191,15 @@ export class JiraService {
   /**
    * Search for issues using JQL (using new /search/jql endpoint per CHANGE-2046)
    * Migration: /rest/api/3/search → /rest/api/3/search/jql
+   * @param projectKey - Jira project key
+   * @param filter - 'mine' for current user's issues, 'all' for all issues
+   * @param statusFilter - Filter by status category: 'all', 'todo', 'in_progress', 'done'
+   * @param additionalJql - Additional JQL to append
    */
   async searchIssues(
     projectKey: string,
     filter: 'mine' | 'all' = 'mine',
+    statusFilter: 'all' | 'todo' | 'in_progress' | 'done' = 'all',
     additionalJql?: string
   ): Promise<JiraIssue[]> {
     let jql = `project = "${projectKey}"`;
@@ -203,8 +208,22 @@ export class JiraService {
       jql += ' AND assignee = currentUser()';
     }
 
-    // Exclude done issues by default
-    jql += ' AND statusCategory != "Done"';
+    // Apply status category filter
+    switch (statusFilter) {
+      case 'todo':
+        jql += ' AND statusCategory = "To Do"';
+        break;
+      case 'in_progress':
+        jql += ' AND statusCategory = "In Progress"';
+        break;
+      case 'done':
+        jql += ' AND statusCategory = "Done"';
+        break;
+      case 'all':
+      default:
+        // No status filter - show all including done
+        break;
+    }
 
     if (additionalJql) {
       jql += ` AND ${additionalJql}`;

@@ -123,6 +123,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       verbose?: boolean;
       skipPermissions?: boolean;
       usePermissionPromptTool?: boolean;
+      agentFile?: string;
     }): Promise<ClaudeInstance> => ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_CREATE, config),
 
     // Create a pending instance without starting Claude (for structured view deferred flow)
@@ -134,6 +135,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       verbose?: boolean;
       skipPermissions?: boolean;
       usePermissionPromptTool?: boolean;
+      agentFile?: string;
     }): Promise<ClaudeInstance & { conversationId?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.INSTANCE_CREATE_PENDING, config),
 
@@ -1386,9 +1388,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     searchIssues: (
       projectKey: string,
-      filter?: 'mine' | 'all'
+      filter?: 'mine' | 'all',
+      statusFilter?: 'all' | 'todo' | 'in_progress' | 'done'
     ): Promise<{ success: boolean; issues?: JiraIssue[]; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.JIRA_SEARCH_ISSUES, projectKey, filter),
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_SEARCH_ISSUES, projectKey, filter, statusFilter),
 
     importIssues: (
       projectId: string,
@@ -1410,6 +1413,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     getCurrentUser: (): Promise<{ success: boolean; user?: JiraUser; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.JIRA_GET_CURRENT_USER),
+
+    getImportedKeys: (
+      projectId: string
+    ): Promise<{ success: boolean; keys?: string[]; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_GET_IMPORTED_KEYS, projectId),
   },
 
   // Vector search operations
@@ -2035,7 +2043,8 @@ declare global {
         ) => Promise<{ success: boolean; statuses?: JiraStatus[]; error?: string }>;
         searchIssues: (
           projectKey: string,
-          filter?: 'mine' | 'all'
+          filter?: 'mine' | 'all',
+          statusFilter?: 'all' | 'todo' | 'in_progress' | 'done'
         ) => Promise<{ success: boolean; issues?: JiraIssue[]; error?: string }>;
         importIssues: (
           projectId: string,
@@ -2055,6 +2064,9 @@ declare global {
           accountId: string
         ) => Promise<{ success: boolean; error?: string }>;
         getCurrentUser: () => Promise<{ success: boolean; user?: JiraUser; error?: string }>;
+        getImportedKeys: (
+          projectId: string
+        ) => Promise<{ success: boolean; keys?: string[]; error?: string }>;
       };
       vectorSearch: {
         getModelStatus: () => Promise<Record<string, ModelState>>;

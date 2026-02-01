@@ -74,12 +74,14 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   // Project handlers
   ipcMain.handle(
     IPC_CHANNELS.PROJECT_CREATE,
-    (_event, data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+    async (_event, data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
       const validated = validators.projectCreate(data);
       const result = dataStore.createProject(validated);
       clusterManager.notifyProjectChange();
       // Track new project for git status
       gitStatusManager.track(result.id, result.path);
+      // Install orchestrator agent for multi-agent coordination
+      await getHookManager().installOrchestratorAgent(result.path);
       return result;
     }
   );
@@ -202,6 +204,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         verbose?: boolean;
         skipPermissions?: boolean;
         usePermissionPromptTool?: boolean;
+        agentFile?: string;
       }
     ) => {
       const validated = validators.instanceCreate(config);

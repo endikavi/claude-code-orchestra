@@ -113,6 +113,7 @@ interface InstanceState {
     verbose?: boolean;
     skipPermissions?: boolean;
     usePermissionPromptTool?: boolean;
+    agentFile?: string;
   }) => Promise<ClaudeInstance>;
 
   // Create a pending instance (no Claude process yet) for structured view deferred flow
@@ -124,6 +125,7 @@ interface InstanceState {
     verbose?: boolean;
     skipPermissions?: boolean;
     usePermissionPromptTool?: boolean;
+    agentFile?: string;
   }) => Promise<ClaudeInstance>;
 
   // Activate a pending instance with the first user message

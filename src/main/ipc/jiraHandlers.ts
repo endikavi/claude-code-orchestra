@@ -81,9 +81,14 @@ export function setupJiraHandlers(): void {
   // Search issues
   ipcMain.handle(
     IPC_CHANNELS.JIRA_SEARCH_ISSUES,
-    async (_event, projectKey: string, filter: 'mine' | 'all' = 'mine') => {
+    async (
+      _event,
+      projectKey: string,
+      filter: 'mine' | 'all' = 'mine',
+      statusFilter: 'all' | 'todo' | 'in_progress' | 'done' = 'all'
+    ) => {
       try {
-        const issues = await jiraService.searchIssues(projectKey, filter);
+        const issues = await jiraService.searchIssues(projectKey, filter, statusFilter);
         return { success: true, issues };
       } catch (error) {
         return {
@@ -192,6 +197,22 @@ export function setupJiraHandlers(): void {
       };
     }
   });
+
+  // Get imported Jira issue keys for a project
+  ipcMain.handle(IPC_CHANNELS.JIRA_GET_IMPORTED_KEYS, (_event, projectId: string) => {
+    try {
+      const tasks = taskManager.getTasksByProject(projectId);
+      const importedKeys = tasks
+        .filter((task) => task.jiraIssueKey)
+        .map((task) => task.jiraIssueKey as string);
+      return { success: true, keys: importedKeys };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get imported keys',
+      };
+    }
+  });
 }
 
 /**
@@ -208,4 +229,5 @@ export function cleanupJiraHandlers(): void {
   ipcMain.removeHandler(IPC_CHANNELS.JIRA_TRANSITION_ISSUE);
   ipcMain.removeHandler(IPC_CHANNELS.JIRA_ASSIGN_ISSUE);
   ipcMain.removeHandler(IPC_CHANNELS.JIRA_GET_CURRENT_USER);
+  ipcMain.removeHandler(IPC_CHANNELS.JIRA_GET_IMPORTED_KEYS);
 }

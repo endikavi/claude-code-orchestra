@@ -336,6 +336,7 @@ export const validators = {
     skipPermissions?: boolean;
     isDirector?: boolean;
     usePermissionPromptTool?: boolean;
+    agentFile?: string;
   } {
     if (!data || typeof data !== 'object') {
       throw new IpcValidationError('instance:create', 'Invalid instance config');
@@ -371,6 +372,7 @@ export const validators = {
       skipPermissions: obj.skipPermissions === true,
       isDirector: obj.isDirector === true,
       usePermissionPromptTool: obj.usePermissionPromptTool === true,
+      agentFile: typeof obj.agentFile === 'string' ? obj.agentFile : undefined,
     };
   },
 

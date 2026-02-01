@@ -97,6 +97,7 @@ export class VectorIndexService extends EventEmitter {
       rerankStrategy: 'embedding',
       useQueryExpansion: false,
       indexPatterns: ['**/*.md'],
+      ignorePatterns: [],
       minimumScore: 0.05,
       ...config,
     };
@@ -137,6 +138,14 @@ export class VectorIndexService extends EventEmitter {
       } catch (error) {
         console.warn(`[VectorIndex] Failed to read .vectorignore:`, error);
       }
+    }
+
+    // Add ignore patterns from config
+    if (this.config.ignorePatterns && this.config.ignorePatterns.length > 0) {
+      this.ignoreFilter.add(this.config.ignorePatterns);
+      console.log(
+        `[VectorIndex] Loaded ${this.config.ignorePatterns.length} ignore patterns from config`
+      );
     }
   }
 
@@ -924,18 +933,30 @@ You are fast, focused, and efficient. Search and report.
       rerankStrategy: config.rerankStrategy ?? this.config.rerankStrategy,
       useQueryExpansion: config.useQueryExpansion ?? this.config.useQueryExpansion,
       indexPatterns: config.indexPatterns ?? this.config.indexPatterns,
+      ignorePatterns: config.ignorePatterns ?? this.config.ignorePatterns,
       minimumScore: config.minimumScore ?? this.config.minimumScore,
     };
 
-    // Check if indexPatterns changed - need to reload ignore patterns
+    // Check if indexPatterns or ignorePatterns changed - need to reload ignore patterns
     const patternsChanged =
       JSON.stringify(this.config.indexPatterns) !== JSON.stringify(newConfig.indexPatterns);
+    const ignorePatternsChanged =
+      JSON.stringify(this.config.ignorePatterns) !== JSON.stringify(newConfig.ignorePatterns);
 
     this.config = newConfig;
 
-    if (patternsChanged) {
-      console.log(`[VectorIndex] Index patterns changed to: ${newConfig.indexPatterns.join(', ')}`);
-      // Reload ignore patterns in case project gitignore changed too
+    if (patternsChanged || ignorePatternsChanged) {
+      if (patternsChanged) {
+        console.log(
+          `[VectorIndex] Index patterns changed to: ${newConfig.indexPatterns.join(', ')}`
+        );
+      }
+      if (ignorePatternsChanged) {
+        console.log(
+          `[VectorIndex] Ignore patterns changed to: ${newConfig.ignorePatterns.join(', ')}`
+        );
+      }
+      // Reload ignore patterns
       this.loadIgnorePatterns();
     }
   }

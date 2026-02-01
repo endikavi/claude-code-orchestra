@@ -13,6 +13,7 @@ export interface VectorSearchConfig {
   rerankStrategy: RerankStrategy; // default: 'embedding'
   useQueryExpansion: boolean; // default: false
   indexPatterns: string[]; // default: ['**/*.md']
+  ignorePatterns: string[]; // default: [], additional patterns to exclude from indexing
   minimumScore: number; // default: 0.05, filter results below this score
 }
 
@@ -292,5 +293,6 @@ export const DEFAULT_VECTOR_SEARCH_CONFIG: VectorSearchConfig = {
   rerankStrategy: 'embedding', // Safe default that works reliably
   useQueryExpansion: false,
   indexPatterns: ['**/*.md'],
+  ignorePatterns: [],
   minimumScore: 0.05,
 };

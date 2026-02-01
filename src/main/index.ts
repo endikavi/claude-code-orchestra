@@ -10,6 +10,7 @@ import { initializeContextBroadcasting } from './services/SharedContextStore';
 import { getAutoReviewService } from './services/AutoReviewService';
 import { UpdateService } from './services/UpdateService';
 import { getRalphTaskLoop } from './services/RalphTaskLoop';
+import { getHookManager } from './services/HookManager';
 
 // GPU cache configuration for xterm.js WebGL performance
 // By default, we enable GPU caches for better terminal rendering performance
@@ -141,6 +142,14 @@ app
     } catch (error) {
       console.error('[Main] Failed to initialize terminal pool:', error);
       // Non-fatal - instances will fall back to direct spawn
+    }
+
+    // Ensure orchestrator agents exist for all projects
+    try {
+      await getHookManager().ensureOrchestratorAgentsForAllProjects();
+    } catch (error) {
+      console.error('[Main] Failed to ensure orchestrator agents:', error);
+      // Non-fatal - agents can be created later
     }
 
     // Initialize Ralph Task Loop for automated task execution

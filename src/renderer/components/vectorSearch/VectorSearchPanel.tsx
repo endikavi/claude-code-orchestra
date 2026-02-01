@@ -63,6 +63,7 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
     rerankStrategy: project.vectorSearchConfig?.rerankStrategy ?? ('embedding' as const),
     useQueryExpansion: project.vectorSearchConfig?.useQueryExpansion ?? false,
     indexPatterns: project.vectorSearchConfig?.indexPatterns ?? ['**/*.md'],
+    ignorePatterns: project.vectorSearchConfig?.ignorePatterns ?? [],
     minimumScore: project.vectorSearchConfig?.minimumScore ?? 0.05,
   });
 
@@ -96,6 +97,17 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
 
     onUpdateProject({
       vectorSearchConfig: { ...getFullConfig(), indexPatterns: patterns },
+    });
+  };
+
+  const handleIgnorePatternsChange = (patternsString: string) => {
+    const patterns = patternsString
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+
+    onUpdateProject({
+      vectorSearchConfig: { ...getFullConfig(), ignorePatterns: patterns },
     });
   };
 
@@ -486,6 +498,38 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
             />
             <p className="text-xs text-neutral-600 mt-1">
               {t('vectorSearch.indexPatternsHint', 'Examples: **/*.md, **/*.ts, docs/**/*.txt')}
+            </p>
+          </div>
+
+          {/* Ignore patterns */}
+          <div className="border-t border-neutral-700 pt-4">
+            <h4 className="text-sm font-medium text-neutral-200 mb-2">
+              {t('vectorSearch.ignorePatterns', 'Ignore Patterns')}
+            </h4>
+            <p className="text-xs text-neutral-500 mb-2">
+              {t(
+                'vectorSearch.ignorePatternsDescription',
+                'Additional files/directories to exclude from indexing (comma-separated)'
+              )}
+            </p>
+            <input
+              type="text"
+              defaultValue={config.ignorePatterns.join(', ')}
+              onBlur={(e) => handleIgnorePatternsChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleIgnorePatternsChange(e.currentTarget.value);
+                  e.currentTarget.blur();
+                }
+              }}
+              placeholder="**/test/**, **/*.spec.ts, docs/drafts/**"
+              className="w-full bg-neutral-800/50 border border-neutral-700 rounded p-2 text-sm text-neutral-300 font-mono focus:border-blue-500 focus:outline-none"
+            />
+            <p className="text-xs text-neutral-600 mt-1">
+              {t(
+                'vectorSearch.ignorePatternsHint',
+                'Combined with .gitignore and .vectorignore. Examples: **/test/**, **/*.spec.ts'
+              )}
             </p>
           </div>
         </>
