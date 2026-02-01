@@ -755,9 +755,10 @@ export class ClaudeInstance extends EventEmitter {
       }
 
       // Add Orchestra MCP server configuration
-      // Write bridge script to userData directory
+      // Write bridge script to userData directory (always update if content changed)
       const bridgePath = path.join(getUserDataPath(), 'mcp-bridge.js');
-      if (!fs.existsSync(bridgePath)) {
+      const existingContent = fs.existsSync(bridgePath) ? fs.readFileSync(bridgePath, 'utf-8') : '';
+      if (existingContent !== MCP_BRIDGE_SCRIPT) {
         fs.writeFileSync(bridgePath, MCP_BRIDGE_SCRIPT, 'utf-8');
         console.log(`[ClaudeInstance] MCP bridge script written to ${bridgePath}`);
       }

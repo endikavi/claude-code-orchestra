@@ -161,13 +161,25 @@ export class ProcessManager extends EventEmitter {
       }
     }
 
-    // Check for AGENT.md in project directory (orchestration instructions)
-    // Use provided agentFile or detect AGENT.md automatically
+    // Check for agent files in project directory (orchestration instructions)
+    // Priority: 1) provided agentFile, 2) claude-code-orchestrator in .claude/agents/, 3) legacy AGENT.md
     let agentFile = config.agentFile;
     if (!agentFile) {
-      const agentMdPath = path.join(project.path, 'AGENT.md');
-      if (fs.existsSync(agentMdPath)) {
-        agentFile = agentMdPath;
+      // Check for standard agent in .claude/agents/
+      const orchestratorPath = path.join(
+        project.path,
+        '.claude',
+        'agents',
+        'claude-code-orchestrator.md'
+      );
+      if (fs.existsSync(orchestratorPath)) {
+        agentFile = 'claude-code-orchestrator'; // Use agent name, not path
+      } else {
+        // Fall back to legacy AGENT.md
+        const agentMdPath = path.join(project.path, 'AGENT.md');
+        if (fs.existsSync(agentMdPath)) {
+          agentFile = agentMdPath;
+        }
       }
     }
 
@@ -233,11 +245,22 @@ export class ProcessManager extends EventEmitter {
       throw new Error(`Project with id ${config.projectId} not found`);
     }
 
-    // Check for AGENT.MD in project directory (orchestration instructions)
+    // Check for agent files in project directory (orchestration instructions)
+    // Priority: 1) claude-code-orchestrator in .claude/agents/, 2) legacy AGENT.md
     let agentFile: string | undefined;
-    const agentMdPath = path.join(project.path, 'AGENT.md');
-    if (fs.existsSync(agentMdPath)) {
-      agentFile = agentMdPath;
+    const orchestratorPath = path.join(
+      project.path,
+      '.claude',
+      'agents',
+      'claude-code-orchestrator.md'
+    );
+    if (fs.existsSync(orchestratorPath)) {
+      agentFile = 'claude-code-orchestrator'; // Use agent name, not path
+    } else {
+      const agentMdPath = path.join(project.path, 'AGENT.md');
+      if (fs.existsSync(agentMdPath)) {
+        agentFile = agentMdPath;
+      }
     }
 
     const instance = new ClaudeInstance({
@@ -289,12 +312,23 @@ export class ProcessManager extends EventEmitter {
     // Generate a unique instance ID
     const instanceId = `pending-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-    // Check for AGENT.md in project directory
+    // Check for agent files in project directory
+    // Priority: 1) provided agentFile, 2) claude-code-orchestrator in .claude/agents/, 3) legacy AGENT.md
     let agentFile = config.agentFile;
     if (!agentFile) {
-      const agentMdPath = path.join(project.path, 'AGENT.md');
-      if (fs.existsSync(agentMdPath)) {
-        agentFile = agentMdPath;
+      const orchestratorPath = path.join(
+        project.path,
+        '.claude',
+        'agents',
+        'claude-code-orchestrator.md'
+      );
+      if (fs.existsSync(orchestratorPath)) {
+        agentFile = 'claude-code-orchestrator'; // Use agent name, not path
+      } else {
+        const agentMdPath = path.join(project.path, 'AGENT.md');
+        if (fs.existsSync(agentMdPath)) {
+          agentFile = agentMdPath;
+        }
       }
     }
 

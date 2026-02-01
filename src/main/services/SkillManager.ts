@@ -455,6 +455,120 @@ curl -k -X POST "${baseUrl}/api/hooks/context/project/contribute" \\
 `,
     },
 
+    'semantic-search': {
+      id: 'semantic-search',
+      name: 'Semantic Search',
+      description: 'Search project documentation using AI-powered semantic understanding',
+      content: `---
+name: semantic-search
+description: Search project documentation using AI-powered semantic understanding
+---
+
+# Semantic Search - AI-Powered Documentation Search
+
+This project has been indexed for semantic search. Use the MCP tools below to find relevant documentation.
+
+## Quick Start (Recommended)
+
+Just use the defaults - they are optimized:
+
+\`\`\`
+semantic_search({
+  query: "your query in English",
+  limit: 10
+})
+\`\`\`
+
+## Performance Benchmarks
+
+| Mode | Time | Quality | Use When |
+|------|------|---------|----------|
+| With reranking (default) | ~400ms | 8/10 | Most searches - best balance |
+| Without reranking | ~40ms | 5/10 | Quick lookups, exact terms |
+| With query expansion | ~1.5s | 9/10 | Complex conceptual queries |
+
+**Recommendation**: Keep reranking ON (default). The 400ms cost significantly improves first-result relevance.
+
+## Language Requirement
+
+**Write queries in English** for best results. The embedding model is optimized for English.
+
+- GOOD: \`"how does the ProcessManager work"\`
+- LESS GOOD: \`"cómo funciona el ProcessManager"\`
+
+## Parameters Reference
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| query | required | Natural language, in English |
+| limit | 5 | Use 10 for broader searches |
+| useReranking | **true** | Keep ON - improves relevance significantly |
+| useQueryExpansion | false | Only for complex conceptual queries |
+| minimumScore | 0.05 | Lower only if zero results |
+
+## When to Adjust Defaults
+
+| Situation | Action |
+|-----------|--------|
+| Need faster results | Add \`useReranking: false\` (~40ms) |
+| Zero results | Rephrase in English, or lower \`minimumScore: 0.01\` |
+| Complex conceptual search | Add \`useQueryExpansion: true\` (~1.5s) |
+| Need more results | Increase \`limit: 15\` |
+
+## When to Use semantic_search vs grep
+
+**Use semantic_search when:**
+- Looking for conceptually related content
+- Searching "how to" or "why" questions
+- Finding documentation about features
+- Exact terminology is unknown
+
+**Use grep/Glob when:**
+- Searching for exact strings
+- Finding specific function/class names
+- Looking for imports or file references
+
+## Example Queries
+
+\`\`\`
+// Basic search (uses optimal defaults - recommended)
+semantic_search({ query: "authentication flow", limit: 10 })
+
+// Filter by file type
+semantic_search({
+  query: "API endpoints",
+  filter: { filePath: "docs/**" }
+})
+
+// Find code examples
+semantic_search({
+  query: "database connection",
+  filter: { hasCode: true }
+})
+
+// Fast mode (skip reranking - only for quick lookups)
+semantic_search({
+  query: "quick lookup",
+  useReranking: false
+})
+\`\`\`
+
+## Verify Search is Working
+
+\`\`\`
+search_index_status()  // Should show searchReady: true
+\`\`\`
+
+## Tips
+
+1. **Keep reranking ON** - default is optimal for quality
+2. **Use English queries** - best results
+3. **Be descriptive**: "user authentication errors" > "auth"
+4. **If zero results**: rephrase in different terms
+5. **Don't specify rerankStrategy** - embedding default is optimal
+`,
+    },
+
     'auto-lint-subagent': {
       id: 'auto-lint-subagent',
       name: 'Auto Lint Subagent',

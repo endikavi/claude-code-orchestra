@@ -24,6 +24,8 @@ import type {
   UpdateRalphTaskInput,
 } from '@shared/types/ralphTasks';
 import type { InstancePreset, CreatePresetInput, UpdatePresetInput } from '@shared/types/presets';
+import type { JiraGlobalConfig, JiraProjectConfig } from '@shared/types/jira';
+import { DEFAULT_JIRA_GLOBAL_CONFIG } from '@shared/types/jira';
 import { DEFAULT_TERMINAL_POOL_CONFIG } from '@shared/types/pool';
 import type { RemoteConfig } from '@shared/types/remote';
 import { DEFAULT_REMOTE_CONFIG } from '@shared/types/remote';
@@ -103,6 +105,9 @@ export class DataStore {
 
     // Migration: Add autoReview column if it doesn't exist
     this.migrateAddAutoReview();
+
+    // Migration: Add vectorSearchConfig column if it doesn't exist
+    this.migrateAddVectorSearchConfig();
 
     // Create index on path for faster lookups
     this.db.exec(`
@@ -452,6 +457,72 @@ export class DataStore {
           DEFAULT_TERMINAL_POOL_CONFIG.replenishDelayMs
         );
     }
+
+    // Create jira_config table for global Jira configuration
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS jira_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        apiToken TEXT DEFAULT '',
+        baseUrl TEXT DEFAULT '',
+        userEmail TEXT DEFAULT '',
+        isConfigured INTEGER DEFAULT 0
+      )
+    `);
+
+    // Insert default jira config if not exists
+    const existingJiraConfig = this.db.prepare('SELECT * FROM jira_config WHERE id = 1').get();
+    if (!existingJiraConfig) {
+      this.db.exec(`
+        INSERT INTO jira_config (id, apiToken, baseUrl, userEmail, isConfigured)
+        VALUES (1, '', '', '', 0)
+      `);
+    }
+
+    // Migration: Add jiraConfig column to projects if it doesn't exist
+    this.migrateAddProjectJiraConfig();
+
+    // Migration: Add Jira columns to ralph_tasks if they don't exist
+    this.migrateAddRalphTasksJiraFields();
+  }
+
+  /**
+   * Migration: Add jiraConfig column to projects for Jira integration
+   */
+  private migrateAddProjectJiraConfig(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'jiraConfig'
+      );
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN jiraConfig TEXT');
+      }
+    } catch (error) {
+      console.warn('Migration jiraConfig:', error);
+    }
+  }
+
+  /**
+   * Migration: Add Jira fields to ralph_tasks table
+   */
+  private migrateAddRalphTasksJiraFields(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(ralph_tasks)');
+      const columns = tableInfo as Array<{ name: string }>;
+
+      if (!columns.some((col) => col.name === 'jiraIssueId')) {
+        this.db.exec('ALTER TABLE ralph_tasks ADD COLUMN jiraIssueId TEXT');
+      }
+      if (!columns.some((col) => col.name === 'jiraIssueKey')) {
+        this.db.exec('ALTER TABLE ralph_tasks ADD COLUMN jiraIssueKey TEXT');
+      }
+      if (!columns.some((col) => col.name === 'jiraLastSyncAt')) {
+        this.db.exec('ALTER TABLE ralph_tasks ADD COLUMN jiraLastSyncAt INTEGER');
+      }
+    } catch (error) {
+      console.warn('Migration ralph_tasks Jira fields:', error);
+    }
   }
 
   /**
@@ -654,6 +725,21 @@ export class DataStore {
     }
   }
 
+  private migrateAddVectorSearchConfig(): void {
+    try {
+      const tableInfo = this.db.pragma('table_info(projects)');
+      const hasColumn = (tableInfo as Array<{ name: string }>).some(
+        (col) => col.name === 'vectorSearchConfig'
+      );
+
+      if (!hasColumn) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN vectorSearchConfig TEXT');
+      }
+    } catch (error) {
+      console.warn('Migration vectorSearchConfig:', error);
+    }
+  }
+
   // Project CRUD operations
   createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Project {
     const now = Date.now();
@@ -666,8 +752,8 @@ export class DataStore {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, enableMcp, autoReview, clusterPermissions, agents, additionalDirs, agentDeliveryMethod, createdAt, updatedAt)
-      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @enableMcp, @autoReview, @clusterPermissions, @agents, @additionalDirs, @agentDeliveryMethod, @createdAt, @updatedAt)
+      INSERT INTO projects (id, name, path, description, color, hostname, skipPermissions, preferredShell, enableMcp, autoReview, clusterPermissions, agents, additionalDirs, agentDeliveryMethod, jiraConfig, vectorSearchConfig, createdAt, updatedAt)
+      VALUES (@id, @name, @path, @description, @color, @hostname, @skipPermissions, @preferredShell, @enableMcp, @autoReview, @clusterPermissions, @agents, @additionalDirs, @agentDeliveryMethod, @jiraConfig, @vectorSearchConfig, @createdAt, @updatedAt)
     `);
 
     stmt.run({
@@ -682,6 +768,10 @@ export class DataStore {
       agents: project.agents ? JSON.stringify(project.agents) : null,
       additionalDirs: project.additionalDirs ? JSON.stringify(project.additionalDirs) : null,
       agentDeliveryMethod: project.agentDeliveryMethod ?? 'skill',
+      jiraConfig: project.jiraConfig ? JSON.stringify(project.jiraConfig) : null,
+      vectorSearchConfig: project.vectorSearchConfig
+        ? JSON.stringify(project.vectorSearchConfig)
+        : null,
     });
     return project;
   }
@@ -699,6 +789,7 @@ export class DataStore {
           preferredShell = @preferredShell, enableMcp = @enableMcp, autoReview = @autoReview,
           clusterPermissions = @clusterPermissions, agents = @agents,
           additionalDirs = @additionalDirs, agentDeliveryMethod = @agentDeliveryMethod,
+          jiraConfig = @jiraConfig, vectorSearchConfig = @vectorSearchConfig,
           updatedAt = @updatedAt
       WHERE id = @id
     `);
@@ -722,6 +813,10 @@ export class DataStore {
         ? JSON.stringify(updatedProject.additionalDirs)
         : null,
       agentDeliveryMethod: updatedProject.agentDeliveryMethod ?? 'skill',
+      jiraConfig: updatedProject.jiraConfig ? JSON.stringify(updatedProject.jiraConfig) : null,
+      vectorSearchConfig: updatedProject.vectorSearchConfig
+        ? JSON.stringify(updatedProject.vectorSearchConfig)
+        : null,
       updatedAt: updatedProject.updatedAt,
     });
     if (result.changes === 0) {
@@ -773,6 +868,26 @@ export class DataStore {
       }
     }
 
+    // Parse jiraConfig if present
+    let jiraConfig = undefined;
+    if (row.jiraConfig && typeof row.jiraConfig === 'string') {
+      try {
+        jiraConfig = JSON.parse(row.jiraConfig);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
+    // Parse vectorSearchConfig if present
+    let vectorSearchConfig = undefined;
+    if (row.vectorSearchConfig && typeof row.vectorSearchConfig === 'string') {
+      try {
+        vectorSearchConfig = JSON.parse(row.vectorSearchConfig);
+      } catch {
+        // Keep undefined if JSON is invalid
+      }
+    }
+
     return {
       id: row.id as string,
       name: row.name as string,
@@ -788,6 +903,8 @@ export class DataStore {
       agents,
       additionalDirs,
       agentDeliveryMethod: (row.agentDeliveryMethod as 'skill' | 'args') ?? 'skill',
+      jiraConfig,
+      vectorSearchConfig,
       createdAt: row.createdAt as number,
       updatedAt: row.updatedAt as number,
     };
@@ -1865,11 +1982,15 @@ export class DataStore {
       isInteractive: true, // Default to interactive mode
       createdAt: now,
       updatedAt: now,
+      // Jira fields from import
+      jiraIssueId: data.jiraIssueId,
+      jiraIssueKey: data.jiraIssueKey,
+      jiraLastSyncAt: data.jiraIssueId ? now : undefined,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO ralph_tasks (id, projectId, name, description, status, orderIndex, instanceId, loopCount, isPaused, pauseReason, completionSummary, contextFilePath, isInteractive, createdAt, updatedAt, startedAt, completedAt)
-      VALUES (@id, @projectId, @name, @description, @status, @orderIndex, @instanceId, @loopCount, @isPaused, @pauseReason, @completionSummary, @contextFilePath, @isInteractive, @createdAt, @updatedAt, @startedAt, @completedAt)
+      INSERT INTO ralph_tasks (id, projectId, name, description, status, orderIndex, instanceId, loopCount, isPaused, pauseReason, completionSummary, contextFilePath, isInteractive, createdAt, updatedAt, startedAt, completedAt, jiraIssueId, jiraIssueKey, jiraLastSyncAt)
+      VALUES (@id, @projectId, @name, @description, @status, @orderIndex, @instanceId, @loopCount, @isPaused, @pauseReason, @completionSummary, @contextFilePath, @isInteractive, @createdAt, @updatedAt, @startedAt, @completedAt, @jiraIssueId, @jiraIssueKey, @jiraLastSyncAt)
     `);
 
     stmt.run({
@@ -1890,6 +2011,9 @@ export class DataStore {
       updatedAt: task.updatedAt,
       startedAt: task.startedAt ?? null,
       completedAt: task.completedAt ?? null,
+      jiraIssueId: task.jiraIssueId ?? null,
+      jiraIssueKey: task.jiraIssueKey ?? null,
+      jiraLastSyncAt: task.jiraLastSyncAt ?? null,
     });
 
     return task;
@@ -1917,6 +2041,15 @@ export class DataStore {
       startedAt: updates.startedAt === null ? undefined : (updates.startedAt ?? existing.startedAt),
       completedAt:
         updates.completedAt === null ? undefined : (updates.completedAt ?? existing.completedAt),
+      // Handle Jira null values
+      jiraIssueId:
+        updates.jiraIssueId === null ? undefined : (updates.jiraIssueId ?? existing.jiraIssueId),
+      jiraIssueKey:
+        updates.jiraIssueKey === null ? undefined : (updates.jiraIssueKey ?? existing.jiraIssueKey),
+      jiraLastSyncAt:
+        updates.jiraLastSyncAt === null
+          ? undefined
+          : (updates.jiraLastSyncAt ?? existing.jiraLastSyncAt),
       updatedAt: Date.now(),
     };
 
@@ -1926,7 +2059,8 @@ export class DataStore {
           instanceId = @instanceId, loopCount = @loopCount, isPaused = @isPaused,
           pauseReason = @pauseReason, completionSummary = @completionSummary,
           contextFilePath = @contextFilePath, isInteractive = @isInteractive, updatedAt = @updatedAt,
-          startedAt = @startedAt, completedAt = @completedAt
+          startedAt = @startedAt, completedAt = @completedAt,
+          jiraIssueId = @jiraIssueId, jiraIssueKey = @jiraIssueKey, jiraLastSyncAt = @jiraLastSyncAt
       WHERE id = @id
     `);
 
@@ -1946,6 +2080,9 @@ export class DataStore {
       updatedAt: updated.updatedAt,
       startedAt: updated.startedAt ?? null,
       completedAt: updated.completedAt ?? null,
+      jiraIssueId: updated.jiraIssueId ?? null,
+      jiraIssueKey: updated.jiraIssueKey ?? null,
+      jiraLastSyncAt: updated.jiraLastSyncAt ?? null,
     });
 
     return updated;
@@ -2068,6 +2205,10 @@ export class DataStore {
       updatedAt: row.updatedAt as number,
       startedAt: row.startedAt as number | undefined,
       completedAt: row.completedAt as number | undefined,
+      // Jira fields
+      jiraIssueId: row.jiraIssueId as string | undefined,
+      jiraIssueKey: row.jiraIssueKey as string | undefined,
+      jiraLastSyncAt: row.jiraLastSyncAt as number | undefined,
     };
   }
 
@@ -2298,6 +2439,57 @@ export class DataStore {
       createdAt: row.createdAt as number,
       updatedAt: row.updatedAt as number,
     };
+  }
+
+  // ==================== Jira Config CRUD ====================
+
+  /**
+   * Get global Jira configuration
+   */
+  getJiraGlobalConfig(): JiraGlobalConfig {
+    const stmt = this.db.prepare('SELECT * FROM jira_config WHERE id = 1');
+    const row = stmt.get() as Record<string, unknown> | undefined;
+
+    if (!row) {
+      return { ...DEFAULT_JIRA_GLOBAL_CONFIG };
+    }
+
+    return {
+      apiToken: row.apiToken as string,
+      baseUrl: row.baseUrl as string,
+      userEmail: row.userEmail as string,
+      isConfigured: row.isConfigured === 1,
+    };
+  }
+
+  /**
+   * Update global Jira configuration
+   */
+  updateJiraGlobalConfig(config: Partial<JiraGlobalConfig>): JiraGlobalConfig {
+    const current = this.getJiraGlobalConfig();
+    const updated: JiraGlobalConfig = { ...current, ...config };
+
+    const stmt = this.db.prepare(`
+      UPDATE jira_config
+      SET apiToken = @apiToken, baseUrl = @baseUrl, userEmail = @userEmail, isConfigured = @isConfigured
+      WHERE id = 1
+    `);
+
+    stmt.run({
+      apiToken: updated.apiToken,
+      baseUrl: updated.baseUrl,
+      userEmail: updated.userEmail,
+      isConfigured: updated.isConfigured ? 1 : 0,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Reset Jira configuration to defaults
+   */
+  resetJiraGlobalConfig(): JiraGlobalConfig {
+    return this.updateJiraGlobalConfig(DEFAULT_JIRA_GLOBAL_CONFIG);
   }
 
   // Clean up

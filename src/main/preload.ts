@@ -76,6 +76,22 @@ import type {
   ContextUpdateEvent,
 } from '@shared/types/sharedContext';
 import type { InstancePreset, CreatePresetInput, UpdatePresetInput } from '@shared/types/presets';
+import type {
+  JiraGlobalConfig,
+  JiraBoard,
+  JiraStatus,
+  JiraIssue,
+  JiraUser,
+} from '@shared/types/jira';
+import type {
+  SearchOptions,
+  SearchResponse,
+  IndexProgress,
+  IndexStats,
+  ModelDownloadProgress,
+  ModelState,
+  ProjectIndexStatus,
+} from '@shared/types/vectorSearch';
 import type { IpcRendererEvent } from 'electron';
 
 // Expose protected methods to renderer
@@ -696,14 +712,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on(IPC_CHANNELS.HOOK_ACTIVITY, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.HOOK_ACTIVITY, listener);
     },
-  },
-
-  // Orchestration operations
-  orchestration: {
-    setupAgentMd: (
-      projectPath: string
-    ): Promise<{ success: boolean; path?: string; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATION_SETUP_AGENT_MD, projectPath),
   },
 
   // Agent discovery operations
@@ -1353,6 +1361,130 @@ contextBridge.exposeInMainWorld('electronAPI', {
     duplicate: (id: string, newName: string): Promise<InstancePreset | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.PRESET_DUPLICATE, id, newName),
   },
+
+  // Jira integration operations
+  jira: {
+    getGlobalConfig: (): Promise<JiraGlobalConfig> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_GET_GLOBAL_CONFIG),
+
+    updateGlobalConfig: (config: Partial<JiraGlobalConfig>): Promise<JiraGlobalConfig> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_UPDATE_GLOBAL_CONFIG, config),
+
+    validateCredentials: (): Promise<{
+      valid: boolean;
+      user?: JiraUser;
+      error?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.JIRA_VALIDATE_CREDENTIALS),
+
+    getBoards: (): Promise<{ success: boolean; boards?: JiraBoard[]; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_GET_BOARDS),
+
+    getStatuses: (
+      projectKey: string
+    ): Promise<{ success: boolean; statuses?: JiraStatus[]; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_GET_STATUSES, projectKey),
+
+    searchIssues: (
+      projectKey: string,
+      filter?: 'mine' | 'all'
+    ): Promise<{ success: boolean; issues?: JiraIssue[]; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_SEARCH_ISSUES, projectKey, filter),
+
+    importIssues: (
+      projectId: string,
+      issues: JiraIssue[]
+    ): Promise<{ success: boolean; imported?: string[]; errors?: string[]; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_IMPORT_ISSUES, projectId, issues),
+
+    transitionIssue: (
+      issueKey: string,
+      targetStatusId: string
+    ): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_TRANSITION_ISSUE, issueKey, targetStatusId),
+
+    assignIssue: (
+      issueKey: string,
+      accountId: string
+    ): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_ASSIGN_ISSUE, issueKey, accountId),
+
+    getCurrentUser: (): Promise<{ success: boolean; user?: JiraUser; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.JIRA_GET_CURRENT_USER),
+  },
+
+  // Vector search operations
+  vectorSearch: {
+    // Model operations
+    getModelStatus: (): Promise<Record<string, ModelState>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_MODEL_STATUS),
+
+    downloadModel: (modelId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_MODEL_DOWNLOAD, modelId),
+
+    cancelDownload: (modelId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_MODEL_CANCEL_DOWNLOAD, modelId),
+
+    deleteModel: (modelId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_MODEL_DELETE, modelId),
+
+    // Index operations
+    getIndexStatus: (projectId: string): Promise<ProjectIndexStatus> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_INDEX_STATUS, projectId),
+
+    startIndexing: (projectId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_INDEX_START, projectId),
+
+    cancelIndexing: (projectId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_INDEX_CANCEL, projectId),
+
+    clearIndex: (projectId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_INDEX_CLEAR, projectId),
+
+    // Search
+    search: (
+      projectId: string,
+      options: SearchOptions
+    ): Promise<{ success: boolean; response?: SearchResponse; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VECTOR_SEARCH, projectId, options),
+
+    // Event listeners
+    onIndexProgress: (
+      callback: (projectId: string, progress: IndexProgress) => void
+    ): (() => void) => {
+      const handler = (_event: IpcRendererEvent, projectId: string, progress: IndexProgress) =>
+        callback(projectId, progress);
+      ipcRenderer.on(IPC_CHANNELS.VECTOR_INDEX_PROGRESS, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.VECTOR_INDEX_PROGRESS, handler);
+    },
+
+    onIndexComplete: (callback: (projectId: string, stats: IndexStats) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, projectId: string, stats: IndexStats) =>
+        callback(projectId, stats);
+      ipcRenderer.on(IPC_CHANNELS.VECTOR_INDEX_COMPLETE, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.VECTOR_INDEX_COMPLETE, handler);
+    },
+
+    onIndexError: (callback: (projectId: string, error: string) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, projectId: string, error: string) =>
+        callback(projectId, error);
+      ipcRenderer.on(IPC_CHANNELS.VECTOR_INDEX_ERROR, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.VECTOR_INDEX_ERROR, handler);
+    },
+
+    onModelProgress: (callback: (progress: ModelDownloadProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: ModelDownloadProgress) =>
+        callback(progress);
+      ipcRenderer.on(IPC_CHANNELS.VECTOR_MODEL_PROGRESS, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.VECTOR_MODEL_PROGRESS, handler);
+    },
+
+    onModelStatusChange: (callback: (modelId: string, state: ModelState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, modelId: string, state: ModelState) =>
+        callback(modelId, state);
+      ipcRenderer.on(IPC_CHANNELS.VECTOR_MODEL_STATUS_CHANGE, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.VECTOR_MODEL_STATUS_CHANGE, handler);
+    },
+  },
 });
 
 // Type declarations for renderer
@@ -1606,11 +1738,6 @@ declare global {
             data: { instanceId: string; toolName?: string; files?: string[]; timestamp: number }
           ) => void
         ) => () => void;
-      };
-      orchestration: {
-        setupAgentMd: (
-          projectPath: string
-        ) => Promise<{ success: boolean; path?: string; error?: string }>;
       };
       agent: {
         discover: (
@@ -1893,6 +2020,62 @@ declare global {
         getGlobal: () => Promise<InstancePreset[]>;
         getAll: () => Promise<InstancePreset[]>;
         duplicate: (id: string, newName: string) => Promise<InstancePreset | null>;
+      };
+      jira: {
+        getGlobalConfig: () => Promise<JiraGlobalConfig>;
+        updateGlobalConfig: (config: Partial<JiraGlobalConfig>) => Promise<JiraGlobalConfig>;
+        validateCredentials: () => Promise<{
+          valid: boolean;
+          user?: JiraUser;
+          error?: string;
+        }>;
+        getBoards: () => Promise<{ success: boolean; boards?: JiraBoard[]; error?: string }>;
+        getStatuses: (
+          projectKey: string
+        ) => Promise<{ success: boolean; statuses?: JiraStatus[]; error?: string }>;
+        searchIssues: (
+          projectKey: string,
+          filter?: 'mine' | 'all'
+        ) => Promise<{ success: boolean; issues?: JiraIssue[]; error?: string }>;
+        importIssues: (
+          projectId: string,
+          issues: JiraIssue[]
+        ) => Promise<{
+          success: boolean;
+          imported?: string[];
+          errors?: string[];
+          error?: string;
+        }>;
+        transitionIssue: (
+          issueKey: string,
+          targetStatusId: string
+        ) => Promise<{ success: boolean; error?: string }>;
+        assignIssue: (
+          issueKey: string,
+          accountId: string
+        ) => Promise<{ success: boolean; error?: string }>;
+        getCurrentUser: () => Promise<{ success: boolean; user?: JiraUser; error?: string }>;
+      };
+      vectorSearch: {
+        getModelStatus: () => Promise<Record<string, ModelState>>;
+        downloadModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+        cancelDownload: (modelId: string) => Promise<boolean>;
+        deleteModel: (modelId: string) => Promise<boolean>;
+        getIndexStatus: (projectId: string) => Promise<ProjectIndexStatus>;
+        startIndexing: (projectId: string) => Promise<{ success: boolean; error?: string }>;
+        cancelIndexing: (projectId: string) => Promise<{ success: boolean; error?: string }>;
+        clearIndex: (projectId: string) => Promise<{ success: boolean; error?: string }>;
+        search: (
+          projectId: string,
+          options: SearchOptions
+        ) => Promise<{ success: boolean; response?: SearchResponse; error?: string }>;
+        onIndexProgress: (
+          callback: (projectId: string, progress: IndexProgress) => void
+        ) => () => void;
+        onIndexComplete: (callback: (projectId: string, stats: IndexStats) => void) => () => void;
+        onIndexError: (callback: (projectId: string, error: string) => void) => () => void;
+        onModelProgress: (callback: (progress: ModelDownloadProgress) => void) => () => void;
+        onModelStatusChange: (callback: (modelId: string, state: ModelState) => void) => () => void;
       };
     };
   }

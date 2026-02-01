@@ -86,6 +86,16 @@ export function TaskCard({ task }: TaskCardProps) {
         </div>
       ) : (
         <div className="p-3">
+          {/* Jira badge */}
+          {task.jiraIssueKey && (
+            <div className="mb-1.5">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs font-mono">
+                <JiraIcon className="w-3 h-3" />
+                {task.jiraIssueKey}
+              </span>
+            </div>
+          )}
+
           {/* Header */}
           <div className="flex items-start justify-between gap-2">
             <h4 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">
@@ -169,5 +179,18 @@ export function TaskCard({ task }: TaskCardProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function JiraIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+      />
+    </svg>
   );
 }

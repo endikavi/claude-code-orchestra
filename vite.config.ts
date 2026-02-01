@@ -13,7 +13,8 @@ export default defineConfig({
       {
         entry: resolve(projectRoot, 'src/main/index.ts'),
         onstart(args) {
-          args.startup();
+          // Delay para asegurar que el archivo se escribió completamente (Windows FS delay)
+          setTimeout(() => args.startup(), 300);
         },
         vite: {
           build: {
@@ -24,7 +25,21 @@ export default defineConfig({
               fileName: () => 'index.js',
             },
             rollupOptions: {
-              external: ['electron', 'better-sqlite3', 'node-pty', 'bufferutil', 'utf-8-validate'],
+              external: [
+                'electron',
+                'better-sqlite3',
+                'node-pty',
+                'bufferutil',
+                'utf-8-validate',
+                'node-llama-cpp',
+                'sqlite-vec',
+                // node-llama-cpp platform-specific binaries
+                /^@node-llama-cpp\/.*/,
+              ],
+            },
+            watch: {
+              // Debounce para evitar rebuilds muy frecuentes en Windows
+              buildDelay: 200,
             },
           },
           resolve: {

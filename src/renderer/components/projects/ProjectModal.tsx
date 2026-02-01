@@ -7,6 +7,8 @@ import { useClusterStore } from '../../stores/clusterStore';
 import { Modal } from '../common/Modal';
 import { ImportSessionsModal } from '../conversations/ImportSessionsModal';
 import { AgentFormModal } from './AgentFormModal';
+import { JiraProjectConfig } from '../jira/JiraProjectConfig';
+import { VectorSearchPanel } from '../vectorSearch/VectorSearchPanel';
 import type {
   AvailableShell,
   HookTemplate,
@@ -16,6 +18,7 @@ import type {
   AgentDeliveryMethod,
 } from '@shared/types';
 import type { ProjectClusterPermissions } from '@shared/types/clusterPermissions';
+import type { JiraProjectConfig as JiraProjectConfigType } from '@shared/types/jira';
 
 const PROJECT_COLORS = [
   '#ef4444',
@@ -93,6 +96,17 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
   );
   const [showDirsSection, setShowDirsSection] = useState(
     (existingProject?.additionalDirs?.length || 0) > 0
+  );
+
+  // Jira integration state
+  const [jiraConfig, setJiraConfig] = useState<JiraProjectConfigType | undefined>(
+    existingProject?.jiraConfig
+  );
+  const [showJiraSection, setShowJiraSection] = useState(!!existingProject?.jiraConfig?.enabled);
+
+  // Vector search state
+  const [showVectorSearchSection, setShowVectorSearchSection] = useState(
+    !!existingProject?.vectorSearchConfig?.enabled
   );
 
   const { loadConversations } = useConversationStore();
@@ -214,6 +228,9 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
 
     setIsSubmitting(true);
 
+    // Debug log
+    console.log('[ProjectModal] Saving with jiraConfig:', JSON.stringify(jiraConfig, null, 2));
+
     try {
       const projectPath = path.trim();
 
@@ -241,6 +258,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           additionalDirs: additionalDirs.length > 0 ? additionalDirs : undefined,
           agentDeliveryMethod,
           agents: Object.keys(agents).length > 0 ? agents : undefined,
+          jiraConfig,
         });
 
         // Handle hooks integration changes
@@ -261,11 +279,6 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           // Remove hooks from project
           await window.electronAPI.hook.removeProject(projectPath);
         }
-
-        // Set up AGENT.md for orchestration if MCP is enabled (idempotent - won't overwrite existing)
-        if (enableMcp) {
-          await window.electronAPI.orchestration.setupAgentMd(projectPath);
-        }
       } else {
         await createProject({
           name: name.trim(),
@@ -280,6 +293,7 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           additionalDirs: additionalDirs.length > 0 ? additionalDirs : undefined,
           agentDeliveryMethod,
           agents: Object.keys(agents).length > 0 ? agents : undefined,
+          jiraConfig,
         });
 
         // Set up hooks for new project if enabled
@@ -295,11 +309,6 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
             },
             selectedHookTemplate
           );
-        }
-
-        // Set up AGENT.md for orchestration if MCP is enabled
-        if (enableMcp) {
-          await window.electronAPI.orchestration.setupAgentMd(projectPath);
         }
       }
       onClose();
@@ -741,6 +750,69 @@ export function ProjectModal({ onClose }: ProjectModalProps) {
           )}
         </div>
 
+        {/* Jira Integration */}
+        <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
+          <button
+            type="button"
+            onClick={() => setShowJiraSection(!showJiraSection)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <ChevronIcon
+              className={`w-4 h-4 text-gray-500 transition-transform ${showJiraSection ? 'rotate-90' : ''}`}
+            />
+            <JiraIcon className="w-4 h-4 text-blue-500" />
+            <span className="text-sm font-medium text-gray-800 dark:text-white">
+              {t('project.jiraIntegration', 'Jira Integration')}
+            </span>
+            {jiraConfig?.enabled && (
+              <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded">
+                {t('common.enabled', 'Enabled')}
+              </span>
+            )}
+          </button>
+
+          {showJiraSection && (
+            <div className="mt-3 ml-6">
+              <JiraProjectConfig config={jiraConfig} onChange={setJiraConfig} projectPath={path} />
+            </div>
+          )}
+        </div>
+
+        {/* Vector Search / Semantic Search - Only show in edit mode */}
+        {isEditing && existingProject && (
+          <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
+            <button
+              type="button"
+              onClick={() => setShowVectorSearchSection(!showVectorSearchSection)}
+              className="flex items-center gap-2 w-full text-left"
+            >
+              <ChevronIcon
+                className={`w-4 h-4 text-gray-500 transition-transform ${showVectorSearchSection ? 'rotate-90' : ''}`}
+              />
+              <SearchIcon className="w-4 h-4 text-emerald-500" />
+              <span className="text-sm font-medium text-gray-800 dark:text-white">
+                {t('project.vectorSearch', 'Semantic Search')}
+              </span>
+              {existingProject.vectorSearchConfig?.enabled && (
+                <span className="text-xs px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded">
+                  {t('common.enabled', 'Enabled')}
+                </span>
+              )}
+            </button>
+
+            {showVectorSearchSection && (
+              <div className="mt-3 ml-6">
+                <VectorSearchPanel
+                  project={existingProject}
+                  onUpdateProject={(updates) => {
+                    updateProject({ ...existingProject, ...updates });
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Cluster Sharing - Only show when cluster is enabled and not standalone */}
         {isClusterEnabled() && clusterConfig?.role !== 'standalone' && (
           <div className="pt-2 border-t border-gray-200 dark:border-neutral-700">
@@ -989,6 +1061,32 @@ function PencilIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+      />
+    </svg>
+  );
+}
+
+function JiraIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+      />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
       />
     </svg>
   );

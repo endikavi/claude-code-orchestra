@@ -61,6 +61,10 @@ export interface DiscoveredAgent {
   source: 'project' | 'global'; // Whether from project or ~/.claude/agents/
 }
 
+// Import Jira types for Project interface
+import type { JiraProjectConfig } from './jira';
+import type { VectorSearchConfig } from './vectorSearch';
+
 // Project interface
 export interface Project {
   id: string;
@@ -77,6 +81,8 @@ export interface Project {
   agents?: CustomAgentsConfig; // Custom agents available for this project (--agents)
   additionalDirs?: string[]; // Additional working directories for --add-dir flag
   agentDeliveryMethod?: AgentDeliveryMethod; // How to deliver agents: 'skill' (install) or 'args' (--agents flag)
+  jiraConfig?: JiraProjectConfig; // Jira integration configuration
+  vectorSearchConfig?: VectorSearchConfig; // Vector search configuration for semantic document search
   createdAt: number;
   updatedAt: number;
 }
@@ -349,6 +355,12 @@ export * from './history';
 
 // Re-export ralph tasks types
 export * from './ralphTasks';
+
+// Re-export jira types
+export * from './jira';
+
+// Re-export vector search types
+export * from './vectorSearch';
 
 // Git status types
 export interface GitStatus {

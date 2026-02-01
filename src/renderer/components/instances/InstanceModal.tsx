@@ -84,6 +84,12 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
       try {
         const agents = await window.electronAPI.agent.discover(project.path);
         setAvailableAgents(agents);
+
+        // Pre-select claude-code-orchestrator if available and no agent already selected
+        const orchestrator = agents.find((a) => a.name === 'claude-code-orchestrator');
+        if (orchestrator && !selectedAgentFile) {
+          setSelectedAgentFile(orchestrator.path);
+        }
       } catch (err) {
         console.error('Failed to load agents:', err);
       } finally {
@@ -91,7 +97,7 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
       }
     };
     void loadAgents();
-  }, [project?.path]);
+  }, [project?.path, selectedAgentFile]);
 
   // Mode depends on view: stream-json for structured view, interactive for terminal
   const mode: InstanceMode = viewMode === 'structured' ? 'stream-json' : 'interactive';

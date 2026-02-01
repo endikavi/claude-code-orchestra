@@ -20,6 +20,10 @@ export interface RalphTask {
   updatedAt: number;
   startedAt?: number;
   completedAt?: number;
+  // Jira integration fields
+  jiraIssueId?: string; // Jira issue ID
+  jiraIssueKey?: string; // Jira issue key (e.g., "PROJ-123")
+  jiraLastSyncAt?: number; // Timestamp of last sync with Jira
 }
 
 export interface CreateRalphTaskInput {
@@ -27,6 +31,9 @@ export interface CreateRalphTaskInput {
   name: string;
   description?: string;
   status?: RalphTaskStatus;
+  // Jira fields for imported tasks
+  jiraIssueId?: string;
+  jiraIssueKey?: string;
 }
 
 export interface UpdateRalphTaskInput {
@@ -42,6 +49,10 @@ export interface UpdateRalphTaskInput {
   isInteractive?: boolean;
   startedAt?: number | null;
   completedAt?: number | null;
+  // Jira fields
+  jiraIssueId?: string | null;
+  jiraIssueKey?: string | null;
+  jiraLastSyncAt?: number | null;
 }
 
 export interface MoveRalphTaskInput {

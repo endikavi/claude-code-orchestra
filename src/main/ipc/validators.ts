@@ -200,6 +200,15 @@ export const validators = {
       agents = obj.agents;
     }
 
+    // Pass through jiraConfig if provided (validation done at usage time)
+    const jiraConfig = obj.jiraConfig as Project['jiraConfig'];
+
+    // Pass through clusterPermissions if provided
+    const clusterPermissions = obj.clusterPermissions as Project['clusterPermissions'];
+
+    // Pass through vectorSearchConfig if provided
+    const vectorSearchConfig = obj.vectorSearchConfig as Project['vectorSearchConfig'];
+
     return {
       name: obj.name.trim(),
       path: validatedPath,
@@ -208,9 +217,13 @@ export const validators = {
       skipPermissions: typeof obj.skipPermissions === 'boolean' ? obj.skipPermissions : undefined,
       enableMcp: typeof obj.enableMcp === 'boolean' ? obj.enableMcp : undefined,
       autoReview: typeof obj.autoReview === 'boolean' ? obj.autoReview : undefined,
+      preferredShell: typeof obj.preferredShell === 'string' ? obj.preferredShell : undefined,
+      clusterPermissions,
       additionalDirs,
       agentDeliveryMethod,
       agents,
+      jiraConfig,
+      vectorSearchConfig,
     };
   },
 
@@ -269,6 +282,15 @@ export const validators = {
       agents = obj.agents;
     }
 
+    // Pass through jiraConfig if provided (validation done at usage time)
+    const jiraConfig = obj.jiraConfig as Project['jiraConfig'];
+
+    // Pass through clusterPermissions if provided
+    const clusterPermissions = obj.clusterPermissions as Project['clusterPermissions'];
+
+    // Pass through vectorSearchConfig if provided
+    const vectorSearchConfig = obj.vectorSearchConfig as Project['vectorSearchConfig'];
+
     return {
       id: obj.id,
       name: obj.name.trim(),
@@ -280,9 +302,12 @@ export const validators = {
       enableMcp: typeof obj.enableMcp === 'boolean' ? obj.enableMcp : undefined,
       autoReview: typeof obj.autoReview === 'boolean' ? obj.autoReview : undefined,
       preferredShell: typeof obj.preferredShell === 'string' ? obj.preferredShell : undefined,
+      clusterPermissions,
       additionalDirs,
       agentDeliveryMethod,
       agents,
+      jiraConfig,
+      vectorSearchConfig,
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
     };

@@ -23,17 +23,42 @@ export class AgentDiscovery {
   static discoverAgents(projectPath: string): DiscoveredAgent[] {
     const agents: DiscoveredAgent[] = [];
 
-    // 1. Check for AGENT.md in project root
+    // 1. Look for agents in project's .claude/agents/ directory (standard location)
+    const projectAgentsDir = path.join(projectPath, '.claude', 'agents');
+    if (fs.existsSync(projectAgentsDir)) {
+      try {
+        const files = fs.readdirSync(projectAgentsDir);
+        for (const file of files) {
+          if (file.endsWith('.md')) {
+            const filePath = path.join(projectAgentsDir, file);
+            const stat = fs.statSync(filePath);
+            if (stat.isFile()) {
+              // Use agent name (filename without .md) for --agent parameter
+              const agentName = file.replace(/\.md$/, '');
+              agents.push({
+                name: agentName,
+                path: agentName, // Pass name, not full path
+                source: 'project',
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`[AgentDiscovery] Error reading project agents directory:`, error);
+      }
+    }
+
+    // 2. Keep AGENT.md in root for backwards compatibility (legacy)
     const agentMdPath = path.join(projectPath, 'AGENT.md');
     if (fs.existsSync(agentMdPath)) {
       agents.push({
-        name: 'AGENT.md',
-        path: agentMdPath,
+        name: 'AGENT.md (legacy)',
+        path: agentMdPath, // Full path for legacy AGENT.md
         source: 'project',
       });
     }
 
-    // 2. Look for *.agent.md files in project root
+    // 3. Look for *.agent.md files in project root (legacy pattern)
     try {
       const files = fs.readdirSync(projectPath);
       for (const file of files) {
@@ -42,8 +67,8 @@ export class AgentDiscovery {
           const stat = fs.statSync(filePath);
           if (stat.isFile()) {
             agents.push({
-              name: file,
-              path: filePath,
+              name: `${file} (legacy)`,
+              path: filePath, // Full path for legacy files
               source: 'project',
             });
           }
@@ -53,20 +78,21 @@ export class AgentDiscovery {
       console.warn(`[AgentDiscovery] Error reading project directory:`, error);
     }
 
-    // 3. Look for files in ~/.claude/agents/
+    // 4. Look for agents in ~/.claude/agents/ (global agents)
     const globalAgentsDir = this.getGlobalAgentsDir();
     if (fs.existsSync(globalAgentsDir)) {
       try {
         const files = fs.readdirSync(globalAgentsDir);
         for (const file of files) {
-          // Accept .md files (agent.md, review.agent.md, etc.)
           if (file.endsWith('.md')) {
             const filePath = path.join(globalAgentsDir, file);
             const stat = fs.statSync(filePath);
             if (stat.isFile()) {
+              // Use agent name for global agents too
+              const agentName = file.replace(/\.md$/, '');
               agents.push({
-                name: `~/.claude/agents/${file}`,
-                path: filePath,
+                name: agentName,
+                path: agentName, // Pass name, not full path
                 source: 'global',
               });
             }

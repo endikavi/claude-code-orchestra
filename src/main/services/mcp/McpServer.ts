@@ -13,6 +13,7 @@ import { registerProjectTools } from './tools/ProjectTools';
 import { registerProxyTools } from './tools/ProxyTools';
 import { registerContextTools } from './tools/ContextTools';
 import { registerPermissionPromptTool } from './tools/PermissionPromptTool';
+import { registerSearchTools } from './tools/SearchTools';
 
 /**
  * MCP Server Implementation
@@ -55,6 +56,9 @@ export class McpServer {
 
     // Register permission prompt tool (for --permission-prompt-tool support)
     registerPermissionPromptTool(this.tools);
+
+    // Register semantic search tools
+    registerSearchTools(this.tools);
 
     console.log(`[MCP] Initialized ${this.tools.size} tools`);
   }

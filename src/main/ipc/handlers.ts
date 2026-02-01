@@ -7,6 +7,8 @@ import { validators } from './validators';
 import { registerSecurityHandlers } from './securityHandlers';
 import { setupRalphTaskHandlers, cleanupRalphTaskHandlers } from './ralphTaskHandlers';
 import { registerPresetHandlers, cleanupPresetHandlers } from './presetHandlers';
+import { setupJiraHandlers, cleanupJiraHandlers } from './jiraHandlers';
+import { setupVectorSearchHandlers, cleanupVectorSearchHandlers } from './vectorSearchHandlers';
 import { DataStore } from '../services/DataStore';
 import { getProcessManager } from '../services/ProcessManager';
 import { getWebServer } from '../services/WebServer';
@@ -909,59 +911,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return hookManager.hasHooksConfigured(projectPath);
   });
 
-  // ==================== Orchestration Handlers ====================
-
-  ipcMain.handle(
-    IPC_CHANNELS.ORCHESTRATION_SETUP_AGENT_MD,
-    (_event, projectPath: string): { success: boolean; path?: string; error?: string } => {
-      try {
-        const agentMdPath = path.join(projectPath, 'AGENT.md');
-
-        // Check if AGENT.md already exists
-        if (fs.existsSync(agentMdPath)) {
-          console.log(`[Orchestration] AGENT.md already exists at ${agentMdPath}`);
-          return { success: true, path: agentMdPath };
-        }
-
-        // Try to read from app directory first (development)
-        const possiblePaths = [
-          path.join(__dirname, '..', '..', '..', 'AGENT.md'), // Development
-          path.join(__dirname, '..', '..', 'AGENT.md'), // Packaged
-          path.join(process.resourcesPath || '', 'AGENT.md'), // Electron resources
-        ];
-
-        let agentMdContent: string | null = null;
-        for (const p of possiblePaths) {
-          try {
-            if (fs.existsSync(p)) {
-              agentMdContent = fs.readFileSync(p, 'utf-8');
-              console.log(`[Orchestration] Found AGENT.md at ${p}`);
-              break;
-            }
-          } catch {
-            // Continue to next path
-          }
-        }
-
-        if (!agentMdContent) {
-          // Fallback: use embedded minimal content
-          agentMdContent = getEmbeddedAgentMd();
-          console.log(`[Orchestration] Using embedded AGENT.md content`);
-        }
-
-        // Write AGENT.md to project
-        fs.writeFileSync(agentMdPath, agentMdContent, 'utf-8');
-        console.log(`[Orchestration] AGENT.md copied to ${agentMdPath}`);
-
-        return { success: true, path: agentMdPath };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[Orchestration] Failed to setup AGENT.md:`, error);
-        return { success: false, error: message };
-      }
-    }
-  );
-
   // ==================== Agent Discovery Handlers ====================
   ipcMain.handle(IPC_CHANNELS.AGENT_DISCOVER, (_event, projectPath: string) => {
     return AgentDiscovery.discoverAgents(projectPath);
@@ -1517,6 +1466,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   // Setup Preset handlers
   registerPresetHandlers();
+
+  // Setup Jira handlers
+  setupJiraHandlers();
+
+  // Setup Vector Search handlers
+  setupVectorSearchHandlers(mainWindow);
 }
 
 export function cleanupIpcHandlers(): void {
@@ -1531,76 +1486,10 @@ export function cleanupIpcHandlers(): void {
 
   // Cleanup Preset handlers
   cleanupPresetHandlers();
-}
 
-/**
- * Get embedded AGENT.md content for orchestration
- * This is a fallback when the file cannot be found in the app directory
- */
-function getEmbeddedAgentMd(): string {
-  return `# AGENT.md - Multi-Agent Orchestration Guide
+  // Cleanup Jira handlers
+  cleanupJiraHandlers();
 
-This file provides guidance for Claude instances running in Claude Dashboard to operate as effective orchestrators of parallel work.
-
-## Core Principles
-
-### 1. Parallelism First
-Before starting any non-trivial task, analyze which subtasks are **independent** and can run simultaneously.
-
-**Rule**: If tasks don't share dependencies, launch them in parallel using multiple \`Task\` tool calls in a single message.
-
-### 2. Clean Context Through Delegation
-Keep your main context focused on coordination. Delegate to subagents:
-- Deep codebase exploration (use \`Task\` with \`subagent_type: "Explore"\`)
-- Implementation of isolated components
-- Running tests and verification
-
-**Rule**: If a task requires reading >5 files or deep analysis, delegate it.
-
-### 3. Active Coordination
-Use the shared context system via MCP tools to:
-- Announce what you're working on (\`context_publish\`)
-- Check what peers are doing (\`context_get_peers\`)
-- Share discoveries (\`context_contribute_knowledge\`)
-
-## MCP Context Tools
-
-### context_publish
-\`\`\`json
-{
-  "workStatus": "implementing",
-  "currentTask": "Adding user authentication",
-  "currentFiles": ["src/auth/login.ts"]
-}
-\`\`\`
-
-### context_get_peers
-Check what other instances are doing before modifying shared files.
-
-### context_get_project_knowledge
-Get accumulated project insights (architecture, conventions, warnings).
-
-### context_contribute_knowledge
-Persist discoveries for future instances.
-
-## Automatic Behaviors (Dashboard-Managed)
-
-### Auto-Review on Task Completion
-When you complete a task (\`TaskUpdate status="completed"\`), the Dashboard **automatically** spawns a background review subagent that:
-- Runs typecheck and lint:fix
-- Fixes errors automatically when possible
-- **Publishes findings to shared context** via \`context_publish\`
-
-Check \`context_get_peers()\` to see review status:
-- \`workStatus: "reviewing"\` - Checks running
-- \`workStatus: "completed"\` - All passed
-- \`workStatus: "blocked"\` - Found unfixable issues (check \`notesForOthers\`)
-
-## Anti-Patterns to Avoid
-
-1. **Sequential when parallel is possible**: Don't wait for one exploration to finish before starting another independent one.
-2. **Deep diving in main context**: Don't read 20 files yourself - delegate to an Explore subagent.
-3. **Forgetting to publish context**: Other instances can't coordinate if they don't know what you're doing.
-4. **Not checking peers**: Before editing shared files, check if someone else is working on them.
-`;
+  // Cleanup Vector Search handlers
+  cleanupVectorSearchHandlers();
 }

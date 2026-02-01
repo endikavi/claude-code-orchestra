@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { getRalphTaskManager, RalphTaskManager } from './RalphTaskManager';
 import { DataStore } from './DataStore';
+import { getJiraService } from './JiraService';
 import type { RalphTask, RalphTaskHelpRequest } from '@shared/types/ralphTasks';
 import type { ClaudeInstance as ClaudeInstanceType, ClaudeModel, Project } from '@shared/types';
 
@@ -97,6 +98,9 @@ export class RalphTaskLoop extends EventEmitter {
         return null;
       }
       updatedTask = moved;
+
+      // Sync with Jira if enabled
+      this.syncJiraOnDoing(updatedTask);
     }
 
     // Start the loop
@@ -148,6 +152,9 @@ export class RalphTaskLoop extends EventEmitter {
     if (task) {
       console.log(`[RalphTaskLoop] completeTask success: task moved to done`);
       this.emit('taskCompleted', task);
+
+      // Sync with Jira if enabled
+      this.syncJiraOnDone(task);
 
       // Check if we're processing all tasks
       this.checkProcessNextInQueue(task.projectId);
@@ -473,6 +480,99 @@ Begin working on the task now.`;
   getTaskInstanceId(taskId: string): string | null {
     const running = Array.from(this.runningTasks.values()).find((r) => r.taskId === taskId);
     return running ? running.instanceId : null;
+  }
+
+  /**
+   * Sync with Jira when task moves to "doing"
+   */
+  private async syncJiraOnDoing(task: RalphTask): Promise<void> {
+    if (!task.jiraIssueKey) {
+      return;
+    }
+
+    const project = this.dataStore.getProjectById(task.projectId);
+    if (!project?.jiraConfig?.enabled) {
+      return;
+    }
+
+    const jiraConfig = project.jiraConfig;
+    const jiraService = getJiraService();
+
+    try {
+      // Transition to "doing" status if configured
+      if (jiraConfig.statusMapping?.doing) {
+        const success = await jiraService.transitionIssueToStatus(
+          task.jiraIssueKey,
+          jiraConfig.statusMapping.doing
+        );
+        if (success) {
+          console.log(
+            `[RalphTaskLoop] Jira issue ${task.jiraIssueKey} transitioned to "doing" status`
+          );
+        } else {
+          console.warn(
+            `[RalphTaskLoop] Could not transition Jira issue ${task.jiraIssueKey} to "doing" status`
+          );
+        }
+      }
+
+      // Auto-assign if configured
+      if (jiraConfig.autoAssignOnDoing) {
+        const user = await jiraService.getCurrentUser();
+        if (user) {
+          await jiraService.assignIssue(task.jiraIssueKey, user.accountId);
+          console.log(
+            `[RalphTaskLoop] Jira issue ${task.jiraIssueKey} assigned to ${user.displayName}`
+          );
+        }
+      }
+
+      // Update last sync timestamp
+      this.taskManager.updateTask(task.id, { jiraLastSyncAt: Date.now() });
+    } catch (error) {
+      console.error(`[RalphTaskLoop] Failed to sync Jira on doing:`, error);
+    }
+  }
+
+  /**
+   * Sync with Jira when task moves to "done"
+   */
+  private async syncJiraOnDone(task: RalphTask): Promise<void> {
+    if (!task.jiraIssueKey) {
+      return;
+    }
+
+    const project = this.dataStore.getProjectById(task.projectId);
+    if (!project?.jiraConfig?.enabled) {
+      return;
+    }
+
+    const jiraConfig = project.jiraConfig;
+    const jiraService = getJiraService();
+
+    try {
+      // Transition to "done" status if configured
+      if (jiraConfig.statusMapping?.done) {
+        const success = await jiraService.transitionIssueToStatus(
+          task.jiraIssueKey,
+          jiraConfig.statusMapping.done
+        );
+        if (success) {
+          console.log(
+            `[RalphTaskLoop] Jira issue ${task.jiraIssueKey} transitioned to "done" status`
+          );
+        } else {
+          console.warn(
+            `[RalphTaskLoop] Could not transition Jira issue ${task.jiraIssueKey} to "done" status`
+          );
+        }
+      }
+
+      // Update last sync timestamp
+      this.taskManager.updateTask(task.id, { jiraLastSyncAt: Date.now() });
+    } catch (error) {
+      console.error(`[RalphTaskLoop] Failed to sync Jira on done:`, error);
+    }
   }
 }
 

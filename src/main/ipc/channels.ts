@@ -169,9 +169,6 @@ export const IPC_CHANNELS = {
   HOOK_GET_PROJECT_SETTINGS: 'hook:getProjectSettings',
   HOOK_HAS_CONFIGURED: 'hook:hasConfigured',
 
-  // Orchestration operations
-  ORCHESTRATION_SETUP_AGENT_MD: 'orchestration:setupAgentMd',
-
   // Agent discovery operations
   AGENT_DISCOVER: 'agent:discover',
   AGENT_VALIDATE_FILE: 'agent:validateFile',
@@ -328,6 +325,36 @@ export const IPC_CHANNELS = {
   PRESET_GET_GLOBAL: 'preset:getGlobal',
   PRESET_GET_ALL: 'preset:getAll',
   PRESET_DUPLICATE: 'preset:duplicate',
+
+  // Jira integration operations
+  JIRA_GET_GLOBAL_CONFIG: 'jira:getGlobalConfig',
+  JIRA_UPDATE_GLOBAL_CONFIG: 'jira:updateGlobalConfig',
+  JIRA_VALIDATE_CREDENTIALS: 'jira:validateCredentials',
+  JIRA_GET_BOARDS: 'jira:getBoards',
+  JIRA_GET_STATUSES: 'jira:getStatuses',
+  JIRA_SEARCH_ISSUES: 'jira:searchIssues',
+  JIRA_IMPORT_ISSUES: 'jira:importIssues',
+  JIRA_TRANSITION_ISSUE: 'jira:transitionIssue',
+  JIRA_ASSIGN_ISSUE: 'jira:assignIssue',
+  JIRA_GET_CURRENT_USER: 'jira:getCurrentUser',
+
+  // Vector search operations
+  VECTOR_INDEX_START: 'vector:indexStart',
+  VECTOR_INDEX_CANCEL: 'vector:indexCancel',
+  VECTOR_INDEX_CLEAR: 'vector:indexClear',
+  VECTOR_INDEX_STATUS: 'vector:indexStatus',
+  VECTOR_SEARCH: 'vector:search',
+  VECTOR_MODEL_DOWNLOAD: 'vector:modelDownload',
+  VECTOR_MODEL_CANCEL_DOWNLOAD: 'vector:modelCancelDownload',
+  VECTOR_MODEL_STATUS: 'vector:modelStatus',
+  VECTOR_MODEL_DELETE: 'vector:modelDelete',
+
+  // Vector search events (main -> renderer)
+  VECTOR_INDEX_PROGRESS: 'vector:indexProgress',
+  VECTOR_INDEX_COMPLETE: 'vector:indexComplete',
+  VECTOR_INDEX_ERROR: 'vector:indexError',
+  VECTOR_MODEL_PROGRESS: 'vector:modelProgress',
+  VECTOR_MODEL_STATUS_CHANGE: 'vector:modelStatusChange',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
