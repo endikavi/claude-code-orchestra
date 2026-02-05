@@ -6,6 +6,8 @@ import type {
   InstanceStatus,
   SubagentInstance,
   TrackedTask,
+  TrackedTeam,
+  TrackedPlan,
   SharedInstanceContext,
   ProjectSharedKnowledge,
   ContextUpdateEvent,
@@ -104,6 +106,14 @@ export interface ServerToClientEvents {
   }) => void;
   'context:updated': (event: ContextUpdateEvent) => void;
   'context:sessionStarted': (data: { instanceId: string; projectId: string }) => void;
+  // Team events
+  'team:created': (data: { team: TrackedTeam }) => void;
+  'team:updated': (data: { team: TrackedTeam }) => void;
+  'team:deleted': (data: { teamName: string }) => void;
+  // Plan events
+  'plan:created': (data: { plan: TrackedPlan }) => void;
+  'plan:updated': (data: { plan: TrackedPlan }) => void;
+  'plan:deleted': (data: { planName: string }) => void;
 }
 
 // Subscription callback response

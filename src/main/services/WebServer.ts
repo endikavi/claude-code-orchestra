@@ -30,6 +30,8 @@ import { DataStore } from './DataStore';
 import { getProcessManager } from './ProcessManager';
 import { getSubagentTracker } from './SubagentTracker';
 import { getTaskTracker } from './TaskTracker';
+import { getTeamFileWatcher } from './TeamFileWatcher';
+import { getPlanFileWatcher } from './PlanFileWatcher';
 import { getClusterManager } from './ClusterManager';
 import { getAuditLogger } from './AuditLogger';
 import { getStateSyncManager } from './managers/StateSyncManager';
@@ -58,6 +60,8 @@ import type {
 } from '@shared/types/remote';
 import { DEFAULT_REMOTE_PORT } from '@shared/types/remote';
 import type { StreamMessage, InstanceStatus, TrackedTask } from '@shared/types';
+import type { TrackedTeam } from '@shared/types/teams';
+import type { TrackedPlan } from '@shared/types/plans';
 import type { SubagentInstance } from '@shared/types/orchestration';
 
 // DevTools console entry interface (simplified for server-side storage)
@@ -514,6 +518,30 @@ export class WebServer extends EventEmitter {
           : req.params.instanceId;
         const tasks = tracker.getTasks(instanceId);
         res.json({ success: true, data: tasks });
+      }
+    );
+
+    // Teams endpoint (protected by webAccessGuard + auth)
+    this.app.get(
+      '/api/teams',
+      this.webAccessGuard,
+      this.authMiddleware,
+      (_req: Request, res: Response) => {
+        const watcher = getTeamFileWatcher();
+        const teams = watcher.getAllTeams();
+        res.json({ success: true, data: teams });
+      }
+    );
+
+    // Plans endpoint (protected by webAccessGuard + auth)
+    this.app.get(
+      '/api/plans',
+      this.webAccessGuard,
+      this.authMiddleware,
+      (_req: Request, res: Response) => {
+        const watcher = getPlanFileWatcher();
+        const plans = watcher.getAllPlans();
+        res.json({ success: true, data: plans });
       }
     );
 
@@ -1195,6 +1223,60 @@ export class WebServer extends EventEmitter {
   ): void {
     if (this.io) {
       this.io.emit('context:updated', event);
+    }
+  }
+
+  /**
+   * Broadcast team created event to web clients
+   */
+  public broadcastTeamCreated(team: TrackedTeam): void {
+    if (this.io) {
+      this.io.emit('team:created', { team });
+    }
+  }
+
+  /**
+   * Broadcast team updated event to web clients
+   */
+  public broadcastTeamUpdated(team: TrackedTeam): void {
+    if (this.io) {
+      this.io.emit('team:updated', { team });
+    }
+  }
+
+  /**
+   * Broadcast team deleted event to web clients
+   */
+  public broadcastTeamDeleted(teamName: string): void {
+    if (this.io) {
+      this.io.emit('team:deleted', { teamName });
+    }
+  }
+
+  /**
+   * Broadcast plan created event to web clients
+   */
+  public broadcastPlanCreated(plan: TrackedPlan): void {
+    if (this.io) {
+      this.io.emit('plan:created', { plan });
+    }
+  }
+
+  /**
+   * Broadcast plan updated event to web clients
+   */
+  public broadcastPlanUpdated(plan: TrackedPlan): void {
+    if (this.io) {
+      this.io.emit('plan:updated', { plan });
+    }
+  }
+
+  /**
+   * Broadcast plan deleted event to web clients
+   */
+  public broadcastPlanDeleted(planName: string): void {
+    if (this.io) {
+      this.io.emit('plan:deleted', { planName });
     }
   }
 

@@ -54,6 +54,12 @@ import { getTerminalDimensionManager } from '../services/TerminalDimensionManage
 import { SharedContextStore } from '../services/SharedContextStore';
 import { getSslCertificateService } from '../services/SslCertificateService';
 import { AgentDiscovery } from '../services/AgentDiscovery';
+import { getTeamFileWatcher } from '../services/TeamFileWatcher';
+import { getTeamTracker } from '../services/TeamTracker';
+import { getPlanFileWatcher } from '../services/PlanFileWatcher';
+import { getInstanceBroadcaster } from '../services/InstanceBroadcaster';
+import type { TrackedTeam } from '@shared/types/teams';
+import type { TrackedPlan } from '@shared/types/plans';
 import type { TerminalPoolConfig } from '@shared/types/pool';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow): void {
@@ -1109,6 +1115,68 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_CHANNELS.TASK_GET_ALL, () => {
     return taskTracker.getAllTasks();
+  });
+
+  // ==================== Team Handlers (Claude Code Teammate Tool Tracking) ====================
+  const teamFileWatcher = getTeamFileWatcher();
+  const teamTracker = getTeamTracker();
+  const broadcaster = getInstanceBroadcaster();
+
+  // Start global team file watcher
+  teamFileWatcher.on('team_created', (data: { team: TrackedTeam }) => {
+    teamTracker.setTeam(data.team);
+    broadcaster.broadcastTeamEvent('teamCreated', data.team);
+  });
+
+  teamFileWatcher.on('team_updated', (data: { team: TrackedTeam }) => {
+    teamTracker.setTeam(data.team);
+    broadcaster.broadcastTeamEvent('teamUpdated', data.team);
+  });
+
+  teamFileWatcher.on('team_deleted', (data: { teamName: string }) => {
+    teamTracker.deleteTeam(data.teamName);
+    broadcaster.broadcastTeamEvent('teamDeleted', data.teamName);
+  });
+
+  teamFileWatcher.start();
+
+  ipcMain.handle(IPC_CHANNELS.TEAM_GET_ALL, () => {
+    return teamTracker.getAllTeams();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TEAM_GET_BY_NAME, (_event, name: string) => {
+    return teamTracker.getTeamByName(name);
+  });
+
+  // ==================== Plan Handlers (Claude Code Plan Files Tracking) ====================
+  const planFileWatcher = getPlanFileWatcher();
+
+  planFileWatcher.on('plan_created', (data: { plan: TrackedPlan }) => {
+    broadcaster.broadcastPlanEvent('planCreated', data.plan);
+  });
+
+  planFileWatcher.on('plan_updated', (data: { plan: TrackedPlan }) => {
+    broadcaster.broadcastPlanEvent('planUpdated', data.plan);
+  });
+
+  planFileWatcher.on('plan_deleted', (data: { planName: string }) => {
+    broadcaster.broadcastPlanEvent('planDeleted', data.planName);
+  });
+
+  planFileWatcher.start();
+
+  ipcMain.handle(IPC_CHANNELS.PLAN_GET_ALL, () => {
+    return planFileWatcher.getAllPlans();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PLAN_GET_BY_NAME, (_event, name: string) => {
+    const plan = planFileWatcher.getPlanByName(name);
+    if (plan) {
+      // Load content on demand
+      const content = planFileWatcher.getPlanContent(name);
+      return { ...plan, content };
+    }
+    return null;
   });
 
   // ==================== Proxy Handlers (Web Preview Tunneling) ====================

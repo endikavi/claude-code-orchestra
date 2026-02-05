@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS: UISettings = {
   terminalFont: 'embedded',
   sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
   repaintSettings: DEFAULT_REPAINT_SETTINGS,
+  rightPanelMode: 'tasks',
 };
 
 export class UISettingsStore {

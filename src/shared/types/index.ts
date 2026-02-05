@@ -362,6 +362,12 @@ export * from './jira';
 // Re-export vector search types
 export * from './vectorSearch';
 
+// Re-export teams types
+export * from './teams';
+
+// Re-export plans types
+export * from './plans';
+
 // Git status types
 export interface GitStatus {
   branch: string;

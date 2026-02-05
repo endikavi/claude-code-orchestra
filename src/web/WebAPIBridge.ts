@@ -23,6 +23,8 @@ import type {
 } from '@shared/types';
 import type { SyncState } from '@shared/types/remote';
 import type { SubagentInstance } from '@shared/types/orchestration';
+import type { TrackedTeam } from '@shared/types/teams';
+import type { TrackedPlan } from '@shared/types/plans';
 
 // Storage keys
 const TOKEN_KEY = 'claude_dashboard_token';
@@ -213,6 +215,32 @@ export function connectSocket(): void {
 
   socket.on('subagent:completed', (data: { instanceId: string; subagent: SubagentInstance }) => {
     triggerEvent('subagent:completed', data.instanceId, data.subagent);
+  });
+
+  // Team events
+  socket.on('team:created', (data: { team: TrackedTeam }) => {
+    triggerEvent('team:created', data.team);
+  });
+
+  socket.on('team:updated', (data: { team: TrackedTeam }) => {
+    triggerEvent('team:updated', data.team);
+  });
+
+  socket.on('team:deleted', (data: { teamName: string }) => {
+    triggerEvent('team:deleted', data.teamName);
+  });
+
+  // Plan events
+  socket.on('plan:created', (data: { plan: TrackedPlan }) => {
+    triggerEvent('plan:created', data.plan);
+  });
+
+  socket.on('plan:updated', (data: { plan: TrackedPlan }) => {
+    triggerEvent('plan:updated', data.plan);
+  });
+
+  socket.on('plan:deleted', (data: { planName: string }) => {
+    triggerEvent('plan:deleted', data.planName);
   });
 
   socket.on('session:kicked', (reason: string) => {
@@ -780,6 +808,57 @@ export const webAPI = {
       callback: (instanceId: string, subagent: SubagentInstance) => void
     ): (() => void) => {
       return addEventListener('subagent:completed', callback);
+    },
+  },
+
+  // Team operations
+  team: {
+    getAll: async (): Promise<TrackedTeam[]> => {
+      const response = await apiFetch<{ success: boolean; data: TrackedTeam[] }>('/api/teams');
+      return response.data;
+    },
+
+    getByName: async (teamName: string): Promise<TrackedTeam | null> => {
+      const teams = await apiFetch<{ success: boolean; data: TrackedTeam[] }>('/api/teams');
+      return teams.data.find((t) => t.name === teamName) || null;
+    },
+
+    onCreated: (callback: (team: TrackedTeam) => void): (() => void) => {
+      return addEventListener('team:created', callback);
+    },
+
+    onUpdated: (callback: (team: TrackedTeam) => void): (() => void) => {
+      return addEventListener('team:updated', callback);
+    },
+
+    onDeleted: (callback: (teamName: string) => void): (() => void) => {
+      return addEventListener('team:deleted', callback);
+    },
+  },
+
+  // Plan operations
+  plan: {
+    getAll: async (): Promise<TrackedPlan[]> => {
+      const response = await apiFetch<{ success: boolean; data: TrackedPlan[] }>('/api/plans');
+      return response.data;
+    },
+
+    getByName: async (planName: string): Promise<TrackedPlan | null> => {
+      const plans = await apiFetch<{ success: boolean; data: TrackedPlan[] }>('/api/plans');
+      const plan = plans.data.find((p) => p.name === planName);
+      return plan || null;
+    },
+
+    onCreated: (callback: (plan: TrackedPlan) => void): (() => void) => {
+      return addEventListener('plan:created', callback);
+    },
+
+    onUpdated: (callback: (plan: TrackedPlan) => void): (() => void) => {
+      return addEventListener('plan:updated', callback);
+    },
+
+    onDeleted: (callback: (planName: string) => void): (() => void) => {
+      return addEventListener('plan:deleted', callback);
     },
   },
 

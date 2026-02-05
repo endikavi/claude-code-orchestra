@@ -3,6 +3,7 @@ import type { SharedContextSettings } from './sharedContext';
 
 export type ViewMode = 'terminal' | 'structured';
 export type Theme = 'dark' | 'light';
+export type RightPanelMode = 'none' | 'tasks' | 'teams';
 
 export interface CollapsedSections {
   local: boolean;
@@ -41,4 +42,5 @@ export interface UISettings {
   terminalFont: TerminalFont;
   sharedContext: SharedContextSettings;
   repaintSettings: RepaintSettings;
+  rightPanelMode: RightPanelMode;
 }

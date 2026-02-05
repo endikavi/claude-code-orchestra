@@ -19,6 +19,7 @@ import type {
 } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
 import type { TrackedTask } from '@shared/types/tasks';
+import type { TeamSpawnEvent, TeamMessageEvent } from '@shared/types/teams';
 import type { InstanceOutputBuffer } from '@shared/types/remote';
 
 // Internal buffer type using array for better performance (avoids repeated string concatenation)
@@ -683,6 +684,18 @@ export class ProcessManager extends EventEmitter {
 
     instance.on('task:list', (data: { instanceId: string; tasks: TrackedTask[] }) => {
       this.broadcastInstanceEvent('taskList', data.instanceId, data.tasks);
+    });
+
+    // Team events (Teammate/SendMessage tools)
+    instance.on('team:spawn_detected', (data: TeamSpawnEvent & { instanceId: string }) => {
+      // Team spawn events are tracked via TeamFileWatcher watching the filesystem
+      // This event is useful for associating teams with their parent instance
+      this.emit('team:spawn_detected', data);
+    });
+
+    instance.on('team:message_detected', (data: TeamMessageEvent & { instanceId: string }) => {
+      // Team message events for tracking inter-agent communication
+      this.emit('team:message_detected', data);
     });
   }
 

@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useTaskStore } from '../../stores/taskStore';
+import { useTeamStore } from '../../stores/teamStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { NotificationBadge, NotificationPanel } from '../notifications';
 
@@ -20,10 +22,18 @@ export function TitleBar() {
     sidebarCollapsed,
     showNotificationPanel,
     setShowNotificationPanel,
+    rightPanelMode,
+    toggleRightPanel,
   } = useUIStore();
   const { selectInstance, selectShell } = useInstanceStore();
   const { selectProject } = useProjectStore();
+  const { getTotalTasks, getTotalInProgress: getTotalTasksInProgress } = useTaskStore();
+  const { getTeamCount } = useTeamStore();
   const isMobile = useIsMobile();
+
+  const totalTasks = getTotalTasks();
+  const tasksInProgress = getTotalTasksInProgress();
+  const teamCount = getTeamCount();
 
   const handleGoHome = () => {
     selectInstance(null);
@@ -112,6 +122,45 @@ export function TitleBar() {
           title={t('titleBar.settings')}
         >
           <SettingsIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+        </button>
+
+        {/* Separator */}
+        <div className="w-px h-4 bg-gray-300 dark:bg-neutral-600" />
+
+        {/* Teams toggle */}
+        <button
+          onClick={() => toggleRightPanel('teams')}
+          className={`p-1 rounded-sm transition-colors flex items-center justify-center gap-1 ${
+            rightPanelMode === 'teams'
+              ? 'bg-sky-500/10 text-sky-500'
+              : 'hover:bg-gray-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+          }`}
+          title={t('teams.title')}
+        >
+          <TeamsIcon className="w-4 h-4" />
+          {teamCount > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-semibold bg-sky-500 text-white rounded-full">
+              {teamCount}
+            </span>
+          )}
+        </button>
+
+        {/* Tasks toggle */}
+        <button
+          onClick={() => toggleRightPanel('tasks')}
+          className={`p-1 rounded-sm transition-colors flex items-center justify-center gap-1 ${
+            rightPanelMode === 'tasks'
+              ? 'bg-sky-500/10 text-sky-500'
+              : 'hover:bg-gray-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+          }`}
+          title={t('tasks.title')}
+        >
+          <TasksIcon className="w-4 h-4" />
+          {totalTasks > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-semibold bg-sky-500 text-white rounded-full">
+              {tasksInProgress > 0 ? tasksInProgress : totalTasks}
+            </span>
+          )}
         </button>
       </div>
 
@@ -304,6 +353,32 @@ function HomeIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+      />
+    </svg>
+  );
+}
+
+function TeamsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+      />
+    </svg>
+  );
+}
+
+function TasksIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
       />
     </svg>
   );

@@ -4,6 +4,8 @@ import type {
   InstanceStatus,
   ShellInstanceStatus,
   TrackedTask,
+  TrackedTeam,
+  TrackedPlan,
 } from '@shared/types';
 import type { SubagentInstance } from '@shared/types/orchestration';
 import type { HookStatusUpdate } from '@shared/types/remote';
@@ -67,7 +69,13 @@ export type InstanceEventType =
   | 'hookActivity'
   | 'contextInstanceUpdated'
   | 'contextKnowledgeUpdated'
-  | 'contextUpdated';
+  | 'contextUpdated'
+  | 'teamCreated'
+  | 'teamUpdated'
+  | 'teamDeleted'
+  | 'planCreated'
+  | 'planUpdated'
+  | 'planDeleted';
 
 /**
  * Handles broadcasting instance events to all destinations:
@@ -122,6 +130,12 @@ export class InstanceBroadcaster {
       contextInstanceUpdated: IPC_CHANNELS.CONTEXT_INSTANCE_UPDATED,
       contextKnowledgeUpdated: IPC_CHANNELS.CONTEXT_KNOWLEDGE_UPDATED,
       contextUpdated: IPC_CHANNELS.CONTEXT_UPDATED,
+      teamCreated: IPC_CHANNELS.TEAM_CREATED,
+      teamUpdated: IPC_CHANNELS.TEAM_UPDATED,
+      teamDeleted: IPC_CHANNELS.TEAM_DELETED,
+      planCreated: IPC_CHANNELS.PLAN_CREATED,
+      planUpdated: IPC_CHANNELS.PLAN_UPDATED,
+      planDeleted: IPC_CHANNELS.PLAN_DELETED,
     };
     return channelMap[event] || null;
   }
@@ -253,6 +267,24 @@ export class InstanceBroadcaster {
                 timestamp: number;
               }
             );
+            break;
+          case 'teamCreated':
+            webServer.broadcastTeamCreated(data as TrackedTeam);
+            break;
+          case 'teamUpdated':
+            webServer.broadcastTeamUpdated(data as TrackedTeam);
+            break;
+          case 'teamDeleted':
+            webServer.broadcastTeamDeleted(data as string);
+            break;
+          case 'planCreated':
+            webServer.broadcastPlanCreated(data as TrackedPlan);
+            break;
+          case 'planUpdated':
+            webServer.broadcastPlanUpdated(data as TrackedPlan);
+            break;
+          case 'planDeleted':
+            webServer.broadcastPlanDeleted(data as string);
             break;
         }
       })
@@ -397,6 +429,70 @@ export class InstanceBroadcaster {
       .catch(() => {
         // ClusterManager not available, ignore
       });
+  }
+
+  /**
+   * Broadcast team created event to all destinations
+   */
+  broadcastTeamEvent(
+    event: 'teamCreated' | 'teamUpdated' | 'teamDeleted',
+    data: TrackedTeam | string
+  ): void {
+    const channel = this.getChannel(event);
+    if (channel) {
+      this.sendToRenderer(channel, data);
+    }
+
+    getWebServerModule()
+      .then(({ getWebServer }) => {
+        const webServer = getWebServer();
+        if (!webServer.running) return;
+
+        switch (event) {
+          case 'teamCreated':
+            webServer.broadcastTeamCreated(data as TrackedTeam);
+            break;
+          case 'teamUpdated':
+            webServer.broadcastTeamUpdated(data as TrackedTeam);
+            break;
+          case 'teamDeleted':
+            webServer.broadcastTeamDeleted(data as string);
+            break;
+        }
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Broadcast plan event to all destinations
+   */
+  broadcastPlanEvent(
+    event: 'planCreated' | 'planUpdated' | 'planDeleted',
+    data: TrackedPlan | string
+  ): void {
+    const channel = this.getChannel(event);
+    if (channel) {
+      this.sendToRenderer(channel, data);
+    }
+
+    getWebServerModule()
+      .then(({ getWebServer }) => {
+        const webServer = getWebServer();
+        if (!webServer.running) return;
+
+        switch (event) {
+          case 'planCreated':
+            webServer.broadcastPlanCreated(data as TrackedPlan);
+            break;
+          case 'planUpdated':
+            webServer.broadcastPlanUpdated(data as TrackedPlan);
+            break;
+          case 'planDeleted':
+            webServer.broadcastPlanDeleted(data as string);
+            break;
+        }
+      })
+      .catch(() => {});
   }
 
   /**

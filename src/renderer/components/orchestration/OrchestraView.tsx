@@ -1,11 +1,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOrchestrationStore } from '../../stores/orchestrationStore';
-import { useTaskStore } from '../../stores/taskStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { SubagentCard } from './SubagentCard';
-import { TasksPanel } from '../tasks';
 import type { SubagentInstance } from '@shared/types';
 
 interface ProjectGroup {
@@ -30,7 +28,6 @@ export function OrchestraView() {
   const { instances, selectInstance, selectShell } = useInstanceStore();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(['all']));
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
-  const [showTasksPanel, setShowTasksPanel] = useState(true);
   const {
     isLoading,
     subagentsByInstance,
@@ -39,11 +36,6 @@ export function OrchestraView() {
     getTotalRunningSubagents,
     getTotalCompletedSubagents,
   } = useOrchestrationStore();
-
-  // Task store for showing task count
-  const { getTotalTasks, getTotalInProgress: getTotalTasksInProgress } = useTaskStore();
-  const totalTasks = getTotalTasks();
-  const tasksInProgress = getTotalTasksInProgress();
 
   // Navigate to instance tab
   const navigateToInstance = useCallback(
@@ -249,35 +241,6 @@ export function OrchestraView() {
             >
               {t('orchestration.collapseAll')}
             </button>
-            {/* Toggle Tasks Panel */}
-            <button
-              onClick={() => setShowTasksPanel(!showTasksPanel)}
-              className={`p-2 sm:px-3 sm:py-1.5 text-xs font-medium rounded-sm transition-colors flex items-center gap-1.5 ${
-                showTasksPanel
-                  ? 'bg-sky-500/10 text-sky-500'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800'
-              }`}
-              title={t('tasks.title')}
-            >
-              <svg
-                className="h-5 w-5 sm:h-4 sm:w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-                />
-              </svg>
-              {totalTasks > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold bg-sky-500 text-white rounded-full">
-                  {tasksInProgress > 0 ? tasksInProgress : totalTasks}
-                </span>
-              )}
-            </button>
           </div>
         </div>
 
@@ -296,21 +259,6 @@ export function OrchestraView() {
           ))}
         </div>
       </div>
-
-      {/* Tasks Panel - Side Panel on desktop, Full overlay on mobile */}
-      {showTasksPanel && (
-        <>
-          {/* Backdrop for mobile */}
-          <div
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={() => setShowTasksPanel(false)}
-          />
-          {/* Panel */}
-          <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto md:w-80 md:shrink-0 md:border-l border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-950 md:bg-gray-50 md:dark:bg-neutral-950/50">
-            <TasksPanel onClose={() => setShowTasksPanel(false)} />
-          </div>
-        </>
-      )}
     </div>
   );
 }

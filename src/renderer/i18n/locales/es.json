@@ -641,6 +641,22 @@
       "completed": "Completadas"
     }
   },
+  "teams": {
+    "title": "Equipos",
+    "empty": "No se detectaron equipos",
+    "emptyHint": "Los equipos aparecerán cuando Claude use la herramienta Teammate con spawnTeam",
+    "members": "miembros",
+    "teamsCount": "equipos",
+    "membersTotal": "miembros totales",
+    "viewTasks": "Ver tareas"
+  },
+  "plans": {
+    "title": "Planes",
+    "empty": "No se detectaron planes",
+    "emptyHint": "Los planes aparecerán cuando Claude entre en modo plan",
+    "viewContent": "Ver contenido",
+    "loading": "Cargando plan..."
+  },
   "agent": {
     "name": "Nombre del Agente",
     "nameHint": "Identificador único (sin espacios)",

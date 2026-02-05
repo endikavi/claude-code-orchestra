@@ -304,6 +304,7 @@ export const IPC_CHANNELS = {
   RALPH_TASK_RESPOND_HELP: 'ralphTask:respondHelp',
   RALPH_TASK_PROCESS_ALL: 'ralphTask:processAll',
   RALPH_TASK_STOP_ALL: 'ralphTask:stopAll',
+  RALPH_TASK_GET_PROMPT: 'ralphTask:getPrompt',
 
   // Ralph Task events (main -> renderer)
   RALPH_TASK_CREATED: 'ralphTask:created',
@@ -356,6 +357,24 @@ export const IPC_CHANNELS = {
   VECTOR_INDEX_ERROR: 'vector:indexError',
   VECTOR_MODEL_PROGRESS: 'vector:modelProgress',
   VECTOR_MODEL_STATUS_CHANGE: 'vector:modelStatusChange',
+
+  // Team operations (Claude Code Teammate tool tracking)
+  TEAM_GET_ALL: 'team:getAll',
+  TEAM_GET_BY_NAME: 'team:getByName',
+
+  // Team events (main -> renderer)
+  TEAM_CREATED: 'team:created',
+  TEAM_UPDATED: 'team:updated',
+  TEAM_DELETED: 'team:deleted',
+
+  // Plan operations (Claude Code plan files tracking)
+  PLAN_GET_ALL: 'plan:getAll',
+  PLAN_GET_BY_NAME: 'plan:getByName',
+
+  // Plan events (main -> renderer)
+  PLAN_CREATED: 'plan:created',
+  PLAN_UPDATED: 'plan:updated',
+  PLAN_DELETED: 'plan:deleted',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

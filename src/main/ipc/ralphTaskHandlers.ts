@@ -91,6 +91,11 @@ export function setupRalphTaskHandlers(mainWindow: BrowserWindow): void {
     taskLoop.stopProcessAll(projectId);
     return true;
   });
+
+  // Get generated prompt for a task (without starting it)
+  ipcMain.handle(IPC_CHANNELS.RALPH_TASK_GET_PROMPT, (_event, taskId: string) => {
+    return taskLoop.getTaskPrompt(taskId);
+  });
 }
 
 /**
@@ -180,4 +185,5 @@ export function cleanupRalphTaskHandlers(): void {
   ipcMain.removeHandler(IPC_CHANNELS.RALPH_TASK_RESPOND_HELP);
   ipcMain.removeHandler(IPC_CHANNELS.RALPH_TASK_PROCESS_ALL);
   ipcMain.removeHandler(IPC_CHANNELS.RALPH_TASK_STOP_ALL);
+  ipcMain.removeHandler(IPC_CHANNELS.RALPH_TASK_GET_PROMPT);
 }

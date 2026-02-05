@@ -418,9 +418,9 @@ export class RalphTaskLoop extends EventEmitter {
   }
 
   /**
-   * Generate the prompt for Claude
+   * Generate the prompt for Claude (public so it can be exposed via IPC)
    */
-  private generatePrompt(task: RalphTask, project: Project): string {
+  generatePrompt(task: RalphTask, project: Project): string {
     const contextFilePath =
       task.contextFilePath || this.taskManager.getContextFilePath(task, project.path);
 
@@ -465,6 +465,19 @@ ${task.loopCount > 0 ? `- Previous iterations have been run. Check the context f
 Begin working on the task now.`;
 
     return prompt;
+  }
+
+  /**
+   * Get the generated prompt for a task (without starting it)
+   */
+  getTaskPrompt(taskId: string): string | null {
+    const task = this.taskManager.getTaskById(taskId);
+    if (!task) return null;
+
+    const project = this.dataStore.getProjectById(task.projectId);
+    if (!project) return null;
+
+    return this.generatePrompt(task, project);
   }
 
   /**

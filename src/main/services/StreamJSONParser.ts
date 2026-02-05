@@ -9,6 +9,7 @@ import type {
   TaskStatus,
 } from '@shared/types/tasks';
 import type { InstanceWorkStatus } from '@shared/types/sharedContext';
+import type { TeamSpawnEvent, TeamMessageEvent } from '@shared/types/teams';
 
 // Event emitted when context should be auto-published
 export interface ContextAutoPublishEvent {
@@ -202,6 +203,9 @@ export class StreamJSONParser extends EventEmitter {
         this.detectTaskList(message);
         // Auto-detect context from tool usage
         this.detectContextFromTools(message);
+        // Check for Teammate/SendMessage tools (team tracking)
+        this.detectTeammateToolUse(message);
+        this.detectSendMessage(message);
         break;
       case 'user':
         this.emit('user', message);
@@ -449,6 +453,52 @@ export class StreamJSONParser extends EventEmitter {
     }
 
     return tasks;
+  }
+
+  // ==================== Team Tool Detection (Teammate/SendMessage) ====================
+
+  /**
+   * Detect when Claude spawns a team using the Teammate tool
+   */
+  private detectTeammateToolUse(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    for (const block of message.message.content) {
+      const toolBlock = block as ToolUseBlock;
+      if (toolBlock.type === 'tool_use' && toolBlock.name === 'Teammate') {
+        const operation = (toolBlock.input?.operation as string) || '';
+        if (operation === 'spawnTeam' || operation === 'cleanup') {
+          const event: TeamSpawnEvent = {
+            instanceId: '', // Will be filled by ClaudeInstance
+            teamName: (toolBlock.input?.team_name as string) || '',
+            description: (toolBlock.input?.description as string) || undefined,
+            operation: operation,
+          };
+          this.emit('team_spawn', event);
+        }
+      }
+    }
+  }
+
+  /**
+   * Detect when Claude sends a message using the SendMessage tool
+   */
+  private detectSendMessage(message: StreamMessage): void {
+    if (!message.message?.content) return;
+
+    for (const block of message.message.content) {
+      const toolBlock = block as ToolUseBlock;
+      if (toolBlock.type === 'tool_use' && toolBlock.name === 'SendMessage') {
+        const event: TeamMessageEvent = {
+          instanceId: '', // Will be filled by ClaudeInstance
+          type: (toolBlock.input?.type as TeamMessageEvent['type']) || 'message',
+          recipient: toolBlock.input?.recipient as string | undefined,
+          content: toolBlock.input?.content as string | undefined,
+          summary: toolBlock.input?.summary as string | undefined,
+        };
+        this.emit('team_message', event);
+      }
+    }
   }
 
   /**

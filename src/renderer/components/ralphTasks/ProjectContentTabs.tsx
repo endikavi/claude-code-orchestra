@@ -9,11 +9,11 @@ interface ProjectContentTabsProps {
 }
 
 export function ProjectContentTabs({ projectId, onNewConversation }: ProjectContentTabsProps) {
-  const [activeTab, setActiveTab] = useState('history');
+  const [activeTab, setActiveTab] = useState('tasks');
 
   const tabs: Tab[] = [
-    { id: 'history', label: 'Historial' },
     { id: 'tasks', label: 'Tareas' },
+    { id: 'history', label: 'Historial' },
   ];
 
   return (

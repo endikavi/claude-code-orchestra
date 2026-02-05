@@ -25,6 +25,7 @@ interface RalphTaskState {
   moveTask: (input: MoveRalphTaskInput) => Promise<RalphTask | null>;
   startTask: (id: string, isInteractive?: boolean) => Promise<RalphTask | null>;
   stopTask: (id: string) => Promise<RalphTask | null>;
+  getTaskPrompt: (id: string) => Promise<string | null>;
   respondToHelp: (taskId: string, response: string) => Promise<RalphTask | null>;
   processAll: (projectId: string) => Promise<void>;
   stopAll: (projectId: string) => Promise<void>;
@@ -128,6 +129,17 @@ export const useRalphTaskStore = create<RalphTaskState>((set, get) => ({
       return task;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start task';
+      set({ error: message });
+      return null;
+    }
+  },
+
+  // Get the generated prompt for a task
+  getTaskPrompt: async (id: string) => {
+    try {
+      return await window.electronAPI.ralphTask.getPrompt(id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get task prompt';
       set({ error: message });
       return null;
     }

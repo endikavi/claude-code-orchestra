@@ -10,6 +10,7 @@ import type {
   CollapsedSections,
   TerminalFont,
   RepaintSettings,
+  RightPanelMode,
 } from '@shared/types/uiSettings';
 import { DEFAULT_REPAINT_SETTINGS } from '@shared/types/uiSettings';
 
@@ -62,6 +63,11 @@ interface UIState extends UISettings {
   // Repaint settings (experimental TUI fix)
   repaintSettings: RepaintSettings;
   setRepaintSettings: (settings: Partial<RepaintSettings>) => void;
+
+  // Right panel
+  rightPanelMode: RightPanelMode;
+  setRightPanelMode: (mode: RightPanelMode) => void;
+  toggleRightPanel: (panel: 'tasks' | 'teams') => void;
 }
 
 // Check if running in Electron with uiSettings API
@@ -128,6 +134,7 @@ export const useUIStore = create<UIState>()(
       terminalFont: 'embedded',
       sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
       repaintSettings: DEFAULT_REPAINT_SETTINGS,
+      rightPanelMode: 'tasks' as RightPanelMode,
       sidebarMobileOpen: false,
       showProjectModal: false,
       showInstanceModal: false,
@@ -154,6 +161,7 @@ export const useUIStore = create<UIState>()(
               terminalFont: settings.terminalFont || 'embedded',
               sharedContext: settings.sharedContext || DEFAULT_SHARED_CONTEXT_SETTINGS,
               repaintSettings: settings.repaintSettings || DEFAULT_REPAINT_SETTINGS,
+              rightPanelMode: settings.rightPanelMode || 'tasks',
               _hasHydrated: true,
             });
             // Apply theme and language after loading
@@ -338,6 +346,19 @@ export const useUIStore = create<UIState>()(
         set({ repaintSettings: updated });
         saveToMain({ repaintSettings: updated });
       },
+
+      // Right panel
+      setRightPanelMode: (mode) => {
+        set({ rightPanelMode: mode });
+        saveToMain({ rightPanelMode: mode });
+      },
+
+      toggleRightPanel: (panel) => {
+        const current = get().rightPanelMode;
+        const newMode: RightPanelMode = current === panel ? 'none' : panel;
+        set({ rightPanelMode: newMode });
+        saveToMain({ rightPanelMode: newMode });
+      },
     }),
     {
       name: 'claude-code-orchestra-ui',
@@ -353,6 +374,7 @@ export const useUIStore = create<UIState>()(
         terminalFont: state.terminalFont,
         sharedContext: state.sharedContext,
         repaintSettings: state.repaintSettings,
+        rightPanelMode: state.rightPanelMode,
       }),
       onRehydrateStorage: () => (state) => {
         if (state && !isElectron()) {

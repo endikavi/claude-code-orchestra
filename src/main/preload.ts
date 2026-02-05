@@ -45,6 +45,8 @@ import type {
   GitStatus,
   SubagentInstance,
   TrackedTask,
+  TrackedTeam,
+  TrackedPlan,
   ProxyConfig,
   AllowedPort,
   RalphTask,
@@ -941,6 +943,60 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // Team operations (Claude Code Teammate tool tracking)
+  team: {
+    getAll: (): Promise<TrackedTeam[]> => ipcRenderer.invoke(IPC_CHANNELS.TEAM_GET_ALL),
+
+    getByName: (name: string): Promise<TrackedTeam | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TEAM_GET_BY_NAME, name),
+
+    // Event listeners
+    onCreated: (callback: (team: TrackedTeam) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, team: TrackedTeam) => callback(team);
+      ipcRenderer.on(IPC_CHANNELS.TEAM_CREATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TEAM_CREATED, listener);
+    },
+
+    onUpdated: (callback: (team: TrackedTeam) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, team: TrackedTeam) => callback(team);
+      ipcRenderer.on(IPC_CHANNELS.TEAM_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TEAM_UPDATED, listener);
+    },
+
+    onDeleted: (callback: (teamName: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, teamName: string) => callback(teamName);
+      ipcRenderer.on(IPC_CHANNELS.TEAM_DELETED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TEAM_DELETED, listener);
+    },
+  },
+
+  // Plan operations (Claude Code plan files tracking)
+  plan: {
+    getAll: (): Promise<TrackedPlan[]> => ipcRenderer.invoke(IPC_CHANNELS.PLAN_GET_ALL),
+
+    getByName: (name: string): Promise<TrackedPlan | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PLAN_GET_BY_NAME, name),
+
+    // Event listeners
+    onCreated: (callback: (plan: TrackedPlan) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, plan: TrackedPlan) => callback(plan);
+      ipcRenderer.on(IPC_CHANNELS.PLAN_CREATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.PLAN_CREATED, listener);
+    },
+
+    onUpdated: (callback: (plan: TrackedPlan) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, plan: TrackedPlan) => callback(plan);
+      ipcRenderer.on(IPC_CHANNELS.PLAN_UPDATED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.PLAN_UPDATED, listener);
+    },
+
+    onDeleted: (callback: (planName: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, planName: string) => callback(planName);
+      ipcRenderer.on(IPC_CHANNELS.PLAN_DELETED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.PLAN_DELETED, listener);
+    },
+  },
+
   // Proxy operations (web preview tunneling)
   proxy: {
     getConfig: (): Promise<{ success: boolean; data?: ProxyConfig; error?: string }> =>
@@ -1277,6 +1333,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     stopAll: (projectId: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_STOP_ALL, projectId),
+
+    getPrompt: (taskId: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RALPH_TASK_GET_PROMPT, taskId),
 
     // Event listeners
     onCreated: (callback: (task: RalphTask) => void): (() => void) => {
@@ -2009,6 +2068,7 @@ declare global {
         respondToHelp: (taskId: string, response: string) => Promise<RalphTask | null>;
         processAll: (projectId: string) => Promise<boolean>;
         stopAll: (projectId: string) => Promise<boolean>;
+        getPrompt: (taskId: string) => Promise<string | null>;
         onCreated: (callback: (task: RalphTask) => void) => () => void;
         onUpdated: (callback: (task: RalphTask) => void) => () => void;
         onDeleted: (callback: (taskId: string) => void) => () => void;
@@ -2088,6 +2148,20 @@ declare global {
         onIndexError: (callback: (projectId: string, error: string) => void) => () => void;
         onModelProgress: (callback: (progress: ModelDownloadProgress) => void) => () => void;
         onModelStatusChange: (callback: (modelId: string, state: ModelState) => void) => () => void;
+      };
+      team: {
+        getAll: () => Promise<TrackedTeam[]>;
+        getByName: (name: string) => Promise<TrackedTeam | null>;
+        onCreated: (callback: (team: TrackedTeam) => void) => () => void;
+        onUpdated: (callback: (team: TrackedTeam) => void) => () => void;
+        onDeleted: (callback: (teamName: string) => void) => () => void;
+      };
+      plan: {
+        getAll: () => Promise<TrackedPlan[]>;
+        getByName: (name: string) => Promise<TrackedPlan | null>;
+        onCreated: (callback: (plan: TrackedPlan) => void) => () => void;
+        onUpdated: (callback: (plan: TrackedPlan) => void) => () => void;
+        onDeleted: (callback: (planName: string) => void) => () => void;
       };
     };
   }

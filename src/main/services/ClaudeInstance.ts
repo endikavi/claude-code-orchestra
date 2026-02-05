@@ -27,6 +27,7 @@ import type {
   TaskListEvent,
   TrackedTask,
 } from '@shared/types/tasks';
+import type { TeamSpawnEvent, TeamMessageEvent } from '@shared/types/teams';
 import type { PooledTerminal } from '@shared/types/pool';
 import { randomUUID } from 'crypto';
 
@@ -533,6 +534,15 @@ export class ClaudeInstance extends EventEmitter {
       this.emit('task:list', { instanceId: this.id, tasks });
     });
 
+    // Team tracking (Teammate/SendMessage tools)
+    this.parser.on('team_spawn', (data: TeamSpawnEvent) => {
+      this.emit('team:spawn_detected', { ...data, instanceId: this.id });
+    });
+
+    this.parser.on('team_message', (data: TeamMessageEvent) => {
+      this.emit('team:message_detected', { ...data, instanceId: this.id });
+    });
+
     // Auto-publish context based on tool usage
     this.parser.on('context_auto_publish', (data: ContextAutoPublishEvent) => {
       const contextStore = SharedContextStore.getInstance();
@@ -1032,6 +1042,8 @@ export class ClaudeInstance extends EventEmitter {
         CLAUDE_CODE_ENABLE_TASKS: 'true',
         // Enable reading CLAUDE.md from additional directories (--add-dir)
         CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+        // Enable experimental agent teams (Teammate tool with spawnTeam)
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
         // Dashboard integration environment variables
         // These are used by hook scripts to communicate with the dashboard
         CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
@@ -1206,6 +1218,8 @@ export class ClaudeInstance extends EventEmitter {
       CLAUDE_DASHBOARD_API_URL: apiUrl,
       // Enable reading CLAUDE.md from additional directories (--add-dir)
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+      // Enable experimental agent teams (Teammate tool with spawnTeam)
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
     };
 
     if (this.enableMcp && this.mcpToken) {

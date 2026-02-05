@@ -26,6 +26,11 @@ jobs:
             build-cmd: npm run electron:build:win
             electron-cache: ~/AppData/Local/electron/Cache
             electron-builder-cache: ~/AppData/Local/electron-builder/Cache
+          - os: macos-latest
+            platform: mac
+            build-cmd: npm run electron:build:mac
+            electron-cache: ~/Library/Caches/electron
+            electron-builder-cache: ~/Library/Caches/electron-builder
 
     steps:
       - name: Checkout repository
@@ -62,6 +67,7 @@ jobs:
           name: release-${{ matrix.platform }}
           path: |
             release/*.exe
+            release/*.dmg
             release/*.AppImage
             release/*.deb
           if-no-files-found: error
@@ -87,6 +93,7 @@ jobs:
         with:
           files: |
             artifacts/release-windows/*.exe
+            artifacts/release-mac/*.dmg
             artifacts/release-linux/*.AppImage
             artifacts/release-linux/*.deb
           generate_release_notes: true
