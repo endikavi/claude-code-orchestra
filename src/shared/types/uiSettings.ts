@@ -43,4 +43,10 @@ export interface UISettings {
   sharedContext: SharedContextSettings;
   repaintSettings: RepaintSettings;
   rightPanelMode: RightPanelMode;
+
+  /**
+   * When enabled, terminal rendering/resize logic uses tmux-safe defaults.
+   * This should be enabled when the backend PTY is running a tmux session.
+   */
+  tmuxMode: boolean;
 }

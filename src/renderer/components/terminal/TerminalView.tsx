@@ -11,6 +11,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { ContextMenu } from '../common/ContextMenu';
 import { sharedResizeObserver } from '../../utils/sharedResizeObserver';
 import { getTerminalFontFamily } from '../../utils/terminalFonts';
+import { getXtermTmuxCompatibleOptions } from '../../utils/xtermOptions';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -183,6 +184,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
   const theme = useUIStore((state) => state.theme);
   const terminalFont = useUIStore((state) => state.terminalFont);
   const repaintSettings = useUIStore((state) => state.repaintSettings);
+  const tmuxMode = useUIStore((state) => state.tmuxMode);
 
   const output = getInstanceOutput(instanceId);
 
@@ -273,6 +275,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     const currentHandleSendInput = handleSendInput;
     const currentUpdateTitle = updateTerminalTitle;
     const currentRemoteInstance = remoteInstance;
+    const currentTmuxMode = tmuxMode;
 
     // Wait for container to have dimensions before initializing terminal
     // This prevents xterm.js "dimensions" errors
@@ -293,6 +296,8 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
       // Clear container to avoid residual content
       container.innerHTML = '';
 
+      const tmuxOptions = getXtermTmuxCompatibleOptions({ isTmuxSession: currentTmuxMode });
+
       const terminal = new Terminal({
         theme: currentTheme === 'dark' ? darkTerminalTheme : lightTerminalTheme,
         fontFamily: getTerminalFontFamily(currentTerminalFont),
@@ -300,7 +305,12 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
         lineHeight: 1,
         cursorBlink: true,
         cursorStyle: 'bar',
-        scrollback: 5000, // Reduced from 10000 for better memory usage
+        // tmux compatibility:
+        // - convertEol/windowsMode can cause corruption during redraws/splits when tmux is behind the PTY
+        // - tmux has its own scrollback/history; duplicating it in xterm is usually undesirable
+        convertEol: tmuxOptions.convertEol,
+        windowsMode: tmuxOptions.windowsMode,
+        scrollback: tmuxOptions.scrollback,
         allowProposedApi: true,
         scrollOnUserInput: false, // Prevent auto-scroll on input to reduce flicker
       });
@@ -459,11 +469,29 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
 
   // Handle resize using shared ResizeObserver singleton
   useEffect(() => {
+    // For tmux-backed sessions, avoid resize storms (SIGWINCH + redraw) by:
+    // - Debouncing resizes (300-500ms)
+    // - Ignoring tiny changes (<5px)
+    const DEBOUNCE_MS = tmuxMode ? 350 : 0;
+    const IGNORE_PX = tmuxMode ? 5 : 0;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastSize: { w: number; h: number } | null = null;
+
+    const scheduleFit = () => {
+      if (DEBOUNCE_MS > 0) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          debounceTimer = null;
+          requestAnimationFrame(() => safeFit());
+        }, DEBOUNCE_MS);
+      } else {
+        requestAnimationFrame(() => safeFit());
+      }
+    };
+
     const handleResize = () => {
-      // Use requestAnimationFrame to batch resize operations
-      requestAnimationFrame(() => {
-        safeFit();
-      });
+      scheduleFit();
     };
 
     window.addEventListener('resize', handleResize);
@@ -471,16 +499,29 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     // Use shared ResizeObserver for better performance with multiple terminals
     let unobserve: (() => void) | undefined;
     if (terminalRef.current) {
-      unobserve = sharedResizeObserver.observe(terminalRef.current, () => {
-        safeFit();
+      unobserve = sharedResizeObserver.observe(terminalRef.current, (entry) => {
+        const { width, height } = entry.contentRect;
+
+        if (IGNORE_PX > 0 && lastSize) {
+          if (
+            Math.abs(width - lastSize.w) < IGNORE_PX &&
+            Math.abs(height - lastSize.h) < IGNORE_PX
+          ) {
+            return;
+          }
+        }
+
+        lastSize = { w: width, h: height };
+        scheduleFit();
       });
     }
 
     return () => {
       window.removeEventListener('resize', handleResize);
       unobserve?.();
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, []);
+  }, [tmuxMode]);
 
   // Subscribe to raw output with smart scroll and flicker suppression
   // Claude CLI sends ANSI escape sequences that move cursor to top (CSI H, CSI 1;1H)

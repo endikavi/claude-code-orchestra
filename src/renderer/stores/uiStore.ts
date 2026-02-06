@@ -55,6 +55,7 @@ interface UIState extends UISettings {
 
   // Terminal settings
   setTerminalFont: (font: TerminalFont) => void;
+  setTmuxMode: (enabled: boolean) => void;
 
   // Shared context settings
   sharedContext: SharedContextSettings;
@@ -135,6 +136,7 @@ export const useUIStore = create<UIState>()(
       sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
       repaintSettings: DEFAULT_REPAINT_SETTINGS,
       rightPanelMode: 'tasks' as RightPanelMode,
+      tmuxMode: false,
       sidebarMobileOpen: false,
       showProjectModal: false,
       showInstanceModal: false,
@@ -162,6 +164,7 @@ export const useUIStore = create<UIState>()(
               sharedContext: settings.sharedContext || DEFAULT_SHARED_CONTEXT_SETTINGS,
               repaintSettings: settings.repaintSettings || DEFAULT_REPAINT_SETTINGS,
               rightPanelMode: settings.rightPanelMode || 'tasks',
+              tmuxMode: settings.tmuxMode ?? false,
               _hasHydrated: true,
             });
             // Apply theme and language after loading
@@ -331,6 +334,11 @@ export const useUIStore = create<UIState>()(
         saveToMain({ terminalFont: font });
       },
 
+      setTmuxMode: (enabled) => {
+        set({ tmuxMode: enabled });
+        saveToMain({ tmuxMode: enabled });
+      },
+
       // Shared context settings
       setSharedContext: (settings) => {
         const current = get().sharedContext;
@@ -375,6 +383,7 @@ export const useUIStore = create<UIState>()(
         sharedContext: state.sharedContext,
         repaintSettings: state.repaintSettings,
         rightPanelMode: state.rightPanelMode,
+        tmuxMode: state.tmuxMode,
       }),
       onRehydrateStorage: () => (state) => {
         if (state && !isElectron()) {

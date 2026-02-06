@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS: UISettings = {
   sharedContext: DEFAULT_SHARED_CONTEXT_SETTINGS,
   repaintSettings: DEFAULT_REPAINT_SETTINGS,
   rightPanelMode: 'tasks',
+  tmuxMode: false,
 };
 
 export class UISettingsStore {

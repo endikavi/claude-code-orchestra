@@ -52,7 +52,16 @@ const TERMINAL_FONTS: { value: TerminalFont; label: string; fontFamily: string }
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { t } = useTranslation();
-  const { language, setLanguage, theme, setTheme, terminalFont, setTerminalFont } = useUIStore();
+  const {
+    language,
+    setLanguage,
+    theme,
+    setTheme,
+    terminalFont,
+    setTerminalFont,
+    tmuxMode,
+    setTmuxMode,
+  } = useUIStore();
   const isWebVersion = (window as unknown as { __WEB_VERSION__?: boolean }).__WEB_VERSION__;
 
   // Define tabs - Security, Cluster, and Proxy only visible in desktop version
@@ -239,6 +248,36 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     'Built-in font is always available. Other fonts require system installation.'
                   )}
                 </p>
+              </div>
+
+              {/* Tmux Mode Toggle */}
+              <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-neutral-800/50 rounded border border-gray-200 dark:border-neutral-600">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-800 dark:text-white">
+                    {t('settings.tmuxMode', 'tmux mode')}
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {t(
+                      'settings.tmuxModeDescription',
+                      'Use tmux-safe terminal options and debounce resize'
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={tmuxMode}
+                  onClick={() => setTmuxMode(!tmuxMode)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 ${
+                    tmuxMode ? 'bg-sky-500' : 'bg-gray-200 dark:bg-neutral-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      tmuxMode ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               {/* Info */}

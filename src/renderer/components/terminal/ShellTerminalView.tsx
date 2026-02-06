@@ -8,6 +8,7 @@ import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ContextMenu } from '../common/ContextMenu';
 import { getTerminalFontFamily } from '../../utils/terminalFonts';
+import { getXtermTmuxCompatibleOptions } from '../../utils/xtermOptions';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -79,6 +80,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   const { sendShellInput, getShellOutput } = useInstanceStore();
   const theme = useUIStore((state) => state.theme);
   const terminalFont = useUIStore((state) => state.terminalFont);
+  const tmuxMode = useUIStore((state) => state.tmuxMode);
 
   const output = getShellOutput(shellId);
 
@@ -143,6 +145,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
     const currentTerminalFont = terminalFont;
     const currentOutput = output;
     const currentSendShellInput = sendShellInput;
+    const currentTmuxMode = tmuxMode;
 
     // Wait for container to have dimensions before initializing terminal
     const container = terminalRef.current;
@@ -162,6 +165,8 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
       // Clear container to avoid residual content
       container.innerHTML = '';
 
+      const tmuxOptions = getXtermTmuxCompatibleOptions({ isTmuxSession: currentTmuxMode });
+
       const terminal = new Terminal({
         theme: currentTheme === 'dark' ? darkTerminalTheme : lightTerminalTheme,
         fontFamily: getTerminalFontFamily(currentTerminalFont),
@@ -169,7 +174,10 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
         lineHeight: 1,
         cursorBlink: true,
         cursorStyle: 'bar',
-        scrollback: 5000, // Reduced from 10000 for better memory usage
+        // tmux compatibility (see TerminalView.tsx for rationale)
+        convertEol: tmuxOptions.convertEol,
+        windowsMode: tmuxOptions.windowsMode,
+        scrollback: tmuxOptions.scrollback,
         allowProposedApi: true,
         scrollOnUserInput: false, // Prevent auto-scroll on input to reduce flicker
       });
