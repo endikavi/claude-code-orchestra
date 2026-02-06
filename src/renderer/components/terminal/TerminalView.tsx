@@ -184,13 +184,16 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
   const theme = useUIStore((state) => state.theme);
   const terminalFont = useUIStore((state) => state.terminalFont);
   const repaintSettings = useUIStore((state) => state.repaintSettings);
-  const tmuxMode = useUIStore((state) => state.tmuxMode);
+  const globalTmuxMode = useUIStore((state) => state.tmuxMode);
 
   const output = getInstanceOutput(instanceId);
 
   // Get instance status for loading state and auto-focus
   const instance = instances.find((i) => i.id === instanceId);
   const status = instance?.status ?? 'starting';
+
+  // Per-instance tmux flag takes priority, fall back to global UI setting
+  const tmuxMode = instance?.isTmuxSession ?? globalTmuxMode;
   const isReady = status === 'running' || status === 'waiting_input';
 
   // Check if instance is remote (belongs to another node)

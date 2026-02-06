@@ -1,0 +1,26 @@
+We need to implement: if tmux is available on the machine where a Claude instance is spawned AND the user enabled the UI setting tmuxMode, then NEW Claude instances should run inside tmux.
+
+Repo: claude-dashboard.
+
+Requirements:
+1) Add a backend check for tmux availability. Prefer a cached check at startup or per spawn. Implement cross-platform:
+- On linux/mac: detect `tmux` in PATH (e.g. `which tmux` or spawnSync).
+- On Windows: check for `tmux` in PATH. If not found, treat as unavailable (we can support WSL later but do not do now).
+
+2) When starting a ClaudeInstance in interactive/terminal mode (NOT stream-json or print), if uiSettings.tmuxMode is true and tmux is available, start Claude inside tmux.
+- Use a stable session name per instance, e.g. `orchestra-<instanceId>`.
+- Use `tmux new-session -A -s <session> <claude command...>` so reconnect works.
+- Ensure env vars currently passed to Claude are still present (dashboard vars, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS etc.).
+
+3) Expose per-instance metadata to renderer (e.g. instance.isTmuxSession or instance.terminalBackend) so the renderer can apply tmux-safe xterm options only when needed, instead of global.
+- If too big, at least set a field in the shared instance type and set it.
+
+4) Update TerminalView to prefer per-instance isTmuxSession if available, fallback to global ui tmuxMode.
+
+5) Run `npm run typecheck`.
+
+Output:
+- files changed
+- explanation of behavior
+
+Keep changes minimal and do not refactor broadly.

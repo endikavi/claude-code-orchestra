@@ -8,6 +8,7 @@ import { getInstanceBroadcaster, type InstanceEventType } from './InstanceBroadc
 import { getClusterPermissionValidator } from './ClusterPermissionValidator';
 import { getTerminalPool } from './TerminalPool';
 import { getTerminalDimensionManager } from './TerminalDimensionManager';
+import { UISettingsStore } from './UISettingsStore';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ShellInstance as ShellInstanceType,
@@ -190,6 +191,9 @@ export class ProcessManager extends EventEmitter {
       ? (config.skipPermissions ?? project.skipPermissions)
       : false;
 
+    // Read tmuxMode from UI settings (persisted per-user)
+    const uiSettings = UISettingsStore.getInstance().getSettings();
+
     const instance = new ClaudeInstance({
       projectId: config.projectId,
       projectPath: project.path,
@@ -209,6 +213,7 @@ export class ProcessManager extends EventEmitter {
       isHidden: config.isHidden,
       ralphTaskId: config.ralphTaskId,
       usePermissionPromptTool: config.usePermissionPromptTool, // Enable MCP permission prompt for structured view
+      tmuxMode: uiSettings.tmuxMode, // Spawn inside tmux if user enabled the setting
     });
 
     this.setupInstanceListeners(instance);
@@ -264,6 +269,8 @@ export class ProcessManager extends EventEmitter {
       }
     }
 
+    const resumeUiSettings = UISettingsStore.getInstance().getSettings();
+
     const instance = new ClaudeInstance({
       projectId: config.projectId,
       projectPath: project.path,
@@ -277,6 +284,7 @@ export class ProcessManager extends EventEmitter {
       agents: project.agents, // Custom agents from project settings
       additionalDirs: project.additionalDirs, // Additional directories from project
       useAgentsFlag: project.agentDeliveryMethod === 'args', // Use --agents flag if project configured
+      tmuxMode: resumeUiSettings.tmuxMode, // Spawn inside tmux if user enabled the setting
     });
 
     this.setupInstanceListeners(instance);

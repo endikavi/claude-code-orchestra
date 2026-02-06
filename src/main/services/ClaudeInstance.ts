@@ -13,6 +13,7 @@ import { getTaskTracker } from './TaskTracker';
 import { SharedContextStore } from './SharedContextStore';
 import { getUserDataPath } from '../utils/paths';
 import { isLocalProject } from '../utils/claudePaths';
+import { isTmuxAvailable, getTmuxPath, getTmuxSessionName } from '../utils/tmux';
 import type {
   ClaudeInstance as ClaudeInstanceType,
   ClaudeModel,
@@ -346,6 +347,7 @@ export interface ClaudeInstanceConfig {
   additionalDirs?: string[]; // Additional working directories for --add-dir flag
   useAgentsFlag?: boolean; // Use --agents flag instead of installing as skills
   usePermissionPromptTool?: boolean; // Use --permission-prompt-tool for structured view permission handling
+  tmuxMode?: boolean; // When true and tmux is available, spawn Claude inside a tmux session
 }
 
 export class ClaudeInstance extends EventEmitter {
@@ -367,6 +369,7 @@ export class ClaudeInstance extends EventEmitter {
   public readonly additionalDirs?: string[]; // Additional working directories
   public readonly useAgentsFlag: boolean; // Use --agents flag instead of skills
   public readonly usePermissionPromptTool: boolean; // Use MCP tool for permission prompts
+  public readonly isTmuxSession: boolean; // True when this instance runs inside tmux
 
   private ptyProcess: pty.IPty | null = null;
   private mcpToken?: string; // Token for MCP authentication
@@ -408,6 +411,10 @@ export class ClaudeInstance extends EventEmitter {
     this.additionalDirs = config.additionalDirs;
     this.useAgentsFlag = config.useAgentsFlag ?? false;
     this.usePermissionPromptTool = config.usePermissionPromptTool ?? false;
+    // Only spawn inside tmux for interactive/terminal mode (not stream-json or print)
+    // and only when the user enabled tmuxMode AND tmux is actually available
+    this.isTmuxSession =
+      (config.tmuxMode ?? false) && config.mode === 'interactive' && isTmuxAvailable();
     this.createdAt = Date.now();
 
     this.parser = new StreamJSONParser();
@@ -1027,6 +1034,18 @@ export class ClaudeInstance extends EventEmitter {
       shellArgs = args;
     }
 
+    // Wrap in tmux if this instance should run inside a tmux session
+    // tmux new-session -A -s <name> <command> will create or attach to the session
+    if (this.isTmuxSession) {
+      const tmuxPath = getTmuxPath();
+      const sessionName = getTmuxSessionName(this.id);
+      // Build the full claude command as a single string for tmux to execute
+      const claudeCmd = [shell, ...shellArgs].map((a) => `"${a}"`).join(' ');
+      shell = tmuxPath;
+      shellArgs = ['new-session', '-A', '-s', sessionName, claudeCmd];
+      console.log(`[ClaudeInstance] Spawning inside tmux session: ${sessionName}`);
+    }
+
     try {
       // Use full process.env to ensure PATH includes Node.js and other required tools
       // The claude.cmd script needs node to be available
@@ -1059,13 +1078,15 @@ export class ClaudeInstance extends EventEmitter {
         envVars.ORCHESTRA_MCP_URL = `${apiUrl}/mcp`;
       }
 
-      // Use a very large terminal width to prevent node-pty from wrapping long lines
-      // This is critical for stream-json mode where JSON output must not be corrupted
-      // by line wrapping that can insert extra characters
+      // Terminal size: tmux manages its own terminal size, so use reasonable defaults.
+      // For non-tmux stream-json mode, use very large width to prevent line wrapping corruption.
+      const cols = this.isTmuxSession ? 120 : 32767;
+      const rows = 30;
+
       this.ptyProcess = pty.spawn(shell, shellArgs, {
         name: 'xterm-256color',
-        cols: 32767, // Max value to prevent line wrapping corruption in JSON output
-        rows: 30,
+        cols,
+        rows,
         cwd: this.projectPath,
         env: envVars,
       });
@@ -2036,6 +2057,7 @@ export class ClaudeInstance extends EventEmitter {
       error: this._error,
       isHidden: this.isHidden,
       ralphTaskId: this.ralphTaskId,
+      isTmuxSession: this.isTmuxSession || undefined,
     };
   }
 }

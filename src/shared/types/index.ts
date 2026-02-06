@@ -128,6 +128,7 @@ export interface ClaudeInstance {
   ralphTaskId?: string; // Associated Ralph task ID if this is a Ralph loop instance
   viewMode?: InstanceViewMode; // View mode for this instance: 'terminal' | 'structured'
   sessionId?: string; // Session ID from Claude CLI, used for resuming conversations
+  isTmuxSession?: boolean; // True when this instance is running inside a tmux session
 }
 
 // Stream JSON message types from Claude CLI
