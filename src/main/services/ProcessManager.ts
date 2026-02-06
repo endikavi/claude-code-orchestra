@@ -152,10 +152,15 @@ export class ProcessManager extends EventEmitter {
       throw new Error(`Project with id ${config.projectId} not found`);
     }
 
+    // Read tmuxMode from UI settings (persisted per-user)
+    const uiSettings = UISettingsStore.getInstance().getSettings();
+
     // SECURITY: Only use terminal pool for LOCAL requests
     // Remote/cluster requests MUST use direct spawn
+    // Also skip pool when tmuxMode is enabled: pooled terminals are pre-spawned shells
+    // that can't be wrapped in tmux retroactively — we need a fresh pty for tmux wrapping
     let pooledTerminal = undefined;
-    if (isLocal) {
+    if (isLocal && !uiSettings.tmuxMode) {
       try {
         pooledTerminal = getTerminalPool().acquire() ?? undefined;
       } catch {
@@ -190,9 +195,6 @@ export class ProcessManager extends EventEmitter {
     const effectiveSkipPermissions = project.skipPermissions
       ? (config.skipPermissions ?? project.skipPermissions)
       : false;
-
-    // Read tmuxMode from UI settings (persisted per-user)
-    const uiSettings = UISettingsStore.getInstance().getSettings();
 
     const instance = new ClaudeInstance({
       projectId: config.projectId,
