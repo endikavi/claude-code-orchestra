@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { BrowserWindow } from 'electron';
-import type { GitStatus } from '@shared/types';
+import type { GitStatus, GitFileEntry } from '@shared/types';
 import { IPC_CHANNELS } from '../ipc/channels';
 
 const execFileAsync = promisify(execFile);
@@ -77,6 +77,18 @@ export class GitStatusManager {
    */
   getStatus(projectId: string): GitStatus | null {
     return this.statusCache.get(projectId) || null;
+  }
+
+  /**
+   * Get cached status by project directory path
+   */
+  getStatusByPath(directory: string): GitStatus | null {
+    for (const [, tracked] of this.trackedProjects) {
+      if (tracked.directory === directory) {
+        return this.statusCache.get(tracked.projectId) || null;
+      }
+    }
+    return null;
   }
 
   /**
@@ -204,7 +216,7 @@ export class GitStatusManager {
     const { branch, ahead, behind } = this.parseBranchInfo(branchInfo, statusOutput);
 
     // Parse status output
-    const { staged, unstaged, untracked } = this.parseStatusOutput(statusOutput);
+    const { staged, unstaged, untracked, files } = this.parseStatusOutput(statusOutput);
 
     // Parse diff stats
     const { linesAdded, linesRemoved } = this.parseDiffStats(diffStats);
@@ -235,6 +247,7 @@ export class GitStatusManager {
       lastCommitMessage,
       isRepo: true,
       lastChecked: now,
+      files,
     };
   }
 
@@ -290,10 +303,12 @@ export class GitStatusManager {
     staged: { added: number; modified: number; deleted: number };
     unstaged: { added: number; modified: number; deleted: number };
     untracked: number;
+    files: GitFileEntry[];
   } {
     const staged = { added: 0, modified: 0, deleted: 0 };
     const unstaged = { added: 0, modified: 0, deleted: 0 };
     let untracked = 0;
+    const files: GitFileEntry[] = [];
 
     const lines = output.split('\n').slice(1); // Skip first line (branch info)
 
@@ -302,6 +317,23 @@ export class GitStatusManager {
 
       const indexStatus = line[0];
       const workTreeStatus = line[1];
+      const filePath = line.substring(3);
+
+      // Build file entry
+      const entry: GitFileEntry = {
+        path: filePath,
+        indexStatus,
+        workTreeStatus,
+      };
+
+      // Handle renames: path contains " -> "
+      if (indexStatus === 'R' && filePath.includes(' -> ')) {
+        const parts = filePath.split(' -> ');
+        entry.oldPath = parts[0];
+        entry.path = parts[1];
+      }
+
+      files.push(entry);
 
       // Index (staged) status
       if (indexStatus === 'A') staged.added++;
@@ -323,7 +355,7 @@ export class GitStatusManager {
       }
     }
 
-    return { staged, unstaged, untracked };
+    return { staged, unstaged, untracked, files };
   }
 
   /**

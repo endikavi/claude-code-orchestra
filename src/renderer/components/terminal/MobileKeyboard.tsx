@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
+import { KeyboardIcon, CloseIcon, ArrowUpIcon, ArrowDownIcon } from '@renderer/components/icons';
 
 interface MobileKeyboardProps {
   instanceId: string;
@@ -9,8 +11,18 @@ interface MobileKeyboardProps {
 
 export function MobileKeyboard({ instanceId }: MobileKeyboardProps) {
   const { t } = useTranslation();
-  const { sendInput } = useInstanceStore();
-  const { globalInstances, sendRemoteInput, isConnected: clusterConnected } = useClusterStore();
+  const sendInput = useInstanceStore((s) => s.sendInput);
+  const {
+    globalInstances,
+    sendRemoteInput,
+    isConnected: clusterConnected,
+  } = useClusterStore(
+    useShallow((s) => ({
+      globalInstances: s.globalInstances,
+      sendRemoteInput: s.sendRemoteInput,
+      isConnected: s.isConnected,
+    }))
+  );
   const [isOpen, setIsOpen] = useState(false);
 
   // Check if instance is remote (belongs to another node)
@@ -73,7 +85,7 @@ export function MobileKeyboard({ instanceId }: MobileKeyboardProps) {
       <div className="grid grid-cols-3 gap-2">
         {/* First row: Tab, Up, Permission toggle (y/n) */}
         <KeyButton onClick={() => handleKey(KEYS.TAB)} label="Tab" />
-        <KeyButton onClick={() => handleKey(KEYS.UP)} label={<ArrowUpIcon />} />
+        <KeyButton onClick={() => handleKey(KEYS.UP)} label={<ArrowUpIcon className="w-5 h-5" />} />
         <div className="flex gap-1">
           <KeyButton
             onClick={() => handleKey(KEYS.YES)}
@@ -91,7 +103,10 @@ export function MobileKeyboard({ instanceId }: MobileKeyboardProps) {
 
         {/* Second row: Space, Down, Enter */}
         <KeyButton onClick={() => handleKey(KEYS.SPACE)} label="Space" />
-        <KeyButton onClick={() => handleKey(KEYS.DOWN)} label={<ArrowDownIcon />} />
+        <KeyButton
+          onClick={() => handleKey(KEYS.DOWN)}
+          label={<ArrowDownIcon className="w-5 h-5" />}
+        />
         <KeyButton
           onClick={() => handleKey(KEYS.ENTER)}
           label="Enter"
@@ -127,48 +142,5 @@ function KeyButton({ onClick, label, className = '', title }: KeyButtonProps) {
     >
       {label}
     </button>
-  );
-}
-
-function KeyboardIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 19V5M5 12l7-7 7 7"
-      />
-      <rect x="2" y="6" width="20" height="12" rx="2" strokeWidth={2} />
-      <path
-        strokeLinecap="round"
-        strokeWidth={2}
-        d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"
-      />
-    </svg>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function ArrowUpIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-    </svg>
-  );
-}
-
-function ArrowDownIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-    </svg>
   );
 }

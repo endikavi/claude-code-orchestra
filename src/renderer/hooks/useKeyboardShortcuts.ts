@@ -1,21 +1,46 @@
 import { useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useProjectStore } from '../stores/projectStore';
 import { useInstanceStore } from '../stores/instanceStore';
 import { useUIStore } from '../stores/uiStore';
 
 export function useKeyboardShortcuts() {
-  const { selectedProjectId } = useProjectStore();
-  const { instances, selectedInstanceId, selectInstance, killInstance } = useInstanceStore();
-  const { setShowProjectModal, setShowInstanceModal } = useUIStore();
+  const { selectedProjectId } = useProjectStore(
+    useShallow((s) => ({
+      selectedProjectId: s.selectedProjectId,
+    }))
+  );
+  const { instances, selectedInstanceId, selectInstance, killInstance } = useInstanceStore(
+    useShallow((s) => ({
+      instances: s.instances,
+      selectedInstanceId: s.selectedInstanceId,
+      selectInstance: s.selectInstance,
+      killInstance: s.killInstance,
+    }))
+  );
+  const { setShowProjectModal, setShowInstanceModal, setShowQuickOpen } = useUIStore(
+    useShallow((s) => ({
+      setShowProjectModal: s.setShowProjectModal,
+      setShowInstanceModal: s.setShowInstanceModal,
+      setShowQuickOpen: s.setShowQuickOpen,
+    }))
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      const isMod = e.ctrlKey || e.metaKey;
+
+      // Ctrl+P: Quick Open (works even in inputs)
+      if (isMod && e.key === 'p') {
+        e.preventDefault();
+        setShowQuickOpen(true);
         return;
       }
 
-      const isMod = e.ctrlKey || e.metaKey;
+      // Ignore if typing in an input (for other shortcuts)
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
 
       // Ctrl+N: New project
       if (isMod && e.key === 'n') {
@@ -66,6 +91,7 @@ export function useKeyboardShortcuts() {
     instances,
     setShowProjectModal,
     setShowInstanceModal,
+    setShowQuickOpen,
     killInstance,
     selectInstance,
   ]);

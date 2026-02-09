@@ -1123,6 +1123,317 @@ Task: "Add comprehensive authentication to the API"
     }
   }
 
+  // ==================== Global Sound Hooks ====================
+
+  /**
+   * Get the sounds directory path
+   */
+  private getSoundsDir(): string {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+    return path.join(homeDir, '.claude', 'sounds');
+  }
+
+  /**
+   * Get the global settings path
+   */
+  private getGlobalSettingsPath(): string {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+    return path.join(homeDir, '.claude', 'settings.json');
+  }
+
+  /**
+   * Get the platform-specific play command for a WAV file
+   */
+  private getPlayCommand(wavPath: string): string {
+    if (process.platform === 'darwin') {
+      return `afplay "${wavPath}"`;
+    } else if (process.platform === 'win32') {
+      return `powershell -c "(New-Object Media.SoundPlayer '${wavPath}').PlaySync()"`;
+    } else {
+      // Linux: try paplay (PulseAudio) with fallback to aplay (ALSA)
+      return `paplay "${wavPath}" 2>/dev/null || aplay "${wavPath}" 2>/dev/null || true`;
+    }
+  }
+
+  /**
+   * Generate a WAV file buffer with sinusoidal tones
+   * Format: PCM 16-bit mono, 44100Hz
+   */
+  private generateWavBuffer(
+    tones: Array<{ frequency: number; duration: number; fadeIn?: number; fadeOut?: number }>
+  ): Buffer {
+    const sampleRate = 44100;
+    const bitsPerSample = 16;
+    const numChannels = 1;
+
+    // Calculate total samples
+    let totalSamples = 0;
+    for (const tone of tones) {
+      totalSamples += Math.floor(sampleRate * tone.duration);
+    }
+
+    const dataSize = totalSamples * numChannels * (bitsPerSample / 8);
+    const headerSize = 44;
+    const buffer = Buffer.alloc(headerSize + dataSize);
+
+    // WAV header
+    buffer.write('RIFF', 0);
+    buffer.writeUInt32LE(36 + dataSize, 4);
+    buffer.write('WAVE', 8);
+    buffer.write('fmt ', 12);
+    buffer.writeUInt32LE(16, 16); // Subchunk1Size (PCM)
+    buffer.writeUInt16LE(1, 20); // AudioFormat (PCM)
+    buffer.writeUInt16LE(numChannels, 22);
+    buffer.writeUInt32LE(sampleRate, 24);
+    buffer.writeUInt32LE(sampleRate * numChannels * (bitsPerSample / 8), 28); // ByteRate
+    buffer.writeUInt16LE(numChannels * (bitsPerSample / 8), 32); // BlockAlign
+    buffer.writeUInt16LE(bitsPerSample, 34);
+    buffer.write('data', 36);
+    buffer.writeUInt32LE(dataSize, 40);
+
+    // Generate audio samples
+    let offset = headerSize;
+    const amplitude = 0.3; // Keep volume moderate
+
+    for (const tone of tones) {
+      const toneSamples = Math.floor(sampleRate * tone.duration);
+      const fadeInSamples = Math.floor(sampleRate * (tone.fadeIn || 0.01));
+      const fadeOutSamples = Math.floor(sampleRate * (tone.fadeOut || 0.01));
+
+      for (let i = 0; i < toneSamples; i++) {
+        let sample = Math.sin((2 * Math.PI * tone.frequency * i) / sampleRate) * amplitude;
+
+        // Apply fade in
+        if (i < fadeInSamples) {
+          sample *= i / fadeInSamples;
+        }
+        // Apply fade out
+        if (i > toneSamples - fadeOutSamples) {
+          sample *= (toneSamples - i) / fadeOutSamples;
+        }
+
+        const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
+        buffer.writeInt16LE(intSample, offset);
+        offset += 2;
+      }
+    }
+
+    return buffer;
+  }
+
+  /**
+   * Generate all sound WAV files in ~/.claude/sounds/
+   */
+  private async generateSoundFiles(): Promise<void> {
+    const soundsDir = this.getSoundsDir();
+    await fs.promises.mkdir(soundsDir, { recursive: true });
+
+    // Session start: ascending tone (C5 -> E5)
+    const sessionStart = this.generateWavBuffer([
+      { frequency: 523.25, duration: 0.15, fadeIn: 0.01, fadeOut: 0.02 },
+      { frequency: 659.25, duration: 0.2, fadeIn: 0.02, fadeOut: 0.05 },
+    ]);
+
+    // Prompt submit: short chime (D5)
+    const promptSubmit = this.generateWavBuffer([
+      { frequency: 587.33, duration: 0.1, fadeIn: 0.01, fadeOut: 0.03 },
+    ]);
+
+    // Notification: attention pattern (D5, E5, G5)
+    const notification = this.generateWavBuffer([
+      { frequency: 587.33, duration: 0.1, fadeIn: 0.01, fadeOut: 0.02 },
+      { frequency: 659.25, duration: 0.1, fadeIn: 0.01, fadeOut: 0.02 },
+      { frequency: 783.99, duration: 0.15, fadeIn: 0.01, fadeOut: 0.05 },
+    ]);
+
+    // Stop: major chord (C5, E5, G5 simultaneous - approximated as sequence)
+    const stop = this.generateWavBuffer([
+      { frequency: 523.25, duration: 0.12, fadeIn: 0.01, fadeOut: 0.02 },
+      { frequency: 659.25, duration: 0.12, fadeIn: 0.01, fadeOut: 0.02 },
+      { frequency: 783.99, duration: 0.2, fadeIn: 0.01, fadeOut: 0.08 },
+    ]);
+
+    await Promise.all([
+      fs.promises.writeFile(path.join(soundsDir, 'session-start.wav'), sessionStart),
+      fs.promises.writeFile(path.join(soundsDir, 'prompt-submit.wav'), promptSubmit),
+      fs.promises.writeFile(path.join(soundsDir, 'notification.wav'), notification),
+      fs.promises.writeFile(path.join(soundsDir, 'stop.wav'), stop),
+    ]);
+
+    console.log(`[HookManager] Generated sound files in ${soundsDir}`);
+  }
+
+  /**
+   * Install global sound hooks in ~/.claude/settings.json
+   */
+  public async installGlobalSounds(): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Generate WAV files
+      await this.generateSoundFiles();
+
+      const soundsDir = this.getSoundsDir();
+      const settingsPath = this.getGlobalSettingsPath();
+
+      // Load existing settings
+      let settings: Record<string, unknown> = {};
+      try {
+        const content = await fs.promises.readFile(settingsPath, 'utf-8');
+        settings = JSON.parse(content);
+      } catch {
+        // File doesn't exist, start fresh
+      }
+
+      // Build hook entries for each event
+      const soundHooks: Record<
+        string,
+        Array<{ hooks: Array<{ type: string; command: string }> }>
+      > = {};
+      const soundEvents: Array<{ event: string; file: string }> = [
+        { event: 'SessionStart', file: 'session-start.wav' },
+        { event: 'UserPromptSubmit', file: 'prompt-submit.wav' },
+        { event: 'Notification', file: 'notification.wav' },
+        { event: 'Stop', file: 'stop.wav' },
+      ];
+
+      for (const { event, file } of soundEvents) {
+        const wavPath = path.join(soundsDir, file);
+        const command = this.getPlayCommand(wavPath);
+
+        // Get existing hooks for this event
+        const existingHooks =
+          (settings.hooks as Record<string, unknown[]> | undefined)?.[event] || [];
+
+        // Check if sound hook already exists
+        const hasSoundHook =
+          Array.isArray(existingHooks) &&
+          existingHooks.some((h: unknown) => {
+            const hook = h as { hooks?: Array<{ command?: string }> };
+            return hook.hooks?.some((inner) => inner.command?.includes('.claude/sounds/'));
+          });
+
+        if (!hasSoundHook) {
+          soundHooks[event] = [
+            ...(Array.isArray(existingHooks)
+              ? (existingHooks as Array<{ hooks: Array<{ type: string; command: string }> }>)
+              : []),
+            { hooks: [{ type: 'command', command }] },
+          ];
+        } else {
+          soundHooks[event] = existingHooks as Array<{
+            hooks: Array<{ type: string; command: string }>;
+          }>;
+        }
+      }
+
+      // Merge into settings
+      const existingHooksObj = (settings.hooks as Record<string, unknown>) || {};
+      settings.hooks = {
+        ...existingHooksObj,
+        ...soundHooks,
+      };
+
+      // Write settings
+      await fs.promises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+
+      console.log('[HookManager] Global sound hooks installed');
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[HookManager] Failed to install global sounds: ${errorMessage}`);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Uninstall global sound hooks from ~/.claude/settings.json
+   */
+  public async uninstallGlobalSounds(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const soundsDir = this.getSoundsDir();
+      const settingsPath = this.getGlobalSettingsPath();
+
+      // Remove sound files
+      try {
+        await fs.promises.rm(soundsDir, { recursive: true, force: true });
+      } catch {
+        // Directory might not exist
+      }
+
+      // Remove sound hooks from settings
+      try {
+        const content = await fs.promises.readFile(settingsPath, 'utf-8');
+        const settings = JSON.parse(content);
+
+        if (settings.hooks && typeof settings.hooks === 'object') {
+          const hookEvents = ['SessionStart', 'UserPromptSubmit', 'Notification', 'Stop'];
+
+          for (const event of hookEvents) {
+            const eventHooks = settings.hooks[event];
+            if (Array.isArray(eventHooks)) {
+              // Filter out sound hooks (those referencing .claude/sounds/)
+              settings.hooks[event] = eventHooks.filter(
+                (h: { hooks?: Array<{ command?: string }> }) =>
+                  !h.hooks?.some((inner) => inner.command?.includes('.claude/sounds/'))
+              );
+
+              // Remove event key if no hooks remain
+              if (settings.hooks[event].length === 0) {
+                delete settings.hooks[event];
+              }
+            }
+          }
+
+          // Remove hooks key entirely if empty
+          if (Object.keys(settings.hooks).length === 0) {
+            delete settings.hooks;
+          }
+        }
+
+        await fs.promises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+      } catch {
+        // Settings file might not exist
+      }
+
+      console.log('[HookManager] Global sound hooks uninstalled');
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[HookManager] Failed to uninstall global sounds: ${errorMessage}`);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Check if global sound hooks are installed
+   */
+  public async hasGlobalSoundsInstalled(): Promise<boolean> {
+    try {
+      const settingsPath = this.getGlobalSettingsPath();
+      const content = await fs.promises.readFile(settingsPath, 'utf-8');
+      const settings = JSON.parse(content);
+
+      if (!settings.hooks || typeof settings.hooks !== 'object') {
+        return false;
+      }
+
+      // Check if at least one sound hook exists
+      const hookEvents = ['SessionStart', 'UserPromptSubmit', 'Notification', 'Stop'];
+      for (const event of hookEvents) {
+        const eventHooks = settings.hooks[event];
+        if (Array.isArray(eventHooks)) {
+          const hasSoundHook = eventHooks.some((h: { hooks?: Array<{ command?: string }> }) =>
+            h.hooks?.some((inner) => inner.command?.includes('.claude/sounds/'))
+          );
+          if (hasSoundHook) return true;
+        }
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Destroy the hook manager
    */

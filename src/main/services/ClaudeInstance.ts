@@ -1551,8 +1551,16 @@ export class ClaudeInstance extends EventEmitter {
       //   `[ClaudeInstance] onData received ${data.length} bytes: ${preview.replace(/\n/g, '\\n')}`
       // );
 
-      // Emit raw data for terminal view
-      this.emit('rawOutput', data);
+      // Strip terminal query responses (DA1/DA2/DA3, CPR) that cause garbage
+      // text like [?1;2c[>0;276;0c when displayed or replayed
+      /* eslint-disable no-control-regex, no-useless-escape */
+      const cleanData = data.replace(/\x1b\[[\?>=]\d+(;\d+)*c|\x1b\[\d+(;\d+)*R/g, '');
+      /* eslint-enable no-control-regex, no-useless-escape */
+
+      // Emit raw data for terminal view (skip if only query responses)
+      if (cleanData) {
+        this.emit('rawOutput', cleanData);
+      }
 
       // Detect shell prompt after result message (means Claude CLI has exited)
       // This handles pooled terminals where the PTY doesn't exit when Claude finishes

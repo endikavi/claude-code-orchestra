@@ -1,15 +1,25 @@
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useConversationStore } from '../../stores/conversationStore';
+import { Spinner } from '../common/Spinner';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { BackIcon, PlayCircleIcon as PlayIcon, ToolIcon } from '@renderer/components/icons';
 import type { StreamMessage, ContentBlock, ConversationMessage } from '@shared/types';
 
 export function ConversationViewer() {
   const { t } = useTranslation();
   const { viewingConversation, viewingMessages, isLoadingViewer, closeConversationViewer } =
-    useConversationStore();
-  const { resumeConversation } = useInstanceStore();
-  const { setViewMode } = useUIStore();
+    useConversationStore(
+      useShallow((s) => ({
+        viewingConversation: s.viewingConversation,
+        viewingMessages: s.viewingMessages,
+        isLoadingViewer: s.isLoadingViewer,
+        closeConversationViewer: s.closeConversationViewer,
+      }))
+    );
+  const resumeConversation = useInstanceStore((s) => s.resumeConversation);
+  const setViewMode = useUIStore((s) => s.setViewMode);
 
   if (!viewingConversation) {
     return null;
@@ -84,7 +94,7 @@ export function ConversationViewer() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoadingViewer ? (
           <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
+            <Spinner size="lg" />
           </div>
         ) : viewingMessages.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -301,50 +311,4 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
   }
 
   return null;
-}
-
-function BackIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-  );
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
-}
-
-function ToolIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-    </svg>
-  );
 }

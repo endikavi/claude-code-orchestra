@@ -9,6 +9,7 @@ import type {
 } from '@shared/types/presets';
 import { PRESET_CATEGORIES } from '@shared/types/presets';
 import type { ClaudeModel, CustomAgentsConfig, DiscoveredAgent } from '@shared/types';
+import { XIcon } from '@renderer/components/icons';
 
 interface PresetFormModalProps {
   onClose: () => void;
@@ -380,13 +381,5 @@ export function PresetFormModal({
         </div>
       </form>
     </Modal>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
   );
 }

@@ -1,6 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import { spawn, execSync } from 'child_process';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { IPC_CHANNELS } from './channels';
 import { validators } from './validators';
@@ -48,6 +49,8 @@ import { getPermissionManager } from '../services/PermissionManager';
 import { getMetricsService } from '../services/MetricsService';
 import { getGitStatusManager } from '../services/GitStatusManager';
 import { getSubagentTracker } from '../services/SubagentTracker';
+import { getTmuxSessionService } from '../services/TmuxSessionService';
+import type { TmuxSessionListResponse, TmuxAttachResult } from '@shared/types';
 import { getTaskTracker } from '../services/TaskTracker';
 import { getTerminalPool } from '../services/TerminalPool';
 import { getTerminalDimensionManager } from '../services/TerminalDimensionManager';
@@ -58,6 +61,8 @@ import { getTeamFileWatcher } from '../services/TeamFileWatcher';
 import { getTeamTracker } from '../services/TeamTracker';
 import { getPlanFileWatcher } from '../services/PlanFileWatcher';
 import { getInstanceBroadcaster } from '../services/InstanceBroadcaster';
+import { getFileExplorerService } from '../services/FileExplorerService';
+import { getIdeWebSocketServer } from '../services/IdeWebSocketServer';
 import type { TrackedTeam } from '@shared/types/teams';
 import type { TrackedPlan } from '@shared/types/plans';
 import type { TerminalPoolConfig } from '@shared/types/pool';
@@ -300,28 +305,39 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   );
 
   // Resize handler (from renderer) with dimension synchronization
+  const instanceResizeTimers = new Map<string, NodeJS.Timeout>();
   ipcMain.on('instance:resize', (_event, id: string, cols: number, rows: number) => {
-    // Track dimensions from the Electron renderer client
-    const clientId = 'electron:renderer';
-    const dimManager = getTerminalDimensionManager();
-    const result = dimManager.updateClientDimensions(id, clientId, cols, rows);
+    const existing = instanceResizeTimers.get(id);
+    if (existing) clearTimeout(existing);
 
-    if (result.changed) {
-      // Resize PTY to minimum dimensions
-      processManager.resizeInstance(id, result.min.cols, result.min.rows);
+    instanceResizeTimers.set(
+      id,
+      setTimeout(() => {
+        instanceResizeTimers.delete(id);
 
-      // Broadcast synchronized dimensions to Electron renderer
-      mainWindow.webContents.send(
-        IPC_CHANNELS.INSTANCE_DIMENSION_SYNC,
-        id,
-        result.min.cols,
-        result.min.rows
-      );
+        // Track dimensions from the Electron renderer client
+        const clientId = 'electron:renderer';
+        const dimManager = getTerminalDimensionManager();
+        const result = dimManager.updateClientDimensions(id, clientId, cols, rows);
 
-      // Broadcast to web clients
-      const webServer = getWebServer();
-      webServer.broadcastDimensionSync(id, result.min.cols, result.min.rows);
-    }
+        if (result.changed) {
+          // Resize PTY to minimum dimensions
+          processManager.resizeInstance(id, result.min.cols, result.min.rows);
+
+          // Broadcast synchronized dimensions to Electron renderer
+          mainWindow.webContents.send(
+            IPC_CHANNELS.INSTANCE_DIMENSION_SYNC,
+            id,
+            result.min.cols,
+            result.min.rows
+          );
+
+          // Broadcast to web clients
+          const webServer = getWebServer();
+          webServer.broadcastDimensionSync(id, result.min.cols, result.min.rows);
+        }
+      }, 50)
+    );
   });
 
   // Config handlers
@@ -763,14 +779,18 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
   registerSecurityHandlers();
 
   // ==================== Local Settings Handlers ====================
-  ipcMain.handle(IPC_CHANNELS.LOCAL_SETTINGS_READ, (_event, projectPath: string) => {
+  ipcMain.handle(IPC_CHANNELS.LOCAL_SETTINGS_READ, async (_event, projectPath: string) => {
     try {
       const settingsPath = path.join(projectPath, '.claude', 'settings.local.json');
-      if (!fs.existsSync(settingsPath)) {
-        return { success: true, content: null, exists: false };
+      try {
+        const content = await fsPromises.readFile(settingsPath, 'utf-8');
+        return { success: true, content, exists: true };
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+          return { success: true, content: null, exists: false };
+        }
+        throw e;
       }
-      const content = fs.readFileSync(settingsPath, 'utf-8');
-      return { success: true, content, exists: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: message };
@@ -779,20 +799,18 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(
     IPC_CHANNELS.LOCAL_SETTINGS_WRITE,
-    (_event, projectPath: string, content: string) => {
+    async (_event, projectPath: string, content: string) => {
       try {
         const claudeDir = path.join(projectPath, '.claude');
         const settingsPath = path.join(claudeDir, 'settings.local.json');
 
         // Create .claude directory if it doesn't exist
-        if (!fs.existsSync(claudeDir)) {
-          fs.mkdirSync(claudeDir, { recursive: true });
-        }
+        await fsPromises.mkdir(claudeDir, { recursive: true });
 
         // Validate JSON before writing
         JSON.parse(content);
 
-        fs.writeFileSync(settingsPath, content, 'utf-8');
+        await fsPromises.writeFile(settingsPath, content, 'utf-8');
         return { success: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -824,12 +842,22 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
+  const shellResizeTimers = new Map<string, NodeJS.Timeout>();
   ipcMain.on(IPC_CHANNELS.SHELL_RESIZE, (_event, id: string, cols: number, rows: number) => {
-    try {
-      processManager.resizeShellInstance(id, cols, rows);
-    } catch {
-      // Silently ignore resize errors - shell may have exited
-    }
+    const existing = shellResizeTimers.get(id);
+    if (existing) clearTimeout(existing);
+
+    shellResizeTimers.set(
+      id,
+      setTimeout(() => {
+        shellResizeTimers.delete(id);
+        try {
+          processManager.resizeShellInstance(id, cols, rows);
+        } catch {
+          // Silently ignore resize errors - shell may have exited
+        }
+      }, 50)
+    );
   });
 
   // Get available shells on the system
@@ -918,6 +946,19 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_CHANNELS.HOOK_HAS_CONFIGURED, async (_event, projectPath: string) => {
     return hookManager.hasHooksConfigured(projectPath);
+  });
+
+  // Global sound hooks
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_INSTALL_GLOBAL_SOUNDS, async () => {
+    return hookManager.installGlobalSounds();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_UNINSTALL_GLOBAL_SOUNDS, async () => {
+    return hookManager.uninstallGlobalSounds();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_HAS_GLOBAL_SOUNDS, async () => {
+    return hookManager.hasGlobalSoundsInstalled();
   });
 
   // ==================== Agent Discovery Handlers ====================
@@ -1177,6 +1218,104 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       return { ...plan, content };
     }
     return null;
+  });
+
+  // ==================== File Explorer Handlers ====================
+  const fileExplorerService = getFileExplorerService();
+
+  // Helper to check if a path exists asynchronously
+  const pathExists = async (p: string): Promise<boolean> => {
+    try {
+      await fsPromises.access(p);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILES_LIST_DIRECTORY,
+    async (
+      _event,
+      projectPath: string,
+      relativePath: string = '',
+      respectGitignore: boolean = true
+    ) => {
+      if (!projectPath || !(await pathExists(projectPath))) {
+        return { entries: [], truncated: false, totalCount: 0 };
+      }
+      return fileExplorerService.listDirectory(projectPath, relativePath, respectGitignore);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILES_READ_FILE,
+    async (_event, projectPath: string, relativePath: string) => {
+      if (!projectPath || !(await pathExists(projectPath))) {
+        return { content: null, size: 0, isBinary: false };
+      }
+      return fileExplorerService.readFile(projectPath, relativePath);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILES_WRITE_FILE,
+    async (_event, projectPath: string, relativePath: string, content: string) => {
+      if (!projectPath || !(await pathExists(projectPath))) {
+        return { success: false, error: 'Invalid project path' };
+      }
+      return fileExplorerService.writeFile(projectPath, relativePath, content);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILES_CREATE,
+    async (
+      _event,
+      projectPath: string,
+      relativePath: string,
+      type: 'file' | 'directory',
+      content?: string
+    ) => {
+      if (!projectPath || !(await pathExists(projectPath))) {
+        return { success: false, error: 'Invalid project path' };
+      }
+      return fileExplorerService.createEntry(projectPath, relativePath, type, content);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILES_RENAME,
+    async (_event, projectPath: string, oldPath: string, newPath: string) => {
+      if (!projectPath || !(await pathExists(projectPath))) {
+        return { success: false, error: 'Invalid project path' };
+      }
+      return fileExplorerService.renameEntry(projectPath, oldPath, newPath);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILES_DELETE,
+    async (_event, projectPath: string, relativePath: string) => {
+      if (!projectPath || !(await pathExists(projectPath))) {
+        return { success: false, error: 'Invalid project path' };
+      }
+      return fileExplorerService.deleteEntry(projectPath, relativePath);
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.FILES_GLOB, async (_event, projectPath: string) => {
+    if (!projectPath || !(await pathExists(projectPath))) {
+      return [];
+    }
+    return fileExplorerService.globFiles(projectPath);
+  });
+
+  // ==================== IDE Integration Handlers ====================
+  ipcMain.handle(IPC_CHANNELS.IDE_DIFF_RESOLVED, (_event, requestId: string, applied: boolean) => {
+    const ideServer = getIdeWebSocketServer();
+    ideServer.resolveDiff(requestId, applied);
+    return { success: true };
   });
 
   // ==================== Proxy Handlers (Web Preview Tunneling) ====================
@@ -1527,6 +1666,64 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
         return {
           valid: false,
           error: error instanceof Error ? error.message : 'Validation failed',
+        };
+      }
+    }
+  );
+
+  // ==================== Tmux Session Handlers ====================
+
+  ipcMain.handle(IPC_CHANNELS.TMUX_GET_SESSIONS, async (): Promise<TmuxSessionListResponse> => {
+    const tmuxService = getTmuxSessionService();
+    return tmuxService.listSessions();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.TMUX_ATTACH_SESSION,
+    async (_event, sessionName: string): Promise<TmuxAttachResult> => {
+      try {
+        const tmuxService = getTmuxSessionService();
+        const { sessions } = await tmuxService.listSessions();
+
+        const session = sessions.find((s) => s.sessionName === sessionName);
+        if (!session) {
+          return { success: false, error: `Session "${sessionName}" not found` };
+        }
+
+        const dataStore = DataStore.getInstance();
+        const processManager = getProcessManager();
+
+        // Try to match working directory to an existing project
+        let project = dataStore.getProjectByPath(session.workingDirectory);
+
+        if (!project) {
+          // Look for or create the hidden "Tmux Sessions" project
+          project = dataStore.getProjectByPath('__tmux_sessions__');
+          if (!project) {
+            project = dataStore.createProject({
+              name: 'Tmux Sessions',
+              path: '__tmux_sessions__',
+              description: 'Auto-created project for tmux session reconnection',
+            });
+          }
+        }
+
+        const shellInfo = processManager.createTmuxAttachInstance(
+          project.id,
+          session.workingDirectory,
+          sessionName
+        );
+
+        return {
+          success: true,
+          instanceId: shellInfo.id,
+          projectId: project.id,
+          shell: shellInfo,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to attach tmux session',
         };
       }
     }

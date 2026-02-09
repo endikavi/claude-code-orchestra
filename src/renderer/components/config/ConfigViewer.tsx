@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ClaudeSettings, McpServer } from '@shared/types';
+import { Tabs } from '@renderer/components/common/Tabs';
+import { ServerIcon, ToolIcon, HookIcon } from '@renderer/components/icons';
 
 export function ConfigViewer() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<ClaudeSettings | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,34 +32,28 @@ export function ConfigViewer() {
 
   if (isLoading) {
     return (
-      <div className="p-4 text-center text-gray-500 dark:text-gray-500">
-        Loading configuration...
-      </div>
+      <div className="p-4 text-center text-gray-500 dark:text-gray-500">{t('config.loading')}</div>
     );
   }
 
   if (!settings) {
     return (
-      <div className="p-4 text-center text-gray-500 dark:text-gray-500">
-        No Claude configuration found
-      </div>
+      <div className="p-4 text-center text-gray-500 dark:text-gray-500">{t('config.notFound')}</div>
     );
   }
 
   return (
     <div className="h-full flex flex-col">
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-neutral-700">
-        <TabButton active={activeTab === 'mcp'} onClick={() => setActiveTab('mcp')}>
-          MCP Servers ({mcpServers.length})
-        </TabButton>
-        <TabButton active={activeTab === 'tools'} onClick={() => setActiveTab('tools')}>
-          Tools
-        </TabButton>
-        <TabButton active={activeTab === 'hooks'} onClick={() => setActiveTab('hooks')}>
-          Hooks
-        </TabButton>
-      </div>
+      <Tabs
+        tabs={[
+          { id: 'mcp', label: `${t('config.mcpServers')} (${mcpServers.length})` },
+          { id: 'tools', label: t('config.tools') },
+          { id: 'hooks', label: t('config.hooks') },
+        ]}
+        activeTab={activeTab}
+        onChange={(id) => setActiveTab(id as 'mcp' | 'tools' | 'hooks')}
+      />
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
@@ -67,34 +65,13 @@ export function ConfigViewer() {
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium transition-colors ${
-        active
-          ? 'text-sky-500 border-b-2 border-sky-500'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 function McpServersView({ servers }: { servers: McpServer[] }) {
+  const { t } = useTranslation();
+
   if (servers.length === 0) {
     return (
       <div className="text-center text-gray-500 dark:text-gray-500 py-8">
-        No MCP servers configured
+        {t('config.noMcpServers')}
       </div>
     );
   }
@@ -104,7 +81,7 @@ function McpServersView({ servers }: { servers: McpServer[] }) {
       {servers.map((server) => (
         <div
           key={server.name}
-          className="bg-white/50 dark:bg-neutral-800 rounded p-4 border border-gray-200 dark:border-neutral-700"
+          className="bg-white/50 dark:bg-neutral-800 rounded-md p-4 border border-[var(--color-border-default)] shadow-sm hover:shadow-md transition-shadow"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -115,7 +92,9 @@ function McpServersView({ servers }: { servers: McpServer[] }) {
           </div>
           {server.tools && server.tools.length > 0 && (
             <div className="mt-2">
-              <span className="text-xs text-gray-500 dark:text-gray-500">Tools:</span>
+              <span className="text-xs text-gray-500 dark:text-gray-500">
+                {t('config.toolsLabel')}
+              </span>
               <div className="flex flex-wrap gap-1 mt-1">
                 {server.tools.map((tool) => (
                   <span
@@ -135,13 +114,12 @@ function McpServersView({ servers }: { servers: McpServer[] }) {
 }
 
 function ToolsView({ settings }: { settings: ClaudeSettings }) {
+  const { t } = useTranslation();
   const tools = settings.tools || [];
 
   if (tools.length === 0) {
     return (
-      <div className="text-center text-gray-500 dark:text-gray-500 py-8">
-        No custom tools configured
-      </div>
+      <div className="text-center text-gray-500 dark:text-gray-500 py-8">{t('config.noTools')}</div>
     );
   }
 
@@ -150,7 +128,7 @@ function ToolsView({ settings }: { settings: ClaudeSettings }) {
       {tools.map((tool) => (
         <div
           key={tool.name}
-          className="flex items-center justify-between bg-white/50 dark:bg-neutral-800 rounded p-3 border border-gray-200 dark:border-neutral-700"
+          className="flex items-center justify-between bg-white/50 dark:bg-neutral-800 rounded-md p-3 border border-[var(--color-border-default)] shadow-sm hover:shadow-md transition-shadow"
         >
           <div className="flex items-center gap-2">
             <ToolIcon className="w-4 h-4 text-green-500 dark:text-green-400" />
@@ -163,7 +141,7 @@ function ToolsView({ settings }: { settings: ClaudeSettings }) {
                 : 'bg-gray-200 dark:bg-neutral-700 text-gray-600 dark:text-gray-400'
             }`}
           >
-            {tool.enabled ? 'Enabled' : 'Disabled'}
+            {tool.enabled ? t('common.enabled') : t('common.disabled')}
           </span>
         </div>
       ))}
@@ -172,11 +150,12 @@ function ToolsView({ settings }: { settings: ClaudeSettings }) {
 }
 
 function HooksView({ settings }: { settings: ClaudeSettings }) {
+  const { t } = useTranslation();
   const hooks = settings.hooks || [];
 
   if (hooks.length === 0) {
     return (
-      <div className="text-center text-gray-500 dark:text-gray-500 py-8">No hooks configured</div>
+      <div className="text-center text-gray-500 dark:text-gray-500 py-8">{t('config.noHooks')}</div>
     );
   }
 
@@ -185,13 +164,13 @@ function HooksView({ settings }: { settings: ClaudeSettings }) {
       {hooks.map((hook, index) => (
         <div
           key={index}
-          className="bg-white/50 dark:bg-neutral-800 rounded p-3 border border-gray-200 dark:border-neutral-700"
+          className="bg-white/50 dark:bg-neutral-800 rounded-md p-3 border border-[var(--color-border-default)] shadow-sm hover:shadow-md transition-shadow"
         >
           <div className="flex items-center gap-2 mb-1">
             <HookIcon className="w-4 h-4 text-purple-500 dark:text-purple-400" />
             <span className="text-sm font-medium text-gray-800 dark:text-white">{hook.event}</span>
           </div>
-          <code className="text-xs text-gray-600 dark:text-gray-400 block mt-1 bg-gray-100 dark:bg-neutral-950 p-2 rounded">
+          <code className="text-xs text-gray-600 dark:text-gray-400 block mt-1 bg-gray-100 dark:bg-neutral-950 p-2 rounded-md">
             {hook.command}
           </code>
         </div>
@@ -212,50 +191,5 @@ function StatusIndicator({ status }: { status: string }) {
       <div className={`w-2 h-2 rounded-full ${colors[status] || 'bg-gray-500'}`} />
       <span className="text-xs text-gray-600 dark:text-gray-400">{status}</span>
     </div>
-  );
-}
-
-function ServerIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"
-      />
-    </svg>
-  );
-}
-
-function ToolIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-    </svg>
-  );
-}
-
-function HookIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-      />
-    </svg>
   );
 }

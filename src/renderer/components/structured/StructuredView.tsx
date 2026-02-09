@@ -1,9 +1,11 @@
 import { useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { ChatInput } from './ChatInput';
 import { PermissionBar } from './PermissionBar';
 import { getStatusBadgeConfig } from '../../utils/statusConfig';
+import { SpinnerIcon, ToolIcon, ChatIcon } from '@renderer/components/icons';
 import type { StreamMessage, ContentBlock } from '@shared/types';
 
 interface StructuredViewProps {
@@ -13,7 +15,13 @@ interface StructuredViewProps {
 export function StructuredView({ instanceId }: StructuredViewProps) {
   const { t } = useTranslation();
   const { getInstanceOutput, getSelectedInstance, getPendingPermissionForInstance } =
-    useInstanceStore();
+    useInstanceStore(
+      useShallow((s) => ({
+        getInstanceOutput: s.getInstanceOutput,
+        getSelectedInstance: s.getSelectedInstance,
+        getPendingPermissionForInstance: s.getPendingPermissionForInstance,
+      }))
+    );
   const output = getInstanceOutput(instanceId);
   const instance = getSelectedInstance();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -81,14 +89,20 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
         {instance && (
           <div className="bg-white/50 dark:bg-neutral-900 rounded p-4 border border-gray-200 dark:border-neutral-700">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Instance</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('structuredView.instance')}
+              </span>
               <StatusBadge status={instance.status} />
             </div>
             <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
-              <div>Model: {instance.model}</div>
-              <div>Mode: {instance.mode}</div>
+              <div>
+                {t('structuredView.model')} {instance.model}
+              </div>
+              <div>
+                {t('structuredView.mode')} {instance.mode}
+              </div>
               <div className="truncate" title={instance.prompt}>
-                Prompt: {instance.prompt}
+                {t('structuredView.prompt')} {instance.prompt}
               </div>
             </div>
           </div>
@@ -134,6 +148,7 @@ export function StructuredView({ instanceId }: StructuredViewProps) {
 }
 
 function MessageCard({ message }: { message: StreamMessage }) {
+  const { t } = useTranslation();
   const typeColors: Record<string, string> = {
     system: 'border-blue-500/50 bg-blue-500/10',
     assistant: 'border-sky-500/50 bg-sky-500/10',
@@ -142,10 +157,10 @@ function MessageCard({ message }: { message: StreamMessage }) {
   };
 
   const typeLabels: Record<string, string> = {
-    system: 'System',
-    assistant: 'Assistant',
-    user: 'User',
-    result: 'Result',
+    system: t('structuredView.messageTypes.system'),
+    assistant: t('structuredView.messageTypes.assistant'),
+    user: t('structuredView.messageTypes.user'),
+    result: t('structuredView.messageTypes.result'),
   };
 
   return (
@@ -170,13 +185,13 @@ function MessageCard({ message }: { message: StreamMessage }) {
         <div className="space-y-2 text-sm">
           {message.session_id && (
             <div className="text-gray-600 dark:text-gray-400">
-              Session:{' '}
+              {t('structuredView.session')}{' '}
               <code className="text-gray-700 dark:text-gray-300">{message.session_id}</code>
             </div>
           )}
           {message.tools && message.tools.length > 0 && (
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Tools:</span>
+              <span className="text-gray-600 dark:text-gray-400">{t('structuredView.tools')}</span>
               <div className="flex flex-wrap gap-1 mt-1">
                 {message.tools.map((tool) => (
                   <span
@@ -219,7 +234,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
           )}
           {message.duration_ms !== undefined && (
             <div className="text-xs text-gray-500 dark:text-gray-500">
-              Duration: {(message.duration_ms / 1000).toFixed(2)}s
+              {t('structuredView.duration', { seconds: (message.duration_ms / 1000).toFixed(2) })}
             </div>
           )}
         </div>
@@ -229,6 +244,7 @@ function MessageCard({ message }: { message: StreamMessage }) {
 }
 
 function ContentBlockView({ block }: { block: ContentBlock }) {
+  const { t } = useTranslation();
   if (block.type === 'text') {
     return (
       <div className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">
@@ -255,7 +271,7 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
     return (
       <details className="bg-gray-100 dark:bg-neutral-950 rounded border border-gray-200 dark:border-neutral-700">
         <summary className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-300">
-          Thinking...
+          {t('structuredView.thinking')}
         </summary>
         <div className="px-3 pb-3 text-sm text-gray-500 dark:text-gray-500 whitespace-pre-wrap">
           {block.thinking}
@@ -295,49 +311,4 @@ function StatusBadge({ status }: { status: string }) {
   const { bg, text } = getStatusBadgeConfig(status as import('@shared/types').InstanceStatus);
 
   return <span className={`px-2 py-0.5 rounded text-xs font-medium ${bg} ${text}`}>{status}</span>;
-}
-
-function SpinnerIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  );
-}
-
-function ToolIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-    </svg>
-  );
-}
-
-function ChatIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-      />
-    </svg>
-  );
 }

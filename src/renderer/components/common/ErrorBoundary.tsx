@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import i18n from 'i18next';
 
 interface Props {
   children: ReactNode;
@@ -60,16 +61,15 @@ export class ErrorBoundary extends Component<Props, State> {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-neutral-800 dark:text-white mb-2">
-            Something went wrong
+            {i18n.t('errorBoundary.title')}
           </h2>
           <p className="text-neutral-600 dark:text-neutral-300 mb-3 text-center max-w-md">
-            An unexpected error occurred. You can try reloading this component or refreshing the
-            page.
+            {i18n.t('errorBoundary.description')}
           </p>
           {this.state.error && (
             <details className="mb-3 text-sm text-neutral-500 dark:text-neutral-400 max-w-lg">
               <summary className="cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-200">
-                Error details
+                {i18n.t('errorBoundary.errorDetails')}
               </summary>
               <pre className="mt-2 p-2 bg-gray-100 dark:bg-neutral-900 rounded-sm overflow-auto max-h-32">
                 {this.state.error.message}
@@ -81,13 +81,13 @@ export class ErrorBoundary extends Component<Props, State> {
               onClick={this.handleRetry}
               className="px-3 py-2 bg-sky-500 text-white rounded-sm hover:bg-sky-600 transition-colors"
             >
-              Try Again
+              {i18n.t('errorBoundary.tryAgain')}
             </button>
             <button
               onClick={() => window.location.reload()}
               className="px-3 py-2 bg-gray-200 dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-sm hover:bg-gray-300 dark:hover:bg-neutral-700 transition-colors"
             >
-              Reload Page
+              {i18n.t('errorBoundary.reloadPage')}
             </button>
           </div>
         </div>

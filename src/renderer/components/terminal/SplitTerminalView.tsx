@@ -9,7 +9,7 @@ interface SplitTerminalViewProps {
 }
 
 function SplitPanel({ type, id }: { type: 'instance' | 'shell' | 'proxy'; id: string }) {
-  const { proxyViews } = useProxyStore();
+  const proxyViews = useProxyStore((s) => s.proxyViews);
 
   if (type === 'instance') {
     return <TerminalView key={id} instanceId={id} />;

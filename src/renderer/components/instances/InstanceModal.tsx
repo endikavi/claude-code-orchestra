@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -7,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { Modal } from '../common/Modal';
 import { PresetSelector } from '../presets/PresetSelector';
 import { PresetFormModal } from '../presets/PresetFormModal';
+import { PlayIcon, SpinnerIcon, GlobeIcon, PromptIcon } from '@renderer/components/icons';
 import type { ClaudeModel, InstanceMode, DiscoveredAgent } from '@shared/types';
 import type { InstancePreset, CreatePresetInput, UpdatePresetInput } from '@shared/types/presets';
 
@@ -23,9 +25,28 @@ const MODELS: { value: ClaudeModel; label: string }[] = [
 
 export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
   const { t } = useTranslation();
-  const { createInstance, createPendingInstance } = useInstanceStore();
-  const { isClusterEnabled, config: clusterConfig, privacy } = useClusterStore();
-  const { projects } = useProjectStore();
+  const { createInstance, createPendingInstance } = useInstanceStore(
+    useShallow((s) => ({
+      createInstance: s.createInstance,
+      createPendingInstance: s.createPendingInstance,
+    }))
+  );
+  const {
+    isClusterEnabled,
+    config: clusterConfig,
+    privacy,
+  } = useClusterStore(
+    useShallow((s) => ({
+      isClusterEnabled: s.isClusterEnabled,
+      config: s.config,
+      privacy: s.privacy,
+    }))
+  );
+  const { projects } = useProjectStore(
+    useShallow((s) => ({
+      projects: s.projects,
+    }))
+  );
   const viewMode = useUIStore((state) => state.viewMode);
 
   // Find the project to check if skipPermissions is allowed
@@ -427,57 +448,5 @@ export function InstanceModal({ projectId, onClose }: InstanceModalProps) {
         />
       )}
     </>
-  );
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-      />
-    </svg>
-  );
-}
-
-function SpinnerIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  );
-}
-
-function GlobeIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-      />
-    </svg>
-  );
-}
-
-function PromptIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-      />
-    </svg>
   );
 }

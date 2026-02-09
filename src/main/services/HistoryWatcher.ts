@@ -38,6 +38,7 @@ export class HistoryWatcher extends EventEmitter {
   private historyPath: string | null = null;
   private lastPosition: number = 0;
   private lastSize: number = 0;
+  private fsWatcher: fs.FSWatcher | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;
   private isWatching: boolean = false;
@@ -101,6 +102,11 @@ export class HistoryWatcher extends EventEmitter {
   private stopWatching(): void {
     this.isWatching = false;
 
+    if (this.fsWatcher) {
+      this.fsWatcher.close();
+      this.fsWatcher = null;
+    }
+
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
@@ -115,17 +121,26 @@ export class HistoryWatcher extends EventEmitter {
   }
 
   /**
-   * Start polling the file for changes
-   * We use polling instead of fs.watch because fs.watch can be unreliable
-   * especially when the file is being written to frequently
+   * Start watching the file for changes using fs.watch with polling fallback
    */
   private startPolling(): void {
-    this.pollTimer = setInterval(() => {
-      this.checkForChanges();
-    }, POLL_INTERVAL);
-
-    // Also check immediately
+    // Check immediately
     this.checkForChanges();
+
+    try {
+      this.fsWatcher = fs.watch(this.historyPath!, { persistent: false }, () => {
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => this.checkForChanges(), 300);
+      });
+      this.fsWatcher.on('error', () => {
+        // Fallback to slower polling on fs.watch error
+        this.fsWatcher = null;
+        this.pollTimer = setInterval(() => this.checkForChanges(), 2000);
+      });
+    } catch {
+      // Fallback to slower polling if fs.watch is unavailable
+      this.pollTimer = setInterval(() => this.checkForChanges(), 2000);
+    }
   }
 
   /**
@@ -137,22 +152,20 @@ export class HistoryWatcher extends EventEmitter {
     // Periodically clean up stale tool use IDs to prevent memory leaks
     this.cleanupStaleToolUseIds();
 
-    try {
-      if (!fs.existsSync(this.historyPath)) {
-        return;
-      }
+    fs.promises
+      .stat(this.historyPath)
+      .then((stats) => {
+        const currentSize = stats.size;
 
-      const stats = fs.statSync(this.historyPath);
-      const currentSize = stats.size;
-
-      if (currentSize > this.lastSize) {
-        // File has grown, schedule processing
-        this.lastSize = currentSize;
-        this.scheduleProcessing();
-      }
-    } catch {
-      // File might be locked or deleted, ignore
-    }
+        if (currentSize > this.lastSize) {
+          // File has grown, schedule processing
+          this.lastSize = currentSize;
+          this.scheduleProcessing();
+        }
+      })
+      .catch(() => {
+        // File might not exist, be locked, or deleted, ignore
+      });
   }
 
   /**

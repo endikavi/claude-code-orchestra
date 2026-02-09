@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTaskStore } from '../../stores/taskStore';
+import { Spinner } from '../common/Spinner';
+import { EmptyState } from '../common/EmptyState';
 import { TaskCard } from './TaskCard';
 import type { TaskStatus } from '@shared/types';
 
@@ -149,7 +151,7 @@ export function TasksPanel({ className = '', onClose }: TasksPanelProps) {
           <div className="flex items-center gap-4 mt-3">
             {inProgressCount > 0 && (
               <div className="flex items-center gap-1.5 text-xs">
-                <div className="animate-spin h-3 w-3 border-2 border-blue-500 border-t-transparent rounded-full" />
+                <Spinner size="xs" />
                 <span className="text-blue-600 dark:text-blue-400 font-medium">
                   {inProgressCount}
                 </span>
@@ -188,23 +190,25 @@ export function TasksPanel({ className = '', onClose }: TasksPanelProps) {
       {/* Task Sections */}
       <div className="flex-1 overflow-y-auto p-3">
         {totalCount === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-6">
-            <svg
-              className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-              />
-            </svg>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{t('tasks.empty')}</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('tasks.emptyHint')}</p>
-          </div>
+          <EmptyState
+            icon={
+              <svg
+                className="h-12 w-12 text-gray-300 dark:text-gray-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
+              </svg>
+            }
+            title={t('tasks.empty')}
+            description={t('tasks.emptyHint')}
+          />
         ) : (
           <>
             {/* In Progress Section */}
@@ -212,7 +216,7 @@ export function TasksPanel({ className = '', onClose }: TasksPanelProps) {
               'in_progress',
               t('tasks.sections.inProgress'),
               inProgressCount,
-              <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />,
+              <Spinner size="sm" />,
               'text-blue-600 dark:text-blue-400'
             )}
 

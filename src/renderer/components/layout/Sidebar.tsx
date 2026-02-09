@@ -1,5 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
+import { PlusIcon, FolderIcon } from '@renderer/components/icons';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -15,9 +17,24 @@ const isElectron =
 export function Sidebar() {
   const { t } = useTranslation();
   const { setShowProjectModal, sidebarCollapsed, sidebarMobileOpen, setSidebarMobileOpen } =
-    useUIStore();
-  const { projects } = useProjectStore();
-  const { instances } = useInstanceStore();
+    useUIStore(
+      useShallow((s) => ({
+        setShowProjectModal: s.setShowProjectModal,
+        sidebarCollapsed: s.sidebarCollapsed,
+        sidebarMobileOpen: s.sidebarMobileOpen,
+        setSidebarMobileOpen: s.setSidebarMobileOpen,
+      }))
+    );
+  const { projects } = useProjectStore(
+    useShallow((s) => ({
+      projects: s.projects,
+    }))
+  );
+  const { instances } = useInstanceStore(
+    useShallow((s) => ({
+      instances: s.instances,
+    }))
+  );
   const isMobile = useIsMobile();
 
   const runningCount = instances.filter(
@@ -52,13 +69,13 @@ export function Sidebar() {
   // Collapsed sidebar (icons only)
   if (isCollapsed) {
     return (
-      <aside className="w-12 bg-gray-50 dark:bg-neutral-900 border-r border-gray-200 dark:border-neutral-700 flex flex-col transition-all duration-300 overflow-x-hidden">
+      <aside className="w-12 bg-[var(--color-bg-subtle)] border-r border-[var(--color-border-default)] flex flex-col transition-[width] duration-300 overflow-x-hidden">
         {/* Collapsed Header */}
-        <div className="p-2 border-b border-gray-200 dark:border-neutral-700 flex flex-col items-center gap-2">
+        <div className="p-2 border-b border-[var(--color-border-default)] flex flex-col items-center gap-2">
           {isElectron && (
             <button
               onClick={() => setShowProjectModal(true)}
-              className="p-1 rounded-sm bg-sky-500 hover:bg-sky-600 transition-colors flex items-center justify-center"
+              className="p-1 rounded-md bg-primary hover:bg-primary-hover transition-colors flex items-center justify-center"
               title={t('sidebar.addProject')}
             >
               <PlusIcon className="w-3.5 h-3.5 text-white" />
@@ -98,7 +115,7 @@ export function Sidebar() {
 
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-72 bg-gray-50 dark:bg-neutral-900 border-r border-gray-200 dark:border-neutral-700 flex flex-col transition-transform duration-300 ease-in-out ${
+          className={`fixed inset-y-0 left-0 z-50 w-72 bg-[var(--color-bg-subtle)] border-r border-[var(--color-border-default)] flex flex-col transition-transform duration-300 ease-in-out shadow-xl ${
             sidebarMobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -116,7 +133,7 @@ export function Sidebar() {
 
   // Desktop/Tablet expanded sidebar
   return (
-    <aside className="w-72 bg-gray-50 dark:bg-neutral-900 border-r border-gray-200 dark:border-neutral-700 flex flex-col transition-all duration-300">
+    <aside className="w-72 bg-[var(--color-bg-subtle)] border-r border-[var(--color-border-default)] flex flex-col transition-[width] duration-300">
       <SidebarContent
         t={t}
         projects={projects}
@@ -145,15 +162,15 @@ function SidebarContent({
   return (
     <>
       {/* Header */}
-      <div className="p-3 border-b border-gray-200 dark:border-neutral-700">
+      <div className="p-3 border-b border-[var(--color-border-default)]">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+          <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] dark:text-neutral-300">
             {t('sidebar.projects')}
           </h2>
           {isElectron && (
             <button
               onClick={() => setShowProjectModal(true)}
-              className="p-1 rounded-sm bg-sky-500 hover:bg-sky-600 transition-colors flex items-center justify-center"
+              className="p-1 rounded-md bg-primary hover:bg-primary-hover transition-colors flex items-center justify-center"
               title={t('sidebar.addProject')}
             >
               <PlusIcon className="w-4 h-4 text-white" />
@@ -185,26 +202,5 @@ function SidebarContent({
         <ProjectList onProjectSelect={onProjectSelect} />
       </div>
     </>
-  );
-}
-
-function PlusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
-
-function FolderIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-      />
-    </svg>
   );
 }

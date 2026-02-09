@@ -16,14 +16,14 @@ export interface StatusBadgeConfig {
  */
 export const STATUS_TAB_CONFIG: Record<InstanceStatus, StatusTabConfig> = {
   pending: { color: 'bg-gray-400', pulse: false, label: 'Pending' },
-  starting: { color: 'bg-yellow-500', pulse: true, label: 'Starting' },
-  running: { color: 'bg-green-500', pulse: true, label: 'Running' },
+  starting: { color: 'bg-warning', pulse: true, label: 'Starting' },
+  running: { color: 'bg-success', pulse: true, label: 'Running' },
   waiting_input: { color: 'bg-cyan-500', pulse: false, label: 'Waiting for Input' },
   needs_permission: { color: 'bg-orange-500', pulse: true, label: 'Needs Permission' },
-  tool_executing: { color: 'bg-blue-500', pulse: true, label: 'Executing Tool' },
+  tool_executing: { color: 'bg-primary', pulse: true, label: 'Executing Tool' },
   terminating: { color: 'bg-orange-500', pulse: true, label: 'Terminating' },
   completed: { color: 'bg-gray-500', pulse: false, label: 'Completed' },
-  error: { color: 'bg-red-500', pulse: false, label: 'Error' },
+  error: { color: 'bg-danger', pulse: false, label: 'Error' },
   killed: { color: 'bg-gray-600', pulse: false, label: 'Killed' },
 };
 
@@ -32,14 +32,14 @@ export const STATUS_TAB_CONFIG: Record<InstanceStatus, StatusTabConfig> = {
  */
 export const STATUS_BADGE_CONFIG: Record<InstanceStatus, StatusBadgeConfig> = {
   pending: { bg: 'bg-gray-400/20', text: 'text-gray-400' },
-  starting: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
-  running: { bg: 'bg-green-500/20', text: 'text-green-400' },
-  waiting_input: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  starting: { bg: 'bg-warning/20', text: 'text-warning' },
+  running: { bg: 'bg-success/20', text: 'text-success' },
+  waiting_input: { bg: 'bg-primary/20', text: 'text-primary' },
   needs_permission: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
-  tool_executing: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  tool_executing: { bg: 'bg-primary/20', text: 'text-primary' },
   terminating: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
   completed: { bg: 'bg-gray-500/20', text: 'text-gray-400' },
-  error: { bg: 'bg-red-500/20', text: 'text-red-400' },
+  error: { bg: 'bg-danger/20', text: 'text-danger' },
   killed: { bg: 'bg-gray-600/20', text: 'text-gray-500' },
 };
 

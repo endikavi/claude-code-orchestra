@@ -1,29 +1,9 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useProxyStore } from '../../stores/proxyStore';
 import { ProxyView } from './ProxyView';
-
-// Inline icons to avoid lucide-react dependency
-function GlobeIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-      />
-    </svg>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
+import { GlobeIcon, XIcon } from '@renderer/components/icons';
 
 interface ProxyViewContainerProps {
   /** Filter views by instance ID (optional) */
@@ -36,7 +16,14 @@ interface ProxyViewContainerProps {
  */
 export function ProxyViewContainer({ instanceId }: ProxyViewContainerProps) {
   const { t } = useTranslation();
-  const { proxyViews, activeProxyViewId, selectProxyView, closeProxyView } = useProxyStore();
+  const { proxyViews, activeProxyViewId, selectProxyView, closeProxyView } = useProxyStore(
+    useShallow((s) => ({
+      proxyViews: s.proxyViews,
+      activeProxyViewId: s.activeProxyViewId,
+      selectProxyView: s.selectProxyView,
+      closeProxyView: s.closeProxyView,
+    }))
+  );
 
   // Get views, optionally filtered by instance
   const views = useMemo(() => {

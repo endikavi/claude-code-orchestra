@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS: UISettings = {
   repaintSettings: DEFAULT_REPAINT_SETTINGS,
   rightPanelMode: 'tasks',
   tmuxMode: false,
+  otherProjectBarsCollapsed: false,
 };
 
 export class UISettingsStore {

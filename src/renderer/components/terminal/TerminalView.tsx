@@ -5,10 +5,12 @@ import { WebLinksAddon } from 'xterm-addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import { useInstanceStore } from '../../stores/instanceStore';
+import { useInstanceStore, stripTerminalQueryResponses } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useUIStore } from '../../stores/uiStore';
+import { RepaintIcon, CopyIcon, PasteIcon } from '@renderer/components/icons';
 import { ContextMenu } from '../common/ContextMenu';
+import { Spinner } from '../common/Spinner';
 import { sharedResizeObserver } from '../../utils/sharedResizeObserver';
 import { getTerminalFontFamily } from '../../utils/terminalFonts';
 import { getXtermTmuxCompatibleOptions } from '../../utils/xtermOptions';
@@ -64,18 +66,6 @@ const lightTerminalTheme: ITheme = {
 };
 
 // Helper icon components for terminal UI
-function RepaintIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-      />
-    </svg>
-  );
-}
 
 interface TerminalViewProps {
   instanceId: string;
@@ -378,6 +368,28 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
         }
       }
 
+      // In tmux mode, intercept mouse wheel events at the DOM level (capture phase)
+      // and handle them as local xterm.js scroll instead of letting xterm.js forward
+      // them to the PTY as mouse escape sequences (which tmux → Claude TUI interprets
+      // as input navigation instead of scrolling the output).
+      // See: https://github.com/anthropics/claude-code/issues/2301
+      if (currentTmuxMode) {
+        const SCROLL_LINES = 3;
+        container.addEventListener(
+          'wheel',
+          (event: WheelEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.deltaY < 0) {
+              terminal.scrollLines(-SCROLL_LINES);
+            } else if (event.deltaY > 0) {
+              terminal.scrollLines(SCROLL_LINES);
+            }
+          },
+          { capture: true, passive: false }
+        );
+      }
+
       // Register CSI handler to intercept cursor-home sequences (CSI H, CSI ;H, CSI 1;1H)
       // This provides additional protection against scroll jumps by scheduling
       // immediate scroll restoration when cursor moves to top
@@ -419,13 +431,47 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
             } else {
               window.electronAPI.instance.resize(currentInstanceId, cols, rows);
             }
+
+            // Force tmux to redraw by sending a nudge resize (cols-1 then cols)
+            // This triggers SIGWINCH which makes tmux repaint its TUI
+            if (currentTmuxMode && cols > 1) {
+              setTimeout(() => {
+                if (currentRemoteInstance) {
+                  void resizeRemoteInstance(
+                    currentInstanceId,
+                    currentRemoteInstance.nodeId,
+                    cols - 1,
+                    rows
+                  );
+                } else {
+                  window.electronAPI.instance.resize(currentInstanceId, cols - 1, rows);
+                }
+                setTimeout(() => {
+                  if (currentRemoteInstance) {
+                    void resizeRemoteInstance(
+                      currentInstanceId,
+                      currentRemoteInstance.nodeId,
+                      cols,
+                      rows
+                    );
+                  } else {
+                    window.electronAPI.instance.resize(currentInstanceId, cols, rows);
+                  }
+                  // Re-fit xterm to match restored dimensions
+                  safeFit();
+                }, 50);
+              }, 150);
+            }
           }
         });
       }, 100);
 
-      // Handle user input
+      // Handle user input - filter xterm.js-generated DA responses to prevent PTY echo loop
       terminal.onData((data) => {
-        void currentHandleSendInput(currentInstanceId, data);
+        const filtered = stripTerminalQueryResponses(data);
+        if (filtered) {
+          void currentHandleSendInput(currentInstanceId, filtered);
+        }
       });
 
       // Handle resize
@@ -446,7 +492,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
 
       // Write existing output and scroll to bottom
       if (currentOutput?.rawOutput) {
-        terminal.write(currentOutput.rawOutput, () => {
+        terminal.write(stripTerminalQueryResponses(currentOutput.rawOutput), () => {
           terminal.scrollToBottom();
         });
       }
@@ -602,7 +648,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
     // Subscribe to raw output and buffer the data
     const unsubscribe = window.electronAPI.instance.onRawOutput((id, data) => {
       if (id === instanceId) {
-        outputBuffer.write(data);
+        outputBuffer.write(stripTerminalQueryResponses(data));
       }
     });
 
@@ -749,7 +795,7 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
       {status === 'starting' && (
         <div className="absolute inset-0 bg-neutral-50/80 dark:bg-neutral-950/80 flex items-center justify-center z-10">
           <div className="flex flex-col items-center gap-2">
-            <div className="w-8 h-8 border-3 border-sky-500 border-t-transparent rounded-full animate-spin" />
+            <Spinner size="lg" />
             <span className="text-sm text-neutral-600 dark:text-neutral-400">
               {t('terminal.starting', 'Starting Claude...')}
             </span>
@@ -765,42 +811,16 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
             {
               label: t('terminal.copy'),
               onClick: handleCopy,
-              icon: <CopyIcon />,
+              icon: <CopyIcon className="w-4 h-4" />,
             },
             {
               label: t('terminal.paste'),
               onClick: handlePaste,
-              icon: <PasteIcon />,
+              icon: <PasteIcon className="w-4 h-4" />,
             },
           ]}
         />
       )}
     </div>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-      />
-    </svg>
-  );
-}
-
-function PasteIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-      />
-    </svg>
   );
 }

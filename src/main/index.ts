@@ -11,6 +11,7 @@ import { getAutoReviewService } from './services/AutoReviewService';
 import { UpdateService } from './services/UpdateService';
 import { getRalphTaskLoop } from './services/RalphTaskLoop';
 import { getHookManager } from './services/HookManager';
+import { getIdeWebSocketServer } from './services/IdeWebSocketServer';
 
 // GPU cache configuration for xterm.js WebGL performance
 // By default, we enable GPU caches for better terminal rendering performance
@@ -97,29 +98,52 @@ app
     const dataStore = DataStore.getInstance();
     const remoteConfig = dataStore.getRemoteConfig();
 
-    try {
-      const webServer = getWebServer();
-
-      // Determine binding: localhost by default, 0.0.0.0 if web access is enabled with allowAnyCors
-      const bindAllInterfaces = remoteConfig.webAccessEnabled && remoteConfig.allowAnyCors;
-      await webServer.start(remoteConfig.port, !bindAllInterfaces);
-
-      if (mainWindow) {
-        webServer.setMainWindow(mainWindow);
+    // === Phase 1: Start critical services in parallel ===
+    // Web server, terminal pool, and IDE server are independent of each other
+    const webServerPromise = (async () => {
+      try {
+        const webServer = getWebServer();
+        const bindAllInterfaces = remoteConfig.webAccessEnabled && remoteConfig.allowAnyCors;
+        await webServer.start(remoteConfig.port, !bindAllInterfaces);
+        if (mainWindow) {
+          webServer.setMainWindow(mainWindow);
+        }
+        const bindingInfo = bindAllInterfaces ? '0.0.0.0' : 'localhost';
+        const accessInfo = remoteConfig.webAccessEnabled ? 'web access enabled' : 'internal only';
+        console.log(
+          `[Main] Web server started on ${bindingInfo}:${remoteConfig.port} (${accessInfo})`
+        );
+      } catch (error) {
+        console.error('[Main] Failed to start web server:', error);
       }
+    })();
 
-      const bindingInfo = bindAllInterfaces ? '0.0.0.0' : 'localhost';
-      const accessInfo = remoteConfig.webAccessEnabled ? 'web access enabled' : 'internal only';
-      console.log(
-        `[Main] Web server started on ${bindingInfo}:${remoteConfig.port} (${accessInfo})`
-      );
-    } catch (error) {
-      console.error('[Main] Failed to start web server:', error);
-      // CRITICAL: Without the server, hooks and MCP won't work
-      // The app can still function but with reduced capabilities
-    }
+    const terminalPoolPromise = (async () => {
+      try {
+        const terminalPool = getTerminalPool();
+        await terminalPool.initialize();
+        console.log(`[Main] Terminal pool initialized`);
+      } catch (error) {
+        console.error('[Main] Failed to initialize terminal pool:', error);
+      }
+    })();
 
-    // Auto-start cluster if it was enabled
+    const ideServerPromise = (async () => {
+      try {
+        const ideServer = getIdeWebSocketServer();
+        if (mainWindow) {
+          ideServer.setMainWindow(mainWindow);
+        }
+        await ideServer.start();
+        console.log('[Main] IDE WebSocket server started');
+      } catch (error) {
+        console.error('[Main] Failed to start IDE server:', error);
+      }
+    })();
+
+    await Promise.all([webServerPromise, terminalPoolPromise, ideServerPromise]);
+
+    // === Phase 2: Cluster depends on web server being ready ===
     const clusterConfig = dataStore.getClusterConfig();
     if (clusterConfig.enabled && clusterConfig.role !== 'standalone' && mainWindow) {
       try {
@@ -129,49 +153,34 @@ app
         console.log(`[Main] Cluster auto-started as ${clusterConfig.role}`);
       } catch (error) {
         console.error('[Main] Failed to auto-start cluster:', error);
-        // Reset enabled state on failure to avoid inconsistent state
         dataStore.updateClusterConfig({ enabled: false });
       }
     }
 
-    // Initialize terminal pool for faster instance creation
-    try {
-      const terminalPool = getTerminalPool();
-      await terminalPool.initialize();
-      console.log(`[Main] Terminal pool initialized`);
-    } catch (error) {
-      console.error('[Main] Failed to initialize terminal pool:', error);
-      // Non-fatal - instances will fall back to direct spawn
-    }
+    // Synchronous, lightweight init (no await needed)
+    initializeContextBroadcasting();
 
-    // Ensure orchestrator agents exist for all projects
-    try {
-      await getHookManager().ensureOrchestratorAgentsForAllProjects();
-    } catch (error) {
-      console.error('[Main] Failed to ensure orchestrator agents:', error);
-      // Non-fatal - agents can be created later
-    }
-
-    // Initialize Ralph Task Loop for automated task execution
     try {
       const ralphTaskLoop = getRalphTaskLoop();
       ralphTaskLoop.setProcessManager(getProcessManager());
       console.log('[Main] Ralph Task Loop initialized');
     } catch (error) {
       console.error('[Main] Failed to initialize Ralph Task Loop:', error);
-      // Non-fatal - Ralph tasks will not auto-run
     }
 
-    // Initialize shared context broadcasting for cluster support
-    initializeContextBroadcasting();
-
-    // Initialize update service and check for updates (30 seconds after startup)
     if (mainWindow) {
       const updateService = UpdateService.getInstance();
       updateService.setMainWindow(mainWindow);
       updateService.scheduleStartupCheck(30000);
       console.log('[Main] Update service initialized');
     }
+
+    // === Phase 3: Non-critical background init (fire and forget after window shown) ===
+    getHookManager()
+      .ensureOrchestratorAgentsForAllProjects()
+      .catch((error) => {
+        console.error('[Main] Failed to ensure orchestrator agents:', error);
+      });
   })
   .catch((error) => {
     console.error('[Main] Failed to initialize app:', error);
@@ -189,6 +198,9 @@ app.on('window-all-closed', () => {
   if (clusterManager.isServerRunning() || clusterManager.isConnected()) {
     void clusterManager.stop();
   }
+
+  // Stop IDE WebSocket server
+  getIdeWebSocketServer().stop();
 
   // Stop web server
   const webServer = getWebServer();
@@ -215,6 +227,9 @@ app.on('activate', () => {
 
 // Handle app quit
 app.on('before-quit', () => {
+  // Stop IDE WebSocket server and remove lock file
+  getIdeWebSocketServer().stop();
+
   // Graceful kill with 5 second timeout
   void Promise.race([
     getProcessManager().killAll(false), // Graceful kill

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useVectorSearchStore, formatBytes } from '@renderer/stores/vectorSearchStore';
 import { ModelDownloadPanel } from './ModelDownloadPanel';
 import type { Project } from '@shared/types';
@@ -23,7 +24,18 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
     getIndexProgress,
     areModelsReady,
     setupListeners,
-  } = useVectorSearchStore();
+  } = useVectorSearchStore(
+    useShallow((s) => ({
+      fetchIndexStatus: s.fetchIndexStatus,
+      startIndexing: s.startIndexing,
+      cancelIndexing: s.cancelIndexing,
+      clearIndex: s.clearIndex,
+      getIndexStatus: s.getIndexStatus,
+      getIndexProgress: s.getIndexProgress,
+      areModelsReady: s.areModelsReady,
+      setupListeners: s.setupListeners,
+    }))
+  );
 
   const [showModels, setShowModels] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -167,7 +179,7 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
             onChange={(e) => handleToggleEnabled(e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+          <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-blue-600" />
         </label>
       </div>
 
@@ -232,7 +244,7 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
 
                 <div className="w-full bg-neutral-700 rounded-full h-2">
                   <div
-                    className="bg-blue-500 h-2 rounded-full transition-all"
+                    className="bg-blue-500 h-2 rounded-full transition-[width]"
                     style={{ width: `${indexProgress.percentage}%` }}
                   />
                 </div>
@@ -358,7 +370,7 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
                     onChange={(e) => handleToggleReranking(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                  <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-blue-600" />
                 </label>
               </div>
 
@@ -382,7 +394,7 @@ export const VectorSearchPanel: React.FC<VectorSearchPanelProps> = ({
                     onChange={(e) => handleToggleQueryExpansion(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                  <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-blue-600" />
                 </label>
               </div>
             </div>

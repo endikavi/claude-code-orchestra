@@ -22,6 +22,7 @@ interface UIState extends UISettings {
   showSettingsModal: boolean;
   showLocalSettingsModal: boolean;
   showNotificationPanel: boolean;
+  showQuickOpen: boolean;
   editingProject: string | null;
   localSettingsProjectPath: string | null;
 
@@ -41,6 +42,7 @@ interface UIState extends UISettings {
   setShowLocalSettingsModal: (show: boolean, projectPath?: string | null) => void;
   setShowNotificationPanel: (show: boolean) => void;
   toggleNotificationPanel: () => void;
+  setShowQuickOpen: (show: boolean) => void;
   initializeFromMain: () => Promise<void>;
 
   // Project ordering actions
@@ -68,7 +70,11 @@ interface UIState extends UISettings {
   // Right panel
   rightPanelMode: RightPanelMode;
   setRightPanelMode: (mode: RightPanelMode) => void;
-  toggleRightPanel: (panel: 'tasks' | 'teams') => void;
+  toggleRightPanel: (panel: 'tasks' | 'teams' | 'files') => void;
+
+  // Cross-project tab bars
+  otherProjectBarsCollapsed: boolean;
+  setOtherProjectBarsCollapsed: (collapsed: boolean) => void;
 }
 
 // Check if running in Electron with uiSettings API
@@ -137,12 +143,14 @@ export const useUIStore = create<UIState>()(
       repaintSettings: DEFAULT_REPAINT_SETTINGS,
       rightPanelMode: 'tasks' as RightPanelMode,
       tmuxMode: false,
+      otherProjectBarsCollapsed: false,
       sidebarMobileOpen: false,
       showProjectModal: false,
       showInstanceModal: false,
       showSettingsModal: false,
       showLocalSettingsModal: false,
       showNotificationPanel: false,
+      showQuickOpen: false,
       editingProject: null,
       localSettingsProjectPath: null,
       _hasHydrated: false,
@@ -165,6 +173,7 @@ export const useUIStore = create<UIState>()(
               repaintSettings: settings.repaintSettings || DEFAULT_REPAINT_SETTINGS,
               rightPanelMode: settings.rightPanelMode || 'tasks',
               tmuxMode: settings.tmuxMode ?? false,
+              otherProjectBarsCollapsed: settings.otherProjectBarsCollapsed ?? false,
               _hasHydrated: true,
             });
             // Apply theme and language after loading
@@ -241,6 +250,8 @@ export const useUIStore = create<UIState>()(
 
       toggleNotificationPanel: () =>
         set((state) => ({ showNotificationPanel: !state.showNotificationPanel })),
+
+      setShowQuickOpen: (show) => set({ showQuickOpen: show }),
 
       // Project ordering actions
       setProjectOrder: (order) => {
@@ -367,6 +378,12 @@ export const useUIStore = create<UIState>()(
         set({ rightPanelMode: newMode });
         saveToMain({ rightPanelMode: newMode });
       },
+
+      // Cross-project tab bars
+      setOtherProjectBarsCollapsed: (collapsed) => {
+        set({ otherProjectBarsCollapsed: collapsed });
+        saveToMain({ otherProjectBarsCollapsed: collapsed });
+      },
     }),
     {
       name: 'claude-code-orchestra-ui',
@@ -384,6 +401,7 @@ export const useUIStore = create<UIState>()(
         repaintSettings: state.repaintSettings,
         rightPanelMode: state.rightPanelMode,
         tmuxMode: state.tmuxMode,
+        otherProjectBarsCollapsed: state.otherProjectBarsCollapsed,
       }),
       onRehydrateStorage: () => (state) => {
         if (state && !isElectron()) {

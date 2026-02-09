@@ -64,6 +64,9 @@ export class DataStore {
   private init(): void {
     // Enable WAL mode for better performance
     this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = NORMAL');
+    this.db.pragma('cache_size = -64000');
+    this.db.pragma('temp_store = MEMORY');
 
     // Create projects table
     this.db.exec(`

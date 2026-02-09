@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { CloseIcon } from '@renderer/components/icons';
 
 interface ModalProps {
   title: string;
@@ -34,14 +35,14 @@ export function Modal({ title, onClose, children, width = 'md' }: ModalProps) {
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 bg-black/30 dark:bg-black/60 flex items-center justify-center z-50 animate-fadeIn"
+      className="fixed inset-0 bg-[var(--color-bg-overlay)] flex items-center justify-center z-50 animate-fadeIn"
       onClick={handleOverlayClick}
     >
       <div
-        className={`bg-gray-50 dark:bg-neutral-900 rounded shadow-xl w-full ${widthClasses[width]} mx-4 animate-slideIn max-h-[90vh] flex flex-col`}
+        className={`bg-[var(--color-bg-subtle)] dark:bg-neutral-900 rounded-lg shadow-xl w-full ${widthClasses[width]} mx-4 animate-slideIn max-h-[90vh] flex flex-col border border-[var(--color-border-default)]`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-neutral-700 flex-shrink-0">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border-default)] flex-shrink-0">
           <h2 className="text-lg font-semibold text-neutral-800 dark:text-white">{title}</h2>
           <button
             onClick={onClose}
@@ -55,13 +56,5 @@ export function Modal({ title, onClose, children, width = 'md' }: ModalProps) {
         <div className="p-3 overflow-y-auto">{children}</div>
       </div>
     </div>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
   );
 }

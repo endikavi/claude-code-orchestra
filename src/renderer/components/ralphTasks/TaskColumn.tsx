@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useRalphTaskStore } from '../../stores/ralphTaskStore';
 import { useUIStore } from '../../stores/uiStore';
 import { TaskCard } from './TaskCard';
@@ -29,7 +30,14 @@ interface DropMenuState {
 }
 
 export function TaskColumn({ status, title, projectId: _projectId }: TaskColumnProps) {
-  const { getTasksByStatus, moveTask, startTask, getTaskPrompt } = useRalphTaskStore();
+  const { getTasksByStatus, moveTask, startTask, getTaskPrompt } = useRalphTaskStore(
+    useShallow((s) => ({
+      getTasksByStatus: s.getTasksByStatus,
+      moveTask: s.moveTask,
+      startTask: s.startTask,
+      getTaskPrompt: s.getTaskPrompt,
+    }))
+  );
   const setShowInstanceModal = useUIStore((s) => s.setShowInstanceModal);
   const tasks = getTasksByStatus(status);
   const [dropMenu, setDropMenu] = useState<DropMenuState>({ visible: false, taskId: null });

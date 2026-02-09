@@ -1,9 +1,16 @@
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useUIStore } from '../../stores/uiStore';
+import { InfoIcon } from '@renderer/components/icons';
 
 export function SharedContextSettings() {
   const { t } = useTranslation();
-  const { sharedContext, setSharedContext } = useUIStore();
+  const { sharedContext, setSharedContext } = useUIStore(
+    useShallow((s) => ({
+      sharedContext: s.sharedContext,
+      setSharedContext: s.setSharedContext,
+    }))
+  );
 
   return (
     <div className="space-y-6">
@@ -179,18 +186,5 @@ function ToggleSwitch({ checked, onChange, disabled }: ToggleSwitchProps) {
         }`}
       />
     </button>
-  );
-}
-
-function InfoIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
   );
 }

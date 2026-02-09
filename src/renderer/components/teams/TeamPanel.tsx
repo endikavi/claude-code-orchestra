@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useTeamStore } from '../../stores/teamStore';
+import { Spinner } from '../common/Spinner';
 import { TeamCard } from './TeamCard';
 
 interface TeamPanelProps {
@@ -8,7 +10,14 @@ interface TeamPanelProps {
 
 export function TeamPanel({ onClose }: TeamPanelProps) {
   const { t } = useTranslation();
-  const { getAllTeams, getTeamCount, getTotalMembers, isLoading } = useTeamStore();
+  const { getAllTeams, getTeamCount, getTotalMembers, isLoading } = useTeamStore(
+    useShallow((s) => ({
+      getAllTeams: s.getAllTeams,
+      getTeamCount: s.getTeamCount,
+      getTotalMembers: s.getTotalMembers,
+      isLoading: s.isLoading,
+    }))
+  );
   const teams = getAllTeams();
   const teamCount = getTeamCount();
   const totalMembers = getTotalMembers();
@@ -63,7 +72,7 @@ export function TeamPanel({ onClose }: TeamPanelProps) {
       <div className="flex-1 overflow-auto p-3 space-y-2">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin h-6 w-6 border-2 border-sky-500 border-t-transparent rounded-full" />
+            <Spinner />
           </div>
         ) : teams.length === 0 ? (
           <div className="text-center py-8">

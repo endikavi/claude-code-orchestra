@@ -1,9 +1,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useOrchestrationStore } from '../../stores/orchestrationStore';
+import { Spinner } from '../common/Spinner';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { SubagentCard } from './SubagentCard';
+import { TmuxSessionList } from '../tmux/TmuxSessionList';
 import type { SubagentInstance } from '@shared/types';
 
 interface ProjectGroup {
@@ -24,8 +27,19 @@ interface ProjectGroup {
 
 export function OrchestraView() {
   const { t } = useTranslation();
-  const { projects, selectProject } = useProjectStore();
-  const { instances, selectInstance, selectShell } = useInstanceStore();
+  const { projects, selectProject } = useProjectStore(
+    useShallow((s) => ({
+      projects: s.projects,
+      selectProject: s.selectProject,
+    }))
+  );
+  const { instances, selectInstance, selectShell } = useInstanceStore(
+    useShallow((s) => ({
+      instances: s.instances,
+      selectInstance: s.selectInstance,
+      selectShell: s.selectShell,
+    }))
+  );
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(['all']));
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
   const {
@@ -35,7 +49,16 @@ export function OrchestraView() {
     getCompletedSubagentCount,
     getTotalRunningSubagents,
     getTotalCompletedSubagents,
-  } = useOrchestrationStore();
+  } = useOrchestrationStore(
+    useShallow((s) => ({
+      isLoading: s.isLoading,
+      subagentsByInstance: s.subagentsByInstance,
+      getRunningSubagentCount: s.getRunningSubagentCount,
+      getCompletedSubagentCount: s.getCompletedSubagentCount,
+      getTotalRunningSubagents: s.getTotalRunningSubagents,
+      getTotalCompletedSubagents: s.getTotalCompletedSubagents,
+    }))
+  );
 
   // Navigate to instance tab
   const navigateToInstance = useCallback(
@@ -157,7 +180,7 @@ export function OrchestraView() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-4 border-sky-500 border-t-transparent rounded-full mx-auto mb-3" />
+          <Spinner size="lg" className="mx-auto mb-3" />
           <p className="text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
         </div>
       </div>
@@ -190,6 +213,7 @@ export function OrchestraView() {
           <p className="text-gray-500 dark:text-gray-400 mb-6">
             {t('orchestration.noInstancesDescription')}
           </p>
+          <TmuxSessionList />
         </div>
       </div>
     );

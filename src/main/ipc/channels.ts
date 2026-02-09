@@ -169,6 +169,11 @@ export const IPC_CHANNELS = {
   HOOK_GET_PROJECT_SETTINGS: 'hook:getProjectSettings',
   HOOK_HAS_CONFIGURED: 'hook:hasConfigured',
 
+  // Global sound hooks operations
+  NOTIFICATION_INSTALL_GLOBAL_SOUNDS: 'notification:installGlobalSounds',
+  NOTIFICATION_UNINSTALL_GLOBAL_SOUNDS: 'notification:uninstallGlobalSounds',
+  NOTIFICATION_HAS_GLOBAL_SOUNDS: 'notification:hasGlobalSounds',
+
   // Agent discovery operations
   AGENT_DISCOVER: 'agent:discover',
   AGENT_VALIDATE_FILE: 'agent:validateFile',
@@ -375,6 +380,24 @@ export const IPC_CHANNELS = {
   PLAN_CREATED: 'plan:created',
   PLAN_UPDATED: 'plan:updated',
   PLAN_DELETED: 'plan:deleted',
+
+  // File explorer operations
+  FILES_LIST_DIRECTORY: 'files:listDirectory',
+  FILES_READ_FILE: 'files:readFile',
+  FILES_WRITE_FILE: 'files:writeFile',
+  FILES_CREATE: 'files:create',
+  FILES_RENAME: 'files:rename',
+  FILES_DELETE: 'files:delete',
+  FILES_GLOB: 'files:glob',
+
+  // IDE integration channels
+  IDE_FILE_OPENED: 'ide:fileOpened', // Main → Renderer (file opened by Claude)
+  IDE_DIFF_REQUESTED: 'ide:diffRequested', // Main → Renderer (diff review requested)
+  IDE_DIFF_RESOLVED: 'ide:diffResolved', // Renderer → Main (user accepted/rejected diff)
+
+  // Tmux session operations
+  TMUX_GET_SESSIONS: 'tmux:getSessions',
+  TMUX_ATTACH_SESSION: 'tmux:attachSession',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

@@ -369,6 +369,23 @@ export * from './teams';
 // Re-export plans types
 export * from './plans';
 
+// Re-export file explorer types
+export * from './fileExplorer';
+
+// Re-export IDE integration types
+export * from './ide';
+
+// Re-export tmux session types
+export * from './tmuxSessions';
+
+// Git file entry from git status --porcelain
+export interface GitFileEntry {
+  path: string;
+  indexStatus: string; // Char of staged status ('M','A','D','R','?',' ')
+  workTreeStatus: string; // Char of unstaged status
+  oldPath?: string; // For renames
+}
+
 // Git status types
 export interface GitStatus {
   branch: string;
@@ -384,4 +401,5 @@ export interface GitStatus {
   lastCommitMessage: string | null;
   isRepo: boolean;
   lastChecked: number;
+  files?: GitFileEntry[];
 }

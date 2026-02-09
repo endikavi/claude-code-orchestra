@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useNotificationStore } from '../../stores/notificationStore';
+import { Spinner } from '../common/Spinner';
 import { testSound, initializeAudio, type SoundType } from '../../utils/notificationSound';
 import type { NotificationType } from '@shared/types';
+import { SpeakerIcon } from '@renderer/components/icons';
 
 // Notification types with their settings
 const NOTIFICATION_TYPES: { type: NotificationType; labelKey: string; defaultSound: boolean }[] = [
@@ -34,13 +37,46 @@ const NOTIFICATION_TYPES: { type: NotificationType; labelKey: string; defaultSou
 
 export function NotificationSettings() {
   const { t } = useTranslation();
-  const { preferences, loadPreferences, setPreferences } = useNotificationStore();
+  const { preferences, loadPreferences, setPreferences } = useNotificationStore(
+    useShallow((s) => ({
+      preferences: s.preferences,
+      loadPreferences: s.loadPreferences,
+      setPreferences: s.setPreferences,
+    }))
+  );
+  const [globalSoundsInstalled, setGlobalSoundsInstalled] = useState(false);
+  const [globalSoundsLoading, setGlobalSoundsLoading] = useState(false);
+
+  const checkGlobalSounds = useCallback(async () => {
+    try {
+      const installed = await window.electronAPI.notification.hasGlobalSounds();
+      setGlobalSoundsInstalled(installed);
+    } catch {
+      // Not available (web client)
+    }
+  }, []);
 
   useEffect(() => {
     void loadPreferences();
-    // Initialize audio on mount
     void initializeAudio();
-  }, [loadPreferences]);
+    void checkGlobalSounds();
+  }, [loadPreferences, checkGlobalSounds]);
+
+  const handleInstallGlobalSounds = async () => {
+    setGlobalSoundsLoading(true);
+    try {
+      if (globalSoundsInstalled) {
+        await window.electronAPI.notification.uninstallGlobalSounds();
+      } else {
+        await window.electronAPI.notification.installGlobalSounds();
+      }
+      await checkGlobalSounds();
+    } catch {
+      // Handle error silently
+    } finally {
+      setGlobalSoundsLoading(false);
+    }
+  };
 
   const handleToggle = async (
     key: 'enabled' | 'playSound' | 'showNativeNotifications' | 'showInAppNotifications'
@@ -82,7 +118,7 @@ export function NotificationSettings() {
   if (!preferences) {
     return (
       <div className="flex items-center justify-center h-48">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -192,6 +228,48 @@ export function NotificationSettings() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* CLI Sound Hooks */}
+      <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-neutral-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {t('notifications.settings.cliSounds')}
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-500">
+          {t('notifications.settings.cliSoundsDesc')}
+        </p>
+
+        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-neutral-800/50 rounded">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${
+                globalSoundsInstalled ? 'bg-green-500' : 'bg-gray-400'
+              }`}
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              {globalSoundsInstalled
+                ? t('notifications.settings.globalSoundsInstalled')
+                : t('notifications.settings.globalSoundsNotInstalled')}
+            </span>
+          </div>
+          <button
+            onClick={handleInstallGlobalSounds}
+            disabled={globalSoundsLoading}
+            className={`px-3 py-1.5 text-xs rounded transition-colors ${
+              globalSoundsLoading
+                ? 'bg-gray-200 dark:bg-neutral-700 text-gray-400 cursor-not-allowed'
+                : globalSoundsInstalled
+                  ? 'bg-red-500/20 hover:bg-red-500/30 text-red-500'
+                  : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-500'
+            }`}
+          >
+            {globalSoundsLoading
+              ? t('notifications.settings.installing')
+              : globalSoundsInstalled
+                ? t('notifications.settings.uninstallGlobally')
+                : t('notifications.settings.installGlobally')}
+          </button>
+        </div>
       </div>
 
       {/* Per-type settings */}
@@ -316,18 +394,5 @@ function SoundPreviewButton({ type, label, onTest }: SoundPreviewButtonProps) {
       <SpeakerIcon className="w-3 h-3" />
       {label}
     </button>
-  );
-}
-
-function SpeakerIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-      />
-    </svg>
   );
 }

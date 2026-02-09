@@ -55,6 +55,11 @@ import type {
   MoveRalphTaskInput,
   ReorderRalphTasksInput,
   RalphTaskHelpRequest,
+  DirectoryListingResponse,
+  FileContentResponse,
+  FileOperationResponse,
+  IdeFileOpenEvent,
+  IdeDiffRequestEvent,
 } from '@shared/types';
 import type { RemoteConfig, RemoteServerStatus } from '@shared/types/remote';
 import type {
@@ -94,6 +99,7 @@ import type {
   ModelState,
   ProjectIndexStatus,
 } from '@shared/types/vectorSearch';
+import type { TmuxSessionListResponse, TmuxAttachResult } from '@shared/types/tmuxSessions';
 import type { IpcRendererEvent } from 'electron';
 
 // Expose protected methods to renderer
@@ -679,6 +685,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_CLICKED, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_CLICKED, listener);
     },
+
+    // Global sound hooks
+    installGlobalSounds: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_INSTALL_GLOBAL_SOUNDS),
+
+    uninstallGlobalSounds: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_UNINSTALL_GLOBAL_SOUNDS),
+
+    hasGlobalSounds: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_HAS_GLOBAL_SOUNDS),
   },
 
   // Hook operations
@@ -881,6 +897,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // File explorer operations
+  files: {
+    listDirectory: (
+      projectPath: string,
+      relativePath: string = '',
+      respectGitignore: boolean = true
+    ): Promise<DirectoryListingResponse> =>
+      ipcRenderer.invoke(
+        IPC_CHANNELS.FILES_LIST_DIRECTORY,
+        projectPath,
+        relativePath,
+        respectGitignore
+      ),
+
+    readFile: (projectPath: string, relativePath: string): Promise<FileContentResponse> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILES_READ_FILE, projectPath, relativePath),
+
+    writeFile: (
+      projectPath: string,
+      relativePath: string,
+      content: string
+    ): Promise<FileOperationResponse> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILES_WRITE_FILE, projectPath, relativePath, content),
+
+    create: (
+      projectPath: string,
+      relativePath: string,
+      type: 'file' | 'directory',
+      content?: string
+    ): Promise<FileOperationResponse> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILES_CREATE, projectPath, relativePath, type, content),
+
+    rename: (
+      projectPath: string,
+      oldPath: string,
+      newPath: string
+    ): Promise<FileOperationResponse> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILES_RENAME, projectPath, oldPath, newPath),
+
+    delete: (projectPath: string, relativePath: string): Promise<FileOperationResponse> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILES_DELETE, projectPath, relativePath),
+
+    glob: (projectPath: string): Promise<string[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILES_GLOB, projectPath),
+  },
+
+  // IDE integration operations
+  ide: {
+    onFileOpened: (callback: (event: IdeFileOpenEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: IdeFileOpenEvent) =>
+        callback(data);
+      ipcRenderer.on(IPC_CHANNELS.IDE_FILE_OPENED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.IDE_FILE_OPENED, listener);
+    },
+
+    onDiffRequested: (callback: (event: IdeDiffRequestEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: IdeDiffRequestEvent) =>
+        callback(data);
+      ipcRenderer.on(IPC_CHANNELS.IDE_DIFF_REQUESTED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.IDE_DIFF_REQUESTED, listener);
+    },
+
+    resolveDiff: (requestId: string, applied: boolean): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.IDE_DIFF_RESOLVED, requestId, applied),
+  },
+
   // Subagent operations (native Claude Task tool tracking)
   subagent: {
     getByInstance: (instanceId: string): Promise<SubagentInstance[]> =>
@@ -995,6 +1077,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on(IPC_CHANNELS.PLAN_DELETED, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.PLAN_DELETED, listener);
     },
+  },
+
+  // Tmux session operations
+  tmux: {
+    getSessions: (): Promise<TmuxSessionListResponse> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TMUX_GET_SESSIONS),
+
+    attachSession: (name: string): Promise<TmuxAttachResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TMUX_ATTACH_SESSION, name),
   },
 
   // Proxy operations (web preview tunneling)
@@ -1788,6 +1879,9 @@ declare global {
         onCleared: (callback: () => void) => () => void;
         onAllRead: (callback: () => void) => () => void;
         onClicked: (callback: (id: string) => void) => () => void;
+        installGlobalSounds: () => Promise<{ success: boolean; error?: string }>;
+        uninstallGlobalSounds: () => Promise<{ success: boolean; error?: string }>;
+        hasGlobalSounds: () => Promise<boolean>;
       };
       hook: {
         getTemplates: () => Promise<HookTemplate[]>;
@@ -1882,6 +1976,37 @@ declare global {
         getStatus: (projectId: string) => Promise<GitStatus | null>;
         refresh: (projectId: string) => Promise<GitStatus | null>;
         onStatusChanged: (callback: (projectId: string, status: GitStatus) => void) => () => void;
+      };
+      files: {
+        listDirectory: (
+          projectPath: string,
+          relativePath?: string,
+          respectGitignore?: boolean
+        ) => Promise<DirectoryListingResponse>;
+        readFile: (projectPath: string, relativePath: string) => Promise<FileContentResponse>;
+        writeFile: (
+          projectPath: string,
+          relativePath: string,
+          content: string
+        ) => Promise<FileOperationResponse>;
+        create: (
+          projectPath: string,
+          relativePath: string,
+          type: 'file' | 'directory',
+          content?: string
+        ) => Promise<FileOperationResponse>;
+        rename: (
+          projectPath: string,
+          oldPath: string,
+          newPath: string
+        ) => Promise<FileOperationResponse>;
+        delete: (projectPath: string, relativePath: string) => Promise<FileOperationResponse>;
+        glob: (projectPath: string) => Promise<string[]>;
+      };
+      ide: {
+        onFileOpened: (callback: (event: IdeFileOpenEvent) => void) => () => void;
+        onDiffRequested: (callback: (event: IdeDiffRequestEvent) => void) => () => void;
+        resolveDiff: (requestId: string, applied: boolean) => Promise<{ success: boolean }>;
       };
       subagent: {
         getByInstance: (instanceId: string) => Promise<SubagentInstance[]>;
@@ -2162,6 +2287,10 @@ declare global {
         onCreated: (callback: (plan: TrackedPlan) => void) => () => void;
         onUpdated: (callback: (plan: TrackedPlan) => void) => () => void;
         onDeleted: (callback: (planName: string) => void) => () => void;
+      };
+      tmux: {
+        getSessions: () => Promise<TmuxSessionListResponse>;
+        attachSession: (name: string) => Promise<TmuxAttachResult>;
       };
     };
   }

@@ -1,31 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useProxyStore } from '../../stores/proxyStore';
-
-// Inline icons
-function CrosshairIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <circle cx="12" cy="12" r="10" strokeWidth={2} />
-      <line x1="12" y1="2" x2="12" y2="6" strokeWidth={2} />
-      <line x1="12" y1="18" x2="12" y2="22" strokeWidth={2} />
-      <line x1="2" y1="12" x2="6" y2="12" strokeWidth={2} />
-      <line x1="18" y1="12" x2="22" y2="12" strokeWidth={2} />
-    </svg>
-  );
-}
-
-function TerminalIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-      />
-    </svg>
-  );
-}
+import { CrosshairIcon, TerminalIcon } from '@renderer/components/icons';
 
 interface InspectorToolbarProps {
   viewId: string;

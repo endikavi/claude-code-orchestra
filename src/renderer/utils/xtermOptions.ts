@@ -16,7 +16,9 @@ export interface XtermOptionsFlags {
  * - tmux is a terminal multiplexer; it manages its own screen state, scrollback, and redraws.
  * - Enabling convertEol/windowsMode in tmux sessions can cause inconsistent newline handling
  *   and visual corruption, especially around redraws/splits.
- * - xterm scrollback duplicates tmux history; prefer tmux copy-mode for scroll.
+ * - xterm scrollback duplicates tmux history; however, we keep a local scrollback buffer
+ *   so the user can scroll with the mouse wheel (handled via attachCustomWheelEventHandler
+ *   in TerminalView to prevent events from being forwarded to tmux/Claude TUI).
  */
 export function getXtermTmuxCompatibleOptions(
   flags: XtermOptionsFlags
@@ -25,7 +27,7 @@ export function getXtermTmuxCompatibleOptions(
     return {
       convertEol: false,
       windowsMode: false,
-      scrollback: 0,
+      scrollback: 5000,
     };
   }
 

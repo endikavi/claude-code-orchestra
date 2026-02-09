@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '../stores/instanceStore';
 import { useClusterStore } from '../stores/clusterStore';
 
@@ -11,8 +12,23 @@ import { useClusterStore } from '../stores/clusterStore';
  * - sendJson: For JSON-formatted messages (stream-json mode / structured view)
  */
 export function useInstanceInput(instanceId: string) {
-  const { sendInput, sendJsonMessage } = useInstanceStore();
-  const { globalInstances, sendRemoteInput, isConnected: clusterConnected } = useClusterStore();
+  const { sendInput, sendJsonMessage } = useInstanceStore(
+    useShallow((s) => ({
+      sendInput: s.sendInput,
+      sendJsonMessage: s.sendJsonMessage,
+    }))
+  );
+  const {
+    globalInstances,
+    sendRemoteInput,
+    isConnected: clusterConnected,
+  } = useClusterStore(
+    useShallow((s) => ({
+      globalInstances: s.globalInstances,
+      sendRemoteInput: s.sendRemoteInput,
+      isConnected: s.isConnected,
+    }))
+  );
 
   // Check if instance is remote (belongs to another node in the cluster)
   const remoteInstance = clusterConnected

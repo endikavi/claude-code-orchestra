@@ -4,11 +4,13 @@ import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { useTranslation } from 'react-i18next';
-import { useInstanceStore } from '../../stores/instanceStore';
+import { useShallow } from 'zustand/react/shallow';
+import { useInstanceStore, stripTerminalQueryResponses } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ContextMenu } from '../common/ContextMenu';
 import { getTerminalFontFamily } from '../../utils/terminalFonts';
 import { getXtermTmuxCompatibleOptions } from '../../utils/xtermOptions';
+import { CopyIcon, PasteIcon } from '@renderer/components/icons';
 import 'xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
@@ -77,7 +79,12 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   const pendingScrollRef = useRef(false); // Track if we need to restore scroll after CSI H
   const scrollLockRef = useRef(false); // Lock scroll position during writes to prevent flicker
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const { sendShellInput, getShellOutput } = useInstanceStore();
+  const { sendShellInput, getShellOutput } = useInstanceStore(
+    useShallow((s) => ({
+      sendShellInput: s.sendShellInput,
+      getShellOutput: s.getShellOutput,
+    }))
+  );
   const theme = useUIStore((state) => state.theme);
   const terminalFont = useUIStore((state) => state.terminalFont);
   const tmuxMode = useUIStore((state) => state.tmuxMode);
@@ -268,12 +275,30 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
       initTimer = setTimeout(() => {
         animationFrameId = requestAnimationFrame(() => {
           safeFit();
+
+          // Force tmux to redraw by sending a nudge resize (cols-1 then cols)
+          // This triggers SIGWINCH which makes tmux repaint its TUI
+          if (currentTmuxMode && xtermRef.current) {
+            const { cols, rows } = xtermRef.current;
+            if (cols > 1) {
+              setTimeout(() => {
+                window.electronAPI.shell.resize(currentShellId, cols - 1, rows);
+                setTimeout(() => {
+                  window.electronAPI.shell.resize(currentShellId, cols, rows);
+                  safeFit();
+                }, 50);
+              }, 150);
+            }
+          }
         });
       }, 100);
 
-      // Handle user input - send directly to shell
+      // Handle user input - filter xterm.js-generated DA responses to prevent PTY echo loop
       terminal.onData((data) => {
-        void currentSendShellInput(currentShellId, data);
+        const filtered = stripTerminalQueryResponses(data);
+        if (filtered) {
+          void currentSendShellInput(currentShellId, filtered);
+        }
       });
 
       // Handle resize
@@ -283,7 +308,7 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
 
       // Write existing output and scroll to bottom
       if (currentOutput?.rawOutput) {
-        terminal.write(currentOutput.rawOutput, () => {
+        terminal.write(stripTerminalQueryResponses(currentOutput.rawOutput), () => {
           terminal.scrollToBottom();
         });
       }
@@ -343,8 +368,11 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
   // 5. Unlock scroll and restore position in write callback
   // 6. Restore visibility synchronously after scroll is set
   useEffect(() => {
-    const unsubscribe = window.electronAPI.shell.onRawOutput((id, data) => {
+    const unsubscribe = window.electronAPI.shell.onRawOutput((id, rawData) => {
       if (id === shellId && xtermRef.current) {
+        const data = stripTerminalQueryResponses(rawData);
+        if (!data) return;
+
         const viewport = viewportRef.current;
         const shouldAutoScroll = isNearBottomRef.current;
 
@@ -417,42 +445,16 @@ export function ShellTerminalView({ shellId }: ShellTerminalViewProps) {
             {
               label: t('terminal.copy'),
               onClick: handleCopy,
-              icon: <CopyIcon />,
+              icon: <CopyIcon className="w-4 h-4" />,
             },
             {
               label: t('terminal.paste'),
               onClick: handlePaste,
-              icon: <PasteIcon />,
+              icon: <PasteIcon className="w-4 h-4" />,
             },
           ]}
         />
       )}
     </div>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-      />
-    </svg>
-  );
-}
-
-function PasteIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-      />
-    </svg>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Spinner } from '../common/Spinner';
 import type { TrackedTask, TaskStatus } from '@shared/types';
 import { useElapsedTime } from '../../contexts/TimerContext';
 
@@ -34,11 +35,7 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
         return {
           borderColor: 'border-blue-300 dark:border-blue-600',
           bgColor: 'bg-blue-50 dark:bg-blue-900/20',
-          statusIcon: (
-            <div className="relative">
-              <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-            </div>
-          ),
+          statusIcon: <Spinner size="sm" />,
           statusText: task.activeForm || t('tasks.status.inProgress'),
           statusPill: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
         };
@@ -83,7 +80,7 @@ export function TaskCard({ task, showInstanceBadge = false }: TaskCardProps) {
   return (
     <div
       className={`
-        rounded border transition-all overflow-hidden
+        rounded border transition-colors overflow-hidden
         ${statusConfig.borderColor} ${statusConfig.bgColor}
       `}
     >

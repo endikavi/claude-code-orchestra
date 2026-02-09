@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../common/Modal';
+import { CheckIcon, XIcon } from '@renderer/components/icons';
 
 interface LocalSettingsModalProps {
   projectPath: string;
@@ -168,12 +169,12 @@ export function LocalSettingsModal({ projectPath, onClose }: LocalSettingsModalP
                 {content.trim() &&
                   (parseError ? (
                     <div className="flex items-center gap-1.5 text-red-500">
-                      <InvalidIcon />
+                      <XIcon className="w-4 h-4" />
                       <span className="text-xs">{t('localSettings.invalidJson')}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5 text-green-500">
-                      <ValidIcon />
+                      <CheckIcon className="w-4 h-4" />
                       <span className="text-xs">{t('localSettings.validJson')}</span>
                     </div>
                   ))}
@@ -225,21 +226,5 @@ export function LocalSettingsModal({ projectPath, onClose }: LocalSettingsModalP
         )}
       </div>
     </Modal>
-  );
-}
-
-function ValidIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-
-function InvalidIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
   );
 }

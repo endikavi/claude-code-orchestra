@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { Modal } from '../common/Modal';
+import { Spinner } from '../common/Spinner';
 import { useConversationStore } from '../../stores/conversationStore';
 
 interface ImportSessionsModalProps {
@@ -23,7 +25,15 @@ export function ImportSessionsModal({
     isImporting,
     loadAvailableSessions,
     importSessions,
-  } = useConversationStore();
+  } = useConversationStore(
+    useShallow((s) => ({
+      availableSessions: s.availableSessions,
+      isLoadingSessions: s.isLoadingSessions,
+      isImporting: s.isImporting,
+      loadAvailableSessions: s.loadAvailableSessions,
+      importSessions: s.importSessions,
+    }))
+  );
 
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [importResult, setImportResult] = useState<{ imported: number; failed: number } | null>(
@@ -99,7 +109,7 @@ export function ImportSessionsModal({
         {/* Loading state */}
         {isLoadingSessions && (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
+            <Spinner size="lg" />
           </div>
         )}
 
@@ -191,7 +201,7 @@ export function ImportSessionsModal({
                 <div
                   key={session.sessionId}
                   onClick={() => handleToggleSession(session.sessionId)}
-                  className={`p-3 rounded border cursor-pointer transition-all ${
+                  className={`p-3 rounded border cursor-pointer transition-colors ${
                     selectedSessions.has(session.sessionId)
                       ? 'border-sky-500 bg-sky-500/5 dark:bg-sky-500/10'
                       : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-gray-600'
@@ -288,7 +298,7 @@ export function ImportSessionsModal({
           >
             {isImporting ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <Spinner size="sm" />
                 {t('import.importing')}
               </>
             ) : (

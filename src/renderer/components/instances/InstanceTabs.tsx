@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
@@ -8,11 +9,27 @@ import { useProxyStore } from '../../stores/proxyStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { getStatusTabConfig } from '../../utils/statusConfig';
 import { ContextMenu } from '../common/ContextMenu';
+import {
+  PlusIcon,
+  CloseIcon,
+  TerminalIcon,
+  ChatBubbleIcon,
+  SplitIcon,
+  GlobeIcon,
+  FileIcon,
+} from '@renderer/components/icons';
+import { useEditorStore } from '../../stores/editorStore';
+import { UnsavedChangesDialog } from '../editor/UnsavedChangesDialog';
 import type { InstanceStatus, ShellInstanceStatus, ClaudeInstance, SplitTab } from '@shared/types';
 
 export function InstanceTabs() {
   const { t } = useTranslation();
-  const { selectedProjectId, getSelectedProject } = useProjectStore();
+  const { selectedProjectId, getSelectedProject } = useProjectStore(
+    useShallow((s) => ({
+      selectedProjectId: s.selectedProjectId,
+      getSelectedProject: s.getSelectedProject,
+    }))
+  );
   const {
     instances: allInstances,
     selectedInstanceId,
@@ -29,9 +46,43 @@ export function InstanceTabs() {
     removeSplit,
     selectSplit,
     removingInstanceIds,
-  } = useInstanceStore();
-  const { globalProjects, globalInstances, isConnected: clusterConnected } = useClusterStore();
-  const { setShowInstanceModal, viewMode, toggleViewMode } = useUIStore();
+  } = useInstanceStore(
+    useShallow((s) => ({
+      instances: s.instances,
+      selectedInstanceId: s.selectedInstanceId,
+      selectInstance: s.selectInstance,
+      getInstancesByProject: s.getInstancesByProject,
+      killInstance: s.killInstance,
+      selectedShellId: s.selectedShellId,
+      selectShell: s.selectShell,
+      getShellsByProject: s.getShellsByProject,
+      killShellInstance: s.killShellInstance,
+      splitTabs: s.splitTabs,
+      activeSplitId: s.activeSplitId,
+      createSplit: s.createSplit,
+      removeSplit: s.removeSplit,
+      selectSplit: s.selectSplit,
+      removingInstanceIds: s.removingInstanceIds,
+    }))
+  );
+  const {
+    globalProjects,
+    globalInstances,
+    isConnected: clusterConnected,
+  } = useClusterStore(
+    useShallow((s) => ({
+      globalProjects: s.globalProjects,
+      globalInstances: s.globalInstances,
+      isConnected: s.isConnected,
+    }))
+  );
+  const { setShowInstanceModal, viewMode, toggleViewMode } = useUIStore(
+    useShallow((s) => ({
+      setShowInstanceModal: s.setShowInstanceModal,
+      viewMode: s.viewMode,
+      toggleViewMode: s.toggleViewMode,
+    }))
+  );
   const isMobile = useIsMobile();
 
   // Get project from local or global projects
@@ -161,19 +212,46 @@ export function InstanceTabs() {
   }, [contextMenu, allTabs]);
 
   // Get proxy views
-  const { proxyViews } = useProxyStore();
+  const proxyViews = useProxyStore((s) => s.proxyViews);
+
+  // Editor tabs
+  const {
+    openFiles,
+    activeFilePath,
+    setActiveFile,
+    closeFile,
+    isFileDirty,
+    pendingClose,
+    confirmClose,
+  } = useEditorStore(
+    useShallow((s) => ({
+      openFiles: s.openFiles,
+      activeFilePath: s.activeFilePath,
+      setActiveFile: s.setActiveFile,
+      closeFile: s.closeFile,
+      isFileDirty: s.isFileDirty,
+      pendingClose: s.pendingClose,
+      confirmClose: s.confirmClose,
+    }))
+  );
+
+  // Filter editor files to current project only
+  const projectFiles = useMemo(
+    () => (project ? openFiles.filter((f) => f.projectPath === project.path) : []),
+    [openFiles, project]
+  );
 
   // Get title for an instance, shell, or proxy
   const getTabTitle = (id: string, type: 'instance' | 'shell' | 'proxy'): string => {
     if (type === 'instance') {
       const instance = instances.find((i) => i.id === id);
-      return instance?.terminalTitle || instance?.prompt || 'New session';
+      return instance?.terminalTitle || instance?.prompt || t('tabs.newSession');
     }
     if (type === 'proxy') {
       const proxyView = proxyViews.get(id);
-      return proxyView?.title || `Preview :${proxyView?.port || '?'}`;
+      return proxyView?.title || t('tabs.preview', { port: proxyView?.port || '?' });
     }
-    return 'Shell';
+    return t('tabs.shell');
   };
 
   // Get status for an instance, shell, or proxy
@@ -194,20 +272,22 @@ export function InstanceTabs() {
   };
 
   return (
-    <div className="flex items-center gap-1 sm:gap-2 pt-1.5 px-1.5 sm:pt-2 sm:px-2 bg-gray-50 dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-700 overflow-x-auto scrollbar-hide">
+    <div className="flex items-center gap-1 sm:gap-2 pt-1.5 px-1.5 sm:pt-2 sm:px-2 bg-[var(--color-bg-subtle)] border-b border-[var(--color-border-default)] overflow-x-auto scrollbar-hide">
       {/* Project name/icon - clickable to go to history */}
       {project && (
         <button
           onClick={() => {
             selectInstance(null);
+            selectShell(null);
             selectSplit(null);
+            useEditorStore.setState({ activeFilePath: null });
           }}
-          className={`flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 flex-shrink-0 hover:bg-gray-200 dark:hover:bg-neutral-800 rounded-sm transition-colors cursor-pointer ${
+          className={`flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 flex-shrink-0 hover:bg-[var(--color-bg-elevated)] dark:hover:bg-neutral-800 rounded-md transition-colors cursor-pointer ${
             isMobile
               ? 'p-2 min-w-[44px] min-h-[44px] justify-center'
-              : 'px-2 py-1 border-r border-gray-200 dark:border-neutral-700 pr-3'
+              : 'px-2 py-1 border-r border-[var(--color-border-default)] pr-3'
           }`}
-          title="View conversation history"
+          title={t('tabs.viewHistory')}
         >
           <div
             className="w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full"
@@ -285,6 +365,55 @@ export function InstanceTabs() {
         </div>
       )}
 
+      {/* Editor file tabs (filtered to current project) */}
+      {projectFiles.length > 0 && (
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {projectFiles.map((file) => {
+            const basename = file.relativePath.split('/').pop() || file.relativePath;
+            const isActive =
+              file.relativePath === activeFilePath &&
+              !selectedInstanceId &&
+              !selectedShellId &&
+              !activeSplitId;
+            const dirty = isFileDirty(file.relativePath);
+
+            return (
+              <div
+                key={file.relativePath}
+                className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                  isActive
+                    ? 'bg-[var(--color-bg-elevated)] dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-md shadow-sm'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-md'
+                }`}
+                onClick={() => {
+                  selectInstance(null);
+                  selectShell(null);
+                  selectSplit(null);
+                  setActiveFile(file.relativePath);
+                }}
+                title={file.relativePath}
+              >
+                {dirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />}
+                <FileIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-sm truncate max-w-[100px] sm:max-w-[120px]">{basename}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeFile(file.relativePath);
+                  }}
+                  className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-md transition-opacity ${
+                    isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  title="Close file"
+                >
+                  <CloseIcon className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* View mode toggle for new instances */}
       <button
         onClick={toggleViewMode}
@@ -344,6 +473,16 @@ export function InstanceTabs() {
           ]}
         />
       )}
+
+      {/* Unsaved changes dialog */}
+      {pendingClose && (
+        <UnsavedChangesDialog
+          fileName={pendingClose.relativePath.split('/').pop() || pendingClose.relativePath}
+          onSave={() => void confirmClose('save')}
+          onDiscard={() => void confirmClose('discard')}
+          onCancel={() => void confirmClose('cancel')}
+        />
+      )}
     </div>
   );
 }
@@ -371,8 +510,9 @@ function InstanceTab({
   onContextMenu,
   isMobile = false,
 }: InstanceTabProps) {
+  const { t } = useTranslation();
   // Use terminal title if available, otherwise fallback to prompt or default text
-  const displayText = terminalTitle || prompt || 'New session';
+  const displayText = terminalTitle || prompt || t('tabs.newSession');
   // Truncate more aggressively on mobile
   const maxLength = isMobile ? 15 : 30;
   const truncatedText =
@@ -387,8 +527,8 @@ function InstanceTab({
     <div
       className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-gray-200 dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-sm'
-          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-sm'
+          ? 'bg-[var(--color-bg-elevated)] dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-md shadow-sm'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-md'
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
@@ -398,10 +538,10 @@ function InstanceTab({
       <span className="text-sm truncate max-w-[100px] sm:max-w-[150px]">{truncatedText}</span>
       <button
         onClick={handleClose}
-        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-sm transition-opacity ${
+        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-md transition-opacity ${
           isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
-        title="Close instance"
+        title={t('tabs.closeInstance')}
       >
         <CloseIcon className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
       </button>
@@ -414,48 +554,6 @@ function StatusBadge({ status }: { status: InstanceStatus }) {
 
   return (
     <div className={`w-2 h-2 rounded-full ${color} ${pulse ? 'status-pulse' : ''}`} title={label} />
-  );
-}
-
-function PlusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function TerminalIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-      />
-    </svg>
-  );
-}
-
-function ChatBubbleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-      />
-    </svg>
   );
 }
 
@@ -478,6 +576,7 @@ function ShellTab({
   onContextMenu,
   isMobile = false,
 }: ShellTabProps) {
+  const { t } = useTranslation();
   const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
     onClose();
@@ -487,22 +586,22 @@ function ShellTab({
     <div
       className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-gray-200 dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-sm'
-          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-sm'
+          ? 'bg-[var(--color-bg-elevated)] dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-md shadow-sm'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-md'
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
-      title="Shell"
+      title={t('tabs.shell')}
     >
       <ShellStatusBadge status={status} />
       <TerminalIcon className="w-4 h-4" />
-      <span className="text-sm truncate max-w-[100px] sm:max-w-[150px]">Shell</span>
+      <span className="text-sm truncate max-w-[100px] sm:max-w-[150px]">{t('tabs.shell')}</span>
       <button
         onClick={handleClose}
-        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-sm transition-opacity ${
+        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-md transition-opacity ${
           isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
-        title="Close shell"
+        title={t('tabs.closeShell')}
       >
         <CloseIcon className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
       </button>
@@ -511,11 +610,12 @@ function ShellTab({
 }
 
 function ShellStatusBadge({ status }: { status: ShellInstanceStatus }) {
+  const { t } = useTranslation();
   const config: Record<ShellInstanceStatus, { color: string; pulse: boolean; label: string }> = {
-    running: { color: 'bg-green-500', pulse: true, label: 'Running' },
-    completed: { color: 'bg-gray-500', pulse: false, label: 'Completed' },
-    error: { color: 'bg-red-500', pulse: false, label: 'Error' },
-    killed: { color: 'bg-gray-600', pulse: false, label: 'Killed' },
+    running: { color: 'bg-green-500', pulse: true, label: t('status.running') },
+    completed: { color: 'bg-gray-500', pulse: false, label: t('status.completed') },
+    error: { color: 'bg-red-500', pulse: false, label: t('status.error') },
+    killed: { color: 'bg-gray-600', pulse: false, label: t('status.killed') },
   };
 
   const { color, pulse, label } = config[status];
@@ -553,6 +653,7 @@ function SplitTabComponent({
   onClose,
   isMobile = false,
 }: SplitTabComponentProps) {
+  const { t } = useTranslation();
   // Truncate titles more aggressively for split tabs
   const maxLength = isMobile ? 8 : 15;
   const truncate = (text: string) =>
@@ -586,7 +687,7 @@ function SplitTabComponent({
   // Render type-specific icon
   const renderTypeIcon = (type: 'instance' | 'shell' | 'proxy') => {
     if (type === 'proxy') {
-      return <GlobeIcon className="w-3 h-3 text-sky-500" />;
+      return <GlobeIcon className="w-3 h-3 text-primary" />;
     }
     if (type === 'shell') {
       return <TerminalIcon className="w-3 h-3 text-neutral-500 dark:text-neutral-400" />;
@@ -598,8 +699,8 @@ function SplitTabComponent({
     <div
       className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2 py-2 sm:py-1.5 cursor-pointer transition-colors group min-h-[44px] sm:min-h-0 flex-shrink-0 ${
         isSelected
-          ? 'bg-gray-200 dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-sm'
-          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-sm'
+          ? 'bg-[var(--color-bg-elevated)] dark:bg-neutral-800 text-neutral-800 dark:text-white rounded-t-md shadow-sm'
+          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-750 rounded-md'
       }`}
       onClick={onSelect}
       title={`${leftTitle} | ${rightTitle}`}
@@ -633,39 +734,13 @@ function SplitTabComponent({
       {/* Close button */}
       <button
         onClick={handleClose}
-        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-sm transition-opacity ${
+        className={`p-1 sm:p-0.5 hover:bg-gray-300 dark:hover:bg-neutral-700 rounded-md transition-opacity ${
           isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
-        title="Close split"
+        title={t('tabs.closeSplit')}
       >
         <CloseIcon className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
       </button>
     </div>
-  );
-}
-
-function SplitIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"
-      />
-    </svg>
-  );
-}
-
-function GlobeIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-      />
-    </svg>
   );
 }

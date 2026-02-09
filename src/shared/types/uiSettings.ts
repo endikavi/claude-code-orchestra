@@ -3,7 +3,7 @@ import type { SharedContextSettings } from './sharedContext';
 
 export type ViewMode = 'terminal' | 'structured';
 export type Theme = 'dark' | 'light';
-export type RightPanelMode = 'none' | 'tasks' | 'teams';
+export type RightPanelMode = 'none' | 'tasks' | 'teams' | 'files';
 
 export interface CollapsedSections {
   local: boolean;
@@ -49,4 +49,7 @@ export interface UISettings {
    * This should be enabled when the backend PTY is running a tmux session.
    */
   tmuxMode: boolean;
+
+  /** Whether the cross-project tab bars are collapsed */
+  otherProjectBarsCollapsed: boolean;
 }

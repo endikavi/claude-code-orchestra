@@ -1,14 +1,24 @@
-import { useMemo } from 'react';
+import { useMemo, lazy, Suspense } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
 import { useConversationStore } from '../../stores/conversationStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
-import { ProjectModal } from '../projects/ProjectModal';
-import { LocalSettingsModal } from '../projects/LocalSettingsModal';
-import { InstanceModal } from '../instances/InstanceModal';
-import { SettingsModal } from '../settings/SettingsModal';
+const ProjectModal = lazy(() =>
+  import('../projects/ProjectModal').then((m) => ({ default: m.ProjectModal }))
+);
+const LocalSettingsModal = lazy(() =>
+  import('../projects/LocalSettingsModal').then((m) => ({ default: m.LocalSettingsModal }))
+);
+const InstanceModal = lazy(() =>
+  import('../instances/InstanceModal').then((m) => ({ default: m.InstanceModal }))
+);
+const SettingsModal = lazy(() =>
+  import('../settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
+);
+
 import { InstanceTabs } from '../instances/InstanceTabs';
 import { TerminalView } from '../terminal/TerminalView';
 import { ShellTerminalView } from '../terminal/ShellTerminalView';
@@ -19,9 +29,15 @@ import { ProjectContentTabs } from '../ralphTasks/ProjectContentTabs';
 import { ConversationViewer } from '../conversations/ConversationViewer';
 import { MobileKeyboard } from '../terminal/MobileKeyboard';
 import { OrchestraView } from '../orchestration/OrchestraView';
+import { useEditorStore } from '../../stores/editorStore';
+import { EditorView } from '../editor';
 
 export function MainContent() {
-  const { selectedProjectId } = useProjectStore();
+  const { selectedProjectId } = useProjectStore(
+    useShallow((s) => ({
+      selectedProjectId: s.selectedProjectId,
+    }))
+  );
   const {
     instances: allInstances,
     selectedInstanceId,
@@ -30,9 +46,24 @@ export function MainContent() {
     activeSplitId,
     getActiveSplit,
     removingInstanceIds,
-  } = useInstanceStore();
-  const { globalInstances, isConnected: clusterConnected } = useClusterStore();
-  const { viewingConversation } = useConversationStore();
+  } = useInstanceStore(
+    useShallow((s) => ({
+      instances: s.instances,
+      selectedInstanceId: s.selectedInstanceId,
+      getInstancesByProject: s.getInstancesByProject,
+      selectedShellId: s.selectedShellId,
+      activeSplitId: s.activeSplitId,
+      getActiveSplit: s.getActiveSplit,
+      removingInstanceIds: s.removingInstanceIds,
+    }))
+  );
+  const { globalInstances, isConnected: clusterConnected } = useClusterStore(
+    useShallow((s) => ({
+      globalInstances: s.globalInstances,
+      isConnected: s.isConnected,
+    }))
+  );
+  const viewingConversation = useConversationStore((s) => s.viewingConversation);
   const {
     showProjectModal,
     showInstanceModal,
@@ -44,8 +75,35 @@ export function MainContent() {
     setShowSettingsModal,
     setShowLocalSettingsModal,
     viewMode: defaultViewMode,
-  } = useUIStore();
+  } = useUIStore(
+    useShallow((s) => ({
+      showProjectModal: s.showProjectModal,
+      showInstanceModal: s.showInstanceModal,
+      showSettingsModal: s.showSettingsModal,
+      showLocalSettingsModal: s.showLocalSettingsModal,
+      localSettingsProjectPath: s.localSettingsProjectPath,
+      setShowProjectModal: s.setShowProjectModal,
+      setShowInstanceModal: s.setShowInstanceModal,
+      setShowSettingsModal: s.setShowSettingsModal,
+      setShowLocalSettingsModal: s.setShowLocalSettingsModal,
+      viewMode: s.viewMode,
+    }))
+  );
   const isMobile = useIsMobile();
+  const { activeFilePath: activeEditorFile, openFiles: editorOpenFiles } = useEditorStore(
+    useShallow((s) => ({
+      activeFilePath: s.activeFilePath,
+      openFiles: s.openFiles,
+    }))
+  );
+
+  // Only show editor if active file belongs to the current project
+  const selectedProject = useProjectStore((s) => s.getSelectedProject());
+  const activeEditorFileForProject = useMemo(() => {
+    if (!activeEditorFile || !selectedProject) return null;
+    const file = editorOpenFiles.find((f) => f.relativePath === activeEditorFile);
+    return file?.projectPath === selectedProject.path ? activeEditorFile : null;
+  }, [activeEditorFile, editorOpenFiles, selectedProject]);
 
   // Get instances from local or global instances
   const projectInstances = useMemo(() => {
@@ -107,6 +165,9 @@ export function MainContent() {
             ) : selectedShellId ? (
               // Shell is selected - always show terminal view for shell
               <ShellTerminalView key={selectedShellId} shellId={selectedShellId} />
+            ) : activeEditorFileForProject ? (
+              // Editor file is active (scoped to current project)
+              <EditorView />
             ) : hasInstances && selectedInstanceId ? (
               effectiveViewMode === 'terminal' ? (
                 <TerminalView key={selectedInstanceId} instanceId={selectedInstanceId} />
@@ -127,16 +188,31 @@ export function MainContent() {
       )}
 
       {/* Modals */}
-      {showProjectModal && <ProjectModal onClose={() => setShowProjectModal(false)} />}
-      {showInstanceModal && selectedProjectId && (
-        <InstanceModal projectId={selectedProjectId} onClose={() => setShowInstanceModal(false)} />
+      {showProjectModal && (
+        <Suspense fallback={null}>
+          <ProjectModal onClose={() => setShowProjectModal(false)} />
+        </Suspense>
       )}
-      {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
+      {showInstanceModal && selectedProjectId && (
+        <Suspense fallback={null}>
+          <InstanceModal
+            projectId={selectedProjectId}
+            onClose={() => setShowInstanceModal(false)}
+          />
+        </Suspense>
+      )}
+      {showSettingsModal && (
+        <Suspense fallback={null}>
+          <SettingsModal onClose={() => setShowSettingsModal(false)} />
+        </Suspense>
+      )}
       {showLocalSettingsModal && localSettingsProjectPath && (
-        <LocalSettingsModal
-          projectPath={localSettingsProjectPath}
-          onClose={() => setShowLocalSettingsModal(false)}
-        />
+        <Suspense fallback={null}>
+          <LocalSettingsModal
+            projectPath={localSettingsProjectPath}
+            onClose={() => setShowLocalSettingsModal(false)}
+          />
+        </Suspense>
       )}
 
       {/* Mobile keyboard for terminal interaction */}

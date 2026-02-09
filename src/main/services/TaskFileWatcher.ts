@@ -63,7 +63,9 @@ export function getTaskListDir(taskListId: string): string {
 export class TaskFileWatcher extends EventEmitter {
   private taskListId: string | null = null;
   private taskListDir: string | null = null;
+  private fsWatcher: fs.FSWatcher | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
+  private debounceTimer: NodeJS.Timeout | null = null;
   private isWatching: boolean = false;
   private knownTasks: Map<string, ClaudeTaskFile> = new Map();
   private lastModifiedTimes: Map<string, number> = new Map();
@@ -122,38 +124,61 @@ export class TaskFileWatcher extends EventEmitter {
   private stopWatching(): void {
     this.isWatching = false;
 
+    if (this.fsWatcher) {
+      this.fsWatcher.close();
+      this.fsWatcher = null;
+    }
+
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
   }
 
   /**
-   * Start polling the directory for changes
+   * Start watching the directory for changes using fs.watch with polling fallback
    */
   private startPolling(): void {
-    this.pollTimer = setInterval(() => {
-      this.checkForChanges();
-    }, POLL_INTERVAL);
+    // Check immediately
+    void this.checkForChanges();
 
-    // Also check immediately
-    this.checkForChanges();
+    try {
+      this.fsWatcher = fs.watch(this.taskListDir!, { persistent: false }, () => {
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => void this.checkForChanges(), 300);
+      });
+      this.fsWatcher.on('error', () => {
+        // Fallback to slower polling on fs.watch error
+        this.fsWatcher = null;
+        this.pollTimer = setInterval(() => void this.checkForChanges(), 2000);
+      });
+    } catch {
+      // Fallback to slower polling if fs.watch is unavailable
+      this.pollTimer = setInterval(() => void this.checkForChanges(), 2000);
+    }
   }
 
   /**
    * Check if task files have changed
    */
-  private checkForChanges(): void {
+  private async checkForChanges(): Promise<void> {
     if (!this.taskListDir || !this.isWatching) return;
 
     try {
       // Check if directory exists
-      if (!fs.existsSync(this.taskListDir)) {
+      try {
+        await fs.promises.access(this.taskListDir);
+      } catch {
         return;
       }
 
       // Get all .json files in the directory
-      const files = fs.readdirSync(this.taskListDir);
+      const files = await fs.promises.readdir(this.taskListDir);
       const jsonFiles = files.filter((f) => f.endsWith('.json') && f !== '.lock');
 
       // Track which tasks we've seen
@@ -165,7 +190,7 @@ export class TaskFileWatcher extends EventEmitter {
         seenTasks.add(taskId);
 
         try {
-          const stats = fs.statSync(filePath);
+          const stats = await fs.promises.stat(filePath);
           const lastModified = stats.mtimeMs;
           const previousModified = this.lastModifiedTimes.get(taskId);
 

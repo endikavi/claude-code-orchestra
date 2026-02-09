@@ -16,8 +16,11 @@ import { setupOrchestrationEventListeners } from './stores/orchestrationStore';
 import { setupTaskEventListeners } from './stores/taskStore';
 import { setupTeamEventListeners } from './stores/teamStore';
 import { setupPlanEventListeners } from './stores/planStore';
+import { ToastContainer } from './components/common/Toast';
+import { QuickOpen } from './components/files/QuickOpen';
 
 function App() {
+  const showQuickOpen = useUIStore((state) => state.showQuickOpen);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const setupProjectListeners = useProjectStore((state) => state.setupListeners);
   const setupInstanceListeners = useInstanceStore((state) => state.setupListeners);
@@ -126,6 +129,8 @@ function App() {
           </div>
         </div>
       </TimerProvider>
+      <ToastContainer />
+      {showQuickOpen && <QuickOpen />}
     </ErrorBoundary>
   );
 }

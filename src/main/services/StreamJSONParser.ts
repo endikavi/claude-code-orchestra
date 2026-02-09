@@ -47,6 +47,12 @@ export class StreamJSONParser extends EventEmitter {
   private buffer: string = '';
   private currentStatus: InstanceStatus = 'starting';
 
+  // Static compiled regex for ANSI cleanup - avoids re-creation per call on this hot path
+  /* eslint-disable no-control-regex */
+  private static readonly ANSI_REGEX =
+    /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]|\r/g;
+  /* eslint-enable no-control-regex */
+
   constructor() {
     super();
   }
@@ -55,7 +61,10 @@ export class StreamJSONParser extends EventEmitter {
    * Process incoming data chunk
    */
   process(data: string): void {
-    this.buffer += data;
+    // Clean ANSI codes from new data BEFORE appending to buffer
+    // This avoids re-running the regex on the entire accumulated buffer each time
+    const cleanData = data.replace(StreamJSONParser.ANSI_REGEX, '');
+    this.buffer += cleanData;
     this.processBuffer();
   }
 
@@ -64,14 +73,6 @@ export class StreamJSONParser extends EventEmitter {
    * Claude CLI outputs JSON objects separated by newlines, but node-pty may fragment them
    */
   private processBuffer(): void {
-    // Clean ANSI codes and carriage returns from buffer
-    /* eslint-disable no-control-regex */
-    this.buffer = this.buffer.replace(
-      /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]|\r/g,
-      ''
-    );
-    /* eslint-enable no-control-regex */
-
     // Process complete JSON objects
     // eslint-disable-next-line no-constant-condition
     while (true) {

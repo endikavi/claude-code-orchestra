@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import {
   useVectorSearchStore,
   getModelInfo,
@@ -16,7 +17,16 @@ export const ModelDownloadPanel: React.FC = () => {
     downloadModel,
     cancelDownload,
     deleteModel,
-  } = useVectorSearchStore();
+  } = useVectorSearchStore(
+    useShallow((s) => ({
+      modelStates: s.modelStates,
+      modelDownloadProgress: s.modelDownloadProgress,
+      fetchModelStatus: s.fetchModelStatus,
+      downloadModel: s.downloadModel,
+      cancelDownload: s.cancelDownload,
+      deleteModel: s.deleteModel,
+    }))
+  );
 
   useEffect(() => {
     fetchModelStatus();
@@ -152,7 +162,7 @@ export const ModelDownloadPanel: React.FC = () => {
                 <div className="mt-2">
                   <div className="w-full bg-neutral-700 rounded-full h-1.5">
                     <div
-                      className="bg-blue-500 h-1.5 rounded-full transition-all"
+                      className="bg-blue-500 h-1.5 rounded-full transition-[width]"
                       style={{ width: `${progress.percentage}%` }}
                     />
                   </div>

@@ -9,6 +9,13 @@ import type {
   SessionImportBatchResult,
 } from '@shared/types';
 
+// Memoization cache for getConversationsByProject
+let _memoConversationsByProject: {
+  projectId: string;
+  conversationsRef: Conversation[];
+  result: Conversation[];
+} | null = null;
+
 interface ConversationState {
   conversations: Conversation[];
   isLoading: boolean;
@@ -156,7 +163,17 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   getConversationsByProject: (projectId) => {
-    return get().conversations.filter((c) => c.projectId === projectId);
+    const { conversations } = get();
+    if (
+      _memoConversationsByProject &&
+      _memoConversationsByProject.projectId === projectId &&
+      _memoConversationsByProject.conversationsRef === conversations
+    ) {
+      return _memoConversationsByProject.result;
+    }
+    const result = conversations.filter((c) => c.projectId === projectId);
+    _memoConversationsByProject = { projectId, conversationsRef: conversations, result };
+    return result;
   },
 
   getConversationById: (id) => {

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Spinner } from '../common/Spinner';
+import { usePolling } from '../../hooks/usePolling';
 import type { RemoteConfig, RemoteServerStatus, RemoteSession } from '@shared/types/remote';
 import type { SslConfig } from '@shared/types/ssl';
+import { ClipboardIcon } from '@renderer/components/icons';
 
 export function RemoteAccessSettings() {
   const { t } = useTranslation();
@@ -86,16 +89,18 @@ export function RemoteAccessSettings() {
 
   useEffect(() => {
     void loadData();
+  }, [loadData]);
 
-    // Poll status every 5 seconds when server is running
-    const interval = setInterval(() => {
-      if (status?.running && window.electronAPI?.remote) {
+  // Poll status every 5 seconds when server is running
+  usePolling(
+    () => {
+      if (window.electronAPI?.remote) {
         void window.electronAPI.remote.getStatus().then(setStatus);
       }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [loadData, status?.running]);
+    },
+    5000,
+    !!status?.running
+  );
 
   const handleSetPassword = async () => {
     if (!password) {
@@ -787,32 +792,5 @@ export function RemoteAccessSettings() {
 }
 
 function LoadingSpinner() {
-  return (
-    <svg
-      className="animate-spin h-4 w-4"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  );
-}
-
-function ClipboardIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-      />
-    </svg>
-  );
+  return <Spinner size="sm" />;
 }

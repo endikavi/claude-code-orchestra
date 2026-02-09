@@ -1,10 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useConversationStore } from '../../stores/conversationStore';
+import { Spinner } from '../common/Spinner';
+import { Skeleton } from '../common/Skeleton';
+import { EmptyState } from '../common/EmptyState';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
-import { ImportSessionsModal } from './ImportSessionsModal';
+
+const ImportSessionsModal = lazy(() =>
+  import('./ImportSessionsModal').then((m) => ({ default: m.ImportSessionsModal }))
+);
 import { getLastAssistantText, truncateText, getLastToolName } from '../../utils/messageUtils';
 import type { Conversation, ConversationStatus, InstanceStatus } from '@shared/types';
 
@@ -23,18 +31,36 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
     availableSessionsCount,
     checkAvailableSessions,
     openConversationViewer,
-  } = useConversationStore();
+  } = useConversationStore(
+    useShallow((s) => ({
+      conversations: s.conversations,
+      loadConversations: s.loadConversations,
+      deleteConversation: s.deleteConversation,
+      isLoading: s.isLoading,
+      availableSessionsCount: s.availableSessionsCount,
+      checkAvailableSessions: s.checkAvailableSessions,
+      openConversationViewer: s.openConversationViewer,
+    }))
+  );
   const {
     resumeConversation,
     getInstanceForConversation,
     getInstanceOutputForConversation,
     getActivity,
-    instances, // For reactivity
-    outputs, // For reactivity
-    activities, // For reactivity
-  } = useInstanceStore();
-  const { getSelectedProject } = useProjectStore();
-  const { viewMode } = useUIStore();
+  } = useInstanceStore(
+    useShallow((s) => ({
+      resumeConversation: s.resumeConversation,
+      getInstanceForConversation: s.getInstanceForConversation,
+      getInstanceOutputForConversation: s.getInstanceOutputForConversation,
+      getActivity: s.getActivity,
+    }))
+  );
+  const { getSelectedProject } = useProjectStore(
+    useShallow((s) => ({
+      getSelectedProject: s.getSelectedProject,
+    }))
+  );
+  const viewMode = useUIStore((s) => s.viewMode);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -209,10 +235,14 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
     return baseLabel;
   };
 
-  // Force re-render when instances, outputs, or activities change
-  void instances;
-  void outputs;
-  void activities;
+  const listParentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: sortedConversations.length,
+    getScrollElement: () => listParentRef.current,
+    estimateSize: () => 120,
+    overscan: 5,
+    gap: 8,
+  });
 
   return (
     <div className="h-full flex flex-col bg-gray-100 dark:bg-neutral-950">
@@ -270,193 +300,204 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
       </div>
 
       {/* Conversation List */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
-          </div>
-        ) : conversations.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-            <svg
-              className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-              />
-            </svg>
-            <p className="text-lg font-medium">{t('conversation.noConversations')}</p>
-            <p className="text-sm mt-1">{t('conversation.startNew')}</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {sortedConversations.map((conversation) => {
+      {isLoading ? (
+        <div className="flex-1 overflow-y-auto p-4">
+          <Skeleton.List count={4} variant="conversation" />
+        </div>
+      ) : conversations.length === 0 ? (
+        <div className="flex-1 overflow-y-auto p-4">
+          <EmptyState
+            icon={
+              <svg
+                className="w-16 h-16 text-gray-300 dark:text-gray-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                />
+              </svg>
+            }
+            title={t('conversation.noConversations')}
+            description={t('conversation.startNew')}
+          />
+        </div>
+      ) : (
+        <div ref={listParentRef} className="flex-1 overflow-y-auto p-4">
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              position: 'relative',
+              width: '100%',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const conversation = sortedConversations[virtualRow.index];
               const activeInstance = getActiveInstanceData(conversation.id);
               return (
                 <div
                   key={conversation.id}
-                  onClick={() => handleConversationClick(conversation)}
-                  onContextMenu={(e) => handleContextMenu(e, conversation)}
-                  className={`p-4 rounded border transition-all ${
-                    activeInstance
-                      ? 'ring-2 ring-sky-500/30 cursor-pointer hover:border-sky-500 hover:shadow-md bg-white dark:bg-neutral-800 border-sky-500/50 dark:border-sky-500/50'
-                      : viewMode === 'structured' || conversation.sessionId
-                        ? 'cursor-pointer hover:border-sky-500 hover:shadow-md bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700'
-                        : 'cursor-not-allowed bg-gray-50 dark:bg-neutral-800/50 border-gray-200 dark:border-neutral-700 opacity-60'
-                  }`}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 dark:text-white truncate">
-                        {activeInstance?.terminalTitle || conversation.title}
-                      </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-1">
-                        {conversation.initialPrompt}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-xs text-gray-400 dark:text-gray-500">
-                        {formatDate(conversation.updatedAt)}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {activeInstance ? (
-                          <>
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                            </span>
-                            <span className="text-xs text-green-600 dark:text-green-400 font-medium">
-                              {t('conversation.liveInstance')}
-                            </span>
-                          </>
-                        ) : (
-                          <span
-                            className={`w-2 h-2 rounded-full ${getStatusColor(conversation.status)}`}
-                            title={getStatusLabel(conversation.status)}
-                          />
-                        )}
-                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">
-                          {conversation.model}
+                  <div
+                    onClick={() => handleConversationClick(conversation)}
+                    onContextMenu={(e) => handleContextMenu(e, conversation)}
+                    className={`p-4 rounded border transition-[color,box-shadow,border-color] ${
+                      activeInstance
+                        ? 'ring-2 ring-sky-500/30 cursor-pointer hover:border-sky-500 hover:shadow-md bg-white dark:bg-neutral-800 border-sky-500/50 dark:border-sky-500/50'
+                        : viewMode === 'structured' || conversation.sessionId
+                          ? 'cursor-pointer hover:border-sky-500 hover:shadow-md bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700'
+                          : 'cursor-not-allowed bg-gray-50 dark:bg-neutral-800/50 border-gray-200 dark:border-neutral-700 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-gray-900 dark:text-white truncate">
+                          {activeInstance?.terminalTitle || conversation.title}
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-1">
+                          {conversation.initialPrompt}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                          {formatDate(conversation.updatedAt)}
                         </span>
+                        <div className="flex items-center gap-2">
+                          {activeInstance ? (
+                            <>
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                              </span>
+                              <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                {t('conversation.liveInstance')}
+                              </span>
+                            </>
+                          ) : (
+                            <span
+                              className={`w-2 h-2 rounded-full ${getStatusColor(conversation.status)}`}
+                              title={getStatusLabel(conversation.status)}
+                            />
+                          )}
+                          <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">
+                            {conversation.model}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Active instance status block with activity timeline */}
-                  {activeInstance && (
-                    <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-sm border border-green-200 dark:border-green-800">
-                      <div className="flex items-center justify-between gap-2 text-xs text-green-700 dark:text-green-300">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <svg
-                            className="w-4 h-4 animate-spin flex-shrink-0"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                          </svg>
-                          <span className="font-medium truncate">
-                            {getStatusWithContext(
-                              activeInstance.status,
-                              activeInstance.lastMessage,
-                              activeInstance.activityTool || activeInstance.lastToolName
-                            )}
-                          </span>
+                    {/* Active instance status block with activity timeline */}
+                    {activeInstance && (
+                      <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-sm border border-green-200 dark:border-green-800">
+                        <div className="flex items-center justify-between gap-2 text-xs text-green-700 dark:text-green-300">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Spinner size="sm" className="flex-shrink-0" />
+                            <span className="font-medium truncate">
+                              {getStatusWithContext(
+                                activeInstance.status,
+                                activeInstance.lastMessage,
+                                activeInstance.activityTool || activeInstance.lastToolName
+                              )}
+                            </span>
+                          </div>
+                          {activeInstance.toolCount > 0 && (
+                            <span className="text-green-600 dark:text-green-400 flex-shrink-0">
+                              {activeInstance.toolCount}{' '}
+                              {t('common.tools', { count: activeInstance.toolCount })}
+                            </span>
+                          )}
                         </div>
-                        {activeInstance.toolCount > 0 && (
-                          <span className="text-green-600 dark:text-green-400 flex-shrink-0">
-                            {activeInstance.toolCount}{' '}
-                            {t('common.tools', { count: activeInstance.toolCount })}
-                          </span>
+                        {/* Recent files activity */}
+                        {activeInstance.recentFiles.length > 0 && (
+                          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+                            <svg
+                              className="w-3.5 h-3.5 flex-shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                              />
+                            </svg>
+                            <span className="truncate">
+                              {activeInstance.recentFiles
+                                .slice(0, 2)
+                                .map((f) => f.split('/').pop())
+                                .join(', ')}
+                              {activeInstance.recentFiles.length > 2 &&
+                                ` +${activeInstance.recentFiles.length - 2}`}
+                            </span>
+                          </div>
                         )}
                       </div>
-                      {/* Recent files activity */}
-                      {activeInstance.recentFiles.length > 0 && (
-                        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
-                          <svg
-                            className="w-3.5 h-3.5 flex-shrink-0"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                            />
-                          </svg>
-                          <span className="truncate">
-                            {activeInstance.recentFiles
-                              .slice(0, 2)
-                              .map((f) => f.split('/').pop())
-                              .join(', ')}
-                            {activeInstance.recentFiles.length > 2 &&
-                              ` +${activeInstance.recentFiles.length - 2}`}
-                          </span>
-                        </div>
+                    )}
+
+                    <div className="flex items-center gap-4 mt-3 text-xs text-gray-400 dark:text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                          />
+                        </svg>
+                        {activeInstance
+                          ? conversation.messageCount + activeInstance.messageCount
+                          : conversation.messageCount}{' '}
+                        {t('common.messages')}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        {formatCost(conversation.totalCostUsd)}
+                      </span>
+                      {!conversation.sessionId && (
+                        <span className="text-yellow-600 dark:text-yellow-500">
+                          {t('conversation.noSession')}
+                        </span>
                       )}
                     </div>
-                  )}
-
-                  <div className="flex items-center gap-4 mt-3 text-xs text-gray-400 dark:text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                        />
-                      </svg>
-                      {activeInstance
-                        ? conversation.messageCount + activeInstance.messageCount
-                        : conversation.messageCount}{' '}
-                      {t('common.messages')}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      {formatCost(conversation.totalCostUsd)}
-                    </span>
-                    {!conversation.sessionId && (
-                      <span className="text-yellow-600 dark:text-yellow-500">
-                        {t('conversation.noSession')}
-                      </span>
-                    )}
                   </div>
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Context Menu */}
       {contextMenu && (
@@ -486,12 +527,14 @@ export function ConversationHistory({ projectId, onNewConversation }: Conversati
 
       {/* Import Sessions Modal */}
       {showImportModal && selectedProject && (
-        <ImportSessionsModal
-          projectId={projectId}
-          projectPath={selectedProject.path}
-          onClose={() => setShowImportModal(false)}
-          onImported={handleImported}
-        />
+        <Suspense fallback={null}>
+          <ImportSessionsModal
+            projectId={projectId}
+            projectPath={selectedProject.path}
+            onClose={() => setShowImportModal(false)}
+            onImported={handleImported}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -23,6 +23,48 @@ import { useUIStore } from './uiStore';
 const MAX_MESSAGES_PER_INSTANCE = 1000;
 const MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
 
+// Terminal query responses that should never be visible to users.
+// DA1/DA2/DA3 (Device Attributes) and CPR (Cursor Position Report) responses
+// cause garbage text like [?1;2c[>0;276;0c when replayed or displayed.
+// eslint-disable-next-line no-control-regex, no-useless-escape
+export const TERMINAL_QUERY_RESPONSE_RE = /\x1b\[[\?>=]\d+(;\d+)*c|\x1b\[\d+(;\d+)*R/g;
+
+export function stripTerminalQueryResponses(data: string): string {
+  return data.replace(TERMINAL_QUERY_RESPONSE_RE, '');
+}
+
+// Memoization caches for frequently-called selectors that filter/search arrays
+let _memoInstancesByProject: {
+  projectId: string;
+  instancesRef: ClaudeInstance[];
+  result: ClaudeInstance[];
+} | null = null;
+
+let _memoSelectedInstance: {
+  selectedId: string | null;
+  instancesRef: ClaudeInstance[];
+  result: ClaudeInstance | undefined;
+} | null = null;
+
+let _memoShellsByProject: {
+  projectId: string;
+  shellsRef: ShellInstance[];
+  result: ShellInstance[];
+} | null = null;
+
+let _memoInstanceForConversation: {
+  conversationId: string;
+  instancesRef: ClaudeInstance[];
+  conversationsSize: number;
+  result: ClaudeInstance | undefined;
+} | null = null;
+
+let _memoPendingPermissionForInstance: {
+  instanceId: string;
+  permissionsSize: number;
+  result: PermissionPromptRequest | undefined;
+} | null = null;
+
 // Activity tracking for timeline
 export interface InstanceActivity {
   lastTool?: string;
@@ -173,6 +215,7 @@ interface InstanceState {
 
   // Shell actions
   createShellInstance: (projectId: string) => Promise<ShellInstance>;
+  addShellInstance: (shell: ShellInstance) => void;
   killShellInstance: (id: string) => Promise<void>;
   removeShellInstance: (id: string) => void;
   sendShellInput: (id: string, input: string) => Promise<void>;
@@ -920,7 +963,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       };
 
       // Append and trim if over limit
-      let rawOutput = existing.rawOutput + data;
+      let rawOutput = existing.rawOutput + stripTerminalQueryResponses(data);
       if (rawOutput.length > MAX_RAW_OUTPUT_SIZE) {
         rawOutput = rawOutput.slice(-MAX_RAW_OUTPUT_SIZE);
       }
@@ -1192,12 +1235,35 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   getInstancesByProject: (projectId) => {
-    return get().instances.filter((inst) => inst.projectId === projectId);
+    const { instances } = get();
+    if (
+      _memoInstancesByProject &&
+      _memoInstancesByProject.projectId === projectId &&
+      _memoInstancesByProject.instancesRef === instances
+    ) {
+      return _memoInstancesByProject.result;
+    }
+    const result = instances.filter((inst) => inst.projectId === projectId);
+    _memoInstancesByProject = { projectId, instancesRef: instances, result };
+    return result;
   },
 
   getSelectedInstance: () => {
     const state = get();
-    return state.instances.find((inst) => inst.id === state.selectedInstanceId);
+    if (
+      _memoSelectedInstance &&
+      _memoSelectedInstance.selectedId === state.selectedInstanceId &&
+      _memoSelectedInstance.instancesRef === state.instances
+    ) {
+      return _memoSelectedInstance.result;
+    }
+    const result = state.instances.find((inst) => inst.id === state.selectedInstanceId);
+    _memoSelectedInstance = {
+      selectedId: state.selectedInstanceId,
+      instancesRef: state.instances,
+      result,
+    };
+    return result;
   },
 
   getInstanceOutput: (id) => {
@@ -1210,12 +1276,28 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   getInstanceForConversation: (conversationId) => {
     const state = get();
+    if (
+      _memoInstanceForConversation &&
+      _memoInstanceForConversation.conversationId === conversationId &&
+      _memoInstanceForConversation.instancesRef === state.instances &&
+      _memoInstanceForConversation.conversationsSize === state.instanceConversations.size
+    ) {
+      return _memoInstanceForConversation.result;
+    }
+    let result: ClaudeInstance | undefined;
     for (const [instanceId, convId] of state.instanceConversations.entries()) {
       if (convId === conversationId) {
-        return state.instances.find((i) => i.id === instanceId);
+        result = state.instances.find((i) => i.id === instanceId);
+        break;
       }
     }
-    return undefined;
+    _memoInstanceForConversation = {
+      conversationId,
+      instancesRef: state.instances,
+      conversationsSize: state.instanceConversations.size,
+      result,
+    };
+    return result;
   },
 
   getInstanceOutputForConversation: (conversationId) => {
@@ -1262,6 +1344,21 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       });
       throw error;
     }
+  },
+
+  addShellInstance: (shell) => {
+    // Avoid duplicates
+    if (get().shellInstances.some((s) => s.id === shell.id)) return;
+
+    const shellOutputs = new Map(get().shellOutputs);
+    shellOutputs.set(shell.id, { shellId: shell.id, rawOutput: '' });
+
+    set((state) => ({
+      shellInstances: [...state.shellInstances, shell],
+      shellOutputs,
+      selectedShellId: shell.id,
+      selectedInstanceId: null,
+    }));
   },
 
   killShellInstance: async (id) => {
@@ -1357,7 +1454,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       };
 
       // Append and trim if over limit
-      let rawOutput = existing.rawOutput + data;
+      let rawOutput = existing.rawOutput + stripTerminalQueryResponses(data);
       if (rawOutput.length > MAX_RAW_OUTPUT_SIZE) {
         rawOutput = rawOutput.slice(-MAX_RAW_OUTPUT_SIZE);
       }
@@ -1386,7 +1483,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   getShellsByProject: (projectId) => {
-    return get().shellInstances.filter((s) => s.projectId === projectId);
+    const { shellInstances } = get();
+    if (
+      _memoShellsByProject &&
+      _memoShellsByProject.projectId === projectId &&
+      _memoShellsByProject.shellsRef === shellInstances
+    ) {
+      return _memoShellsByProject.result;
+    }
+    const result = shellInstances.filter((s) => s.projectId === projectId);
+    _memoShellsByProject = { projectId, shellsRef: shellInstances, result };
+    return result;
   },
 
   getSelectedShell: () => {
@@ -1502,11 +1609,25 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   getPendingPermissionForInstance: (instanceId) => {
     const state = get();
+    if (
+      _memoPendingPermissionForInstance &&
+      _memoPendingPermissionForInstance.instanceId === instanceId &&
+      _memoPendingPermissionForInstance.permissionsSize === state.pendingPermissions.size
+    ) {
+      return _memoPendingPermissionForInstance.result;
+    }
+    let result: PermissionPromptRequest | undefined;
     for (const permission of state.pendingPermissions.values()) {
       if (permission.instanceId === instanceId) {
-        return permission;
+        result = permission;
+        break;
       }
     }
-    return undefined;
+    _memoPendingPermissionForInstance = {
+      instanceId,
+      permissionsSize: state.pendingPermissions.size,
+      result,
+    };
+    return result;
   },
 }));

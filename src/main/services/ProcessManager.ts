@@ -22,6 +22,7 @@ import type { SubagentInstance } from '@shared/types/orchestration';
 import type { TrackedTask } from '@shared/types/tasks';
 import type { TeamSpawnEvent, TeamMessageEvent } from '@shared/types/teams';
 import type { InstanceOutputBuffer } from '@shared/types/remote';
+import { getTmuxPath } from '../utils/tmux';
 
 // Internal buffer type using array for better performance (avoids repeated string concatenation)
 interface InternalOutputBuffer {
@@ -70,6 +71,12 @@ export class ProcessManager extends EventEmitter {
   private pendingInstances: Map<string, PendingInstanceConfig> = new Map(); // instanceId -> config (for deferred flow)
   private dataStore: DataStore;
   private mainWindow: BrowserWindowType | null = null;
+
+  // IPC output batching: collect output events and flush periodically
+  private outputBatchBuffers: Map<string, StreamMessage[]> = new Map(); // instanceId -> pending messages
+  private outputBatchTimers: Map<string, NodeJS.Timeout> = new Map(); // instanceId -> flush timer
+  private static readonly OUTPUT_BATCH_INTERVAL_MS = 50;
+  private static readonly OUTPUT_BATCH_MAX_SIZE = 20;
 
   // Max raw output buffer size (to prevent memory issues)
   private static readonly MAX_RAW_OUTPUT_SIZE = 500000; // 500KB
@@ -552,6 +559,67 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Queue an output message for batched IPC sending.
+   * Messages are flushed after OUTPUT_BATCH_INTERVAL_MS or when batch reaches OUTPUT_BATCH_MAX_SIZE.
+   */
+  private queueOutputForBatch(instanceId: string, message: StreamMessage): void {
+    let batch = this.outputBatchBuffers.get(instanceId);
+    if (!batch) {
+      batch = [];
+      this.outputBatchBuffers.set(instanceId, batch);
+    }
+    batch.push(message);
+
+    // Flush immediately if batch is full
+    if (batch.length >= ProcessManager.OUTPUT_BATCH_MAX_SIZE) {
+      this.flushOutputBatch(instanceId);
+      return;
+    }
+
+    // Schedule flush timer if not already scheduled
+    if (!this.outputBatchTimers.has(instanceId)) {
+      const timer = setTimeout(() => {
+        this.flushOutputBatch(instanceId);
+      }, ProcessManager.OUTPUT_BATCH_INTERVAL_MS);
+      this.outputBatchTimers.set(instanceId, timer);
+    }
+  }
+
+  /**
+   * Flush pending output messages for an instance, broadcasting each to all destinations.
+   */
+  private flushOutputBatch(instanceId: string): void {
+    // Clear timer
+    const timer = this.outputBatchTimers.get(instanceId);
+    if (timer) {
+      clearTimeout(timer);
+      this.outputBatchTimers.delete(instanceId);
+    }
+
+    const batch = this.outputBatchBuffers.get(instanceId);
+    if (!batch || batch.length === 0) return;
+
+    // Clear the buffer before sending to avoid re-entrancy issues
+    this.outputBatchBuffers.set(instanceId, []);
+
+    // Broadcast all buffered messages
+    for (const message of batch) {
+      this.broadcastInstanceEvent('output', instanceId, message);
+    }
+  }
+
+  /**
+   * Flush and clean up all output batch state for an instance (called on exit/kill).
+   */
+  private cleanupOutputBatch(instanceId: string): void {
+    // Flush any remaining messages
+    this.flushOutputBatch(instanceId);
+    // Remove buffers
+    this.outputBatchBuffers.delete(instanceId);
+    this.outputBatchTimers.delete(instanceId);
+  }
+
+  /**
    * Setup event listeners for an instance
    */
   private setupInstanceListeners(instance: ClaudeInstance): void {
@@ -582,8 +650,8 @@ export class ProcessManager extends EventEmitter {
         }
       }
 
-      // Broadcast to all destinations after persistence
-      this.broadcastInstanceEvent('output', instance.id, message);
+      // Queue for batched IPC broadcast (50ms window, max 20 messages)
+      this.queueOutputForBatch(instance.id, message);
     });
 
     instance.on('status', (status: InstanceStatus) => {
@@ -608,6 +676,9 @@ export class ProcessManager extends EventEmitter {
     instance.on('exit', (code: number) => {
       // Capture instance ID before cleanup (in case it's needed after listeners are removed)
       const instanceId = instance.id;
+
+      // Flush any pending batched output before broadcasting exit
+      this.cleanupOutputBatch(instanceId);
 
       // Broadcast to all destinations
       this.broadcastInstanceEvent('exit', instanceId, code);
@@ -910,6 +981,30 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Create a shell instance that attaches to an existing tmux session
+   */
+  createTmuxAttachInstance(
+    projectId: string,
+    workingDirectory: string,
+    sessionName: string
+  ): ShellInstanceType {
+    const tmuxPath = getTmuxPath();
+
+    const shell = new ShellInstance({
+      projectId,
+      projectPath: workingDirectory,
+    });
+
+    this.setupShellListeners(shell);
+    this.shellInstances.set(shell.id, shell);
+    this.shellOutputs.set(shell.id, '');
+
+    shell.startWithCommand(tmuxPath, ['attach-session', '-t', sessionName]);
+
+    return shell.toJSON();
+  }
+
+  /**
    * Setup event listeners for a shell instance
    */
   private setupShellListeners(shell: ShellInstance): void {
@@ -1004,6 +1099,11 @@ export class ProcessManager extends EventEmitter {
    * @param force If true, force kill immediately; if false, use graceful kill
    */
   async killAll(force: boolean = false): Promise<void> {
+    // Flush and clear all output batch state
+    for (const instanceId of this.outputBatchBuffers.keys()) {
+      this.cleanupOutputBatch(instanceId);
+    }
+
     // Cancel all pending cleanup timers
     for (const timer of this.cleanupTimers.values()) {
       clearTimeout(timer);
@@ -1059,6 +1159,9 @@ export class ProcessManager extends EventEmitter {
       clearTimeout(timer);
       this.cleanupTimers.delete(id);
     }
+
+    // Clean up any remaining batch state
+    this.cleanupOutputBatch(id);
 
     this.instances.delete(id);
     this.instanceOutputs.delete(id);

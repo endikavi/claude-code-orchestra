@@ -1,8 +1,23 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNotificationStore } from '../../stores/notificationStore';
+import { Spinner } from '../common/Spinner';
+import { EmptyState } from '../common/EmptyState';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import {
+  BellOffIcon,
+  XIcon,
+  TrashIcon,
+  ShieldIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ExclamationIcon,
+  RefreshIcon,
+  InfoIcon,
+} from '@renderer/components/icons';
 import type { DashboardNotification, NotificationType } from '@shared/types';
 
 interface NotificationPanelProps {
@@ -23,7 +38,19 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
     dismiss,
     deleteNotification,
     clearAll,
-  } = useNotificationStore();
+  } = useNotificationStore(
+    useShallow((s) => ({
+      notifications: s.notifications,
+      stats: s.stats,
+      isLoading: s.isLoading,
+      loadNotifications: s.loadNotifications,
+      markRead: s.markRead,
+      markAllRead: s.markAllRead,
+      dismiss: s.dismiss,
+      deleteNotification: s.deleteNotification,
+      clearAll: s.clearAll,
+    }))
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -63,6 +90,16 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
     };
   }, [isOpen, onClose]);
 
+  const visibleNotifications = notifications.filter((n) => !n.dismissed);
+
+  const notifListRef = useRef<HTMLDivElement>(null);
+  const notifVirtualizer = useVirtualizer({
+    count: visibleNotifications.length,
+    getScrollElement: () => notifListRef.current,
+    estimateSize: () => 72,
+    overscan: 5,
+  });
+
   if (!isOpen) return null;
 
   const handleNotificationClick = async (notification: DashboardNotification) => {
@@ -89,8 +126,6 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
       onClose();
     }
   };
-
-  const visibleNotifications = notifications.filter((n) => !n.dismissed);
 
   return (
     <div
@@ -130,30 +165,52 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
       </div>
 
       {/* Notification list */}
-      <div className="flex-1 overflow-y-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-sky-500" />
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Spinner />
+        </div>
+      ) : visibleNotifications.length === 0 ? (
+        <EmptyState
+          icon={<BellOffIcon className="w-8 h-8 opacity-50" />}
+          title={t('notifications.empty', 'No notifications')}
+          description=""
+        />
+      ) : (
+        <div ref={notifListRef} className="flex-1 overflow-y-auto">
+          <div
+            style={{
+              height: `${notifVirtualizer.getTotalSize()}px`,
+              position: 'relative',
+              width: '100%',
+            }}
+          >
+            {notifVirtualizer.getVirtualItems().map((virtualRow) => {
+              const notification = visibleNotifications[virtualRow.index];
+              return (
+                <div
+                  key={notification.id}
+                  ref={notifVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <NotificationItem
+                    notification={notification}
+                    onClick={() => handleNotificationClick(notification)}
+                    onDismiss={() => dismiss(notification.id)}
+                    onDelete={() => deleteNotification(notification.id)}
+                  />
+                </div>
+              );
+            })}
           </div>
-        ) : visibleNotifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-gray-400">
-            <BellOffIcon className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-sm">{t('notifications.empty', 'No notifications')}</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-sky-600/20 dark:divide-gray-700">
-            {visibleNotifications.map((notification) => (
-              <NotificationItem
-                key={notification.id}
-                notification={notification}
-                onClick={() => handleNotificationClick(notification)}
-                onDismiss={() => dismiss(notification.id)}
-                onDelete={() => deleteNotification(notification.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -284,117 +341,4 @@ function getTimeAgo(timestamp: number): string {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
   return new Date(timestamp).toLocaleDateString();
-}
-
-// Icons
-function BellOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-6-6M9 21h6M13.73 21a2 2 0 01-3.46 0M3 3l18 18"
-      />
-    </svg>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function TrashIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-      />
-    </svg>
-  );
-}
-
-function ShieldIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-      />
-    </svg>
-  );
-}
-
-function CheckCircleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
-}
-
-function ExclamationCircleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
-}
-
-function ExclamationIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-      />
-    </svg>
-  );
-}
-
-function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-      />
-    </svg>
-  );
-}
-
-function InfoIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
 }

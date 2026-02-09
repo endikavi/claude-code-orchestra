@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Spinner } from '../common/Spinner';
 import type { SubagentInstance } from '@shared/types';
 import { useElapsedTime } from '../../contexts/TimerContext';
 
@@ -116,11 +117,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
         return {
           borderColor: 'border-green-300 dark:border-green-600',
           bgColor: 'bg-green-50 dark:bg-green-900/20',
-          statusIcon: (
-            <div className="relative">
-              <div className="animate-spin h-4 w-4 border-2 border-green-500 border-t-transparent rounded-full" />
-            </div>
-          ),
+          statusIcon: <Spinner size="sm" />,
           statusText: t('orchestration.status.running'),
           statusPill: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
         };
@@ -187,7 +184,7 @@ export function SubagentCard({ subagent }: SubagentCardProps) {
   return (
     <div
       className={`
-        rounded border transition-all overflow-hidden
+        rounded border transition-colors overflow-hidden
         ${statusConfig.borderColor} ${statusConfig.bgColor}
       `}
     >

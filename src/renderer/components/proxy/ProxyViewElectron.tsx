@@ -1,59 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useProxyStore } from '../../stores/proxyStore';
 import { ConsolePanel } from './ConsolePanel';
 import { InspectorToolbar } from './InspectorToolbar';
 import { DevToolsContextMenu, useDevToolsContextMenu } from './DevToolsContextMenu';
+import { XIcon, RefreshIcon, ExternalLinkIcon, GlobeIcon } from '@renderer/components/icons';
 import type { ProxyView as ProxyViewType } from '@shared/types';
 import type { ConsoleLevel, ContextMenuAction, ElementInfo } from '@shared/types/devtools';
-
-// Inline icons
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-      />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-      />
-    </svg>
-  );
-}
-
-function GlobeIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-      />
-    </svg>
-  );
-}
 
 interface ProxyViewElectronProps {
   view: ProxyViewType;
@@ -74,7 +28,14 @@ const WEBVIEW_LEVEL_MAP: Record<number, ConsoleLevel> = {
  */
 export function ProxyViewElectron({ view, onClose }: ProxyViewElectronProps) {
   const { t } = useTranslation();
-  const { closeProxyView, addConsoleEntry, getDevToolsState, toggleInspector } = useProxyStore();
+  const { closeProxyView, addConsoleEntry, getDevToolsState, toggleInspector } = useProxyStore(
+    useShallow((s) => ({
+      closeProxyView: s.closeProxyView,
+      addConsoleEntry: s.addConsoleEntry,
+      getDevToolsState: s.getDevToolsState,
+      toggleInspector: s.toggleInspector,
+    }))
+  );
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const [currentPath, setCurrentPath] = useState(view.path);
   const [isLoading, setIsLoading] = useState(true);

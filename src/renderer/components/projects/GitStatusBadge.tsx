@@ -1,6 +1,15 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useGitStore } from '../../stores/gitStore';
+import {
+  GitBranchIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  CheckIcon,
+  EditIcon,
+  QuestionIcon,
+} from '@renderer/components/icons';
 import type { GitStatus } from '@shared/types';
 
 interface GitStatusBadgeProps {
@@ -10,7 +19,13 @@ interface GitStatusBadgeProps {
 
 export function GitStatusBadge({ projectId, compact = false }: GitStatusBadgeProps) {
   const { t } = useTranslation();
-  const { getStatus, fetchStatus, setupListeners } = useGitStore();
+  const { getStatus, fetchStatus, setupListeners } = useGitStore(
+    useShallow((s) => ({
+      getStatus: s.getStatus,
+      fetchStatus: s.fetchStatus,
+      setupListeners: s.setupListeners,
+    }))
+  );
   const status = getStatus(projectId);
 
   // Setup listeners and fetch initial status
@@ -200,75 +215,3 @@ function FullBadge({ status, t }: BadgeProps) {
 }
 
 // Icons
-function GitBranchIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M6 3v12m0 0a3 3 0 103 3m-3-3a3 3 0 01-3 3m12-12a3 3 0 10-3 3m3-3V9m0 6a3 3 0 11-3-3h6"
-      />
-    </svg>
-  );
-}
-
-function ArrowUpIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M5 10l7-7m0 0l7 7m-7-7v18"
-      />
-    </svg>
-  );
-}
-
-function ArrowDownIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M19 14l-7 7m0 0l-7-7m7 7V3"
-      />
-    </svg>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-
-function EditIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-      />
-    </svg>
-  );
-}
-
-function QuestionIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
-}

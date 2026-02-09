@@ -18,6 +18,14 @@ import { useClusterStore } from '../../stores/clusterStore';
 import { ContextMenu } from '../common/ContextMenu';
 import { GitStatusBadge } from './GitStatusBadge';
 import { ProjectSection, SortableProjectItem } from './ProjectSection';
+import {
+  PlayCircleIcon as PlayIcon,
+  EditIcon,
+  TrashIcon,
+  TerminalIcon,
+  SettingsIcon,
+} from '@renderer/components/icons';
+import { Skeleton } from '../common/Skeleton';
 import type { Project } from '@shared/types';
 import type { GlobalProject } from '@shared/types/cluster';
 
@@ -37,12 +45,14 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
     selectedProjectId,
     selectProject,
     deleteProject,
+    isLoading,
   } = useProjectStore(
     useShallow((state) => ({
       projects: state.projects,
       selectedProjectId: state.selectedProjectId,
       selectProject: state.selectProject,
       deleteProject: state.deleteProject,
+      isLoading: state.isLoading,
     }))
   );
   const { getInstancesByProject, createShellInstance, selectShell, selectInstance } =
@@ -265,10 +275,10 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
 
     const projectContent = (
       <div
-        className={`p-2 rounded cursor-pointer transition-all ${
+        className={`p-2 rounded-md cursor-pointer transition-colors ${
           isSelected
-            ? 'bg-gray-200 dark:bg-neutral-800 border border-sky-500/50'
-            : 'bg-white/50 dark:bg-neutral-900 hover:bg-white/70 dark:hover:bg-neutral-750 border border-transparent'
+            ? 'bg-primary-muted dark:bg-neutral-800 border border-primary/50 shadow-sm'
+            : 'bg-white/50 dark:bg-neutral-900 hover:bg-[var(--color-bg-elevated)] dark:hover:bg-neutral-750 border border-transparent'
         }`}
         onClick={() => {
           selectProject(project.id);
@@ -337,6 +347,14 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
   const hasLocalProjects = sortedLocalProjects.length > 0;
   const hasClusterProjects = Object.keys(clusterProjectsByNode).length > 0;
 
+  if (isLoading && !hasLocalProjects && !hasClusterProjects) {
+    return (
+      <div className="p-2">
+        <Skeleton.List count={4} variant="project" />
+      </div>
+    );
+  }
+
   if (!hasLocalProjects && !hasClusterProjects) {
     return (
       <div className="p-4 text-center text-gray-500 dark:text-gray-500 text-sm">
@@ -392,7 +410,11 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
           y={contextMenu.y}
           onClose={handleCloseContextMenu}
           items={[
-            { label: t('project.newInstance'), onClick: handleNewInstance, icon: <PlayIcon /> },
+            {
+              label: t('project.newInstance'),
+              onClick: handleNewInstance,
+              icon: <PlayIcon className="w-4 h-4" />,
+            },
             // Show terminal in Electron for both local and remote projects
             ...(isElectron
               ? [
@@ -401,7 +423,7 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
                     onClick: () => {
                       void handleOpenTerminal();
                     },
-                    icon: <TerminalIcon />,
+                    icon: <TerminalIcon className="w-4 h-4" />,
                   },
                 ]
               : []),
@@ -411,19 +433,23 @@ export function ProjectList({ onProjectSelect }: ProjectListProps) {
                   {
                     label: t('project.localSettings'),
                     onClick: handleLocalSettings,
-                    icon: <SettingsIcon />,
+                    icon: <SettingsIcon className="w-4 h-4" />,
                   },
                 ]
               : []),
             // Only show edit/delete for local projects
             ...(contextMenu.isLocal
               ? [
-                  { label: t('project.editProject'), onClick: handleEdit, icon: <EditIcon /> },
+                  {
+                    label: t('project.editProject'),
+                    onClick: handleEdit,
+                    icon: <EditIcon className="w-4 h-4" />,
+                  },
                   { type: 'separator' as const },
                   {
                     label: t('project.deleteProject'),
                     onClick: handleDelete,
-                    icon: <TrashIcon />,
+                    icon: <TrashIcon className="w-4 h-4" />,
                     danger: true,
                   },
                 ]
@@ -457,80 +483,3 @@ const StatusDot = React.memo(function StatusDot({ status }: { status: string }) 
     />
   );
 });
-
-function PlayIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
-}
-
-function EditIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-      />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-      />
-    </svg>
-  );
-}
-
-function TerminalIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-      />
-    </svg>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-    </svg>
-  );
-}

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ToolUsageMetric } from '@shared/types';
+import { ChartIcon } from '@renderer/components/icons';
 
 interface ToolUsageChartProps {
   data: ToolUsageMetric[];
@@ -45,12 +46,12 @@ export function ToolUsageChart({ data, maxItems = 10 }: ToolUsageChartProps) {
             <div className="relative h-6 bg-gray-100 dark:bg-neutral-700 rounded-full overflow-hidden">
               {/* Total bar */}
               <div
-                className="absolute inset-y-0 left-0 bg-gray-200 dark:bg-gray-600 transition-all duration-500"
+                className="absolute inset-y-0 left-0 bg-gray-200 dark:bg-gray-600 transition-[width] duration-500"
                 style={{ width: `${percentage}%` }}
               />
               {/* Success portion */}
               <div
-                className="absolute inset-y-0 left-0 bg-green-500/70 dark:bg-green-600/70 transition-all duration-500"
+                className="absolute inset-y-0 left-0 bg-green-500/70 dark:bg-green-600/70 transition-[width] duration-500"
                 style={{ width: `${(percentage * successRate) / 100}%` }}
               />
               {/* Labels */}
@@ -76,17 +77,4 @@ function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms.toFixed(0)}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}m`;
-}
-
-function ChartIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-      />
-    </svg>
-  );
 }

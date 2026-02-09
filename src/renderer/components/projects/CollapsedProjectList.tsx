@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useProjectStore } from '../../stores/projectStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useClusterStore } from '../../stores/clusterStore';
@@ -9,14 +10,36 @@ import type { GlobalProject } from '@shared/types/cluster';
 
 export function CollapsedProjectList() {
   const { t } = useTranslation();
-  const { projects: localProjects, selectedProjectId, selectProject } = useProjectStore();
-  const { getInstancesByProject } = useInstanceStore();
+  const {
+    projects: localProjects,
+    selectedProjectId,
+    selectProject,
+  } = useProjectStore(
+    useShallow((s) => ({
+      projects: s.projects,
+      selectedProjectId: s.selectedProjectId,
+      selectProject: s.selectProject,
+    }))
+  );
+  const getInstancesByProject = useInstanceStore((s) => s.getInstancesByProject);
   const {
     isConnected: clusterConnected,
     globalProjects,
     nodes: connectedNodes,
-  } = useClusterStore();
-  const { projectOrder, collapsedSections, toggleSectionCollapsed } = useUIStore();
+  } = useClusterStore(
+    useShallow((s) => ({
+      isConnected: s.isConnected,
+      globalProjects: s.globalProjects,
+      nodes: s.nodes,
+    }))
+  );
+  const { projectOrder, collapsedSections, toggleSectionCollapsed } = useUIStore(
+    useShallow((s) => ({
+      projectOrder: s.projectOrder,
+      collapsedSections: s.collapsedSections,
+      toggleSectionCollapsed: s.toggleSectionCollapsed,
+    }))
+  );
 
   // Separate and sort projects
   const { sortedLocalProjects, clusterProjectsByNode } = useMemo(() => {
@@ -90,7 +113,7 @@ export function CollapsedProjectList() {
       <div key={project.id} className="relative group">
         <button
           onClick={() => selectProject(project.id)}
-          className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium transition-all ${
+          className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium transition-[transform,box-shadow] ${
             isSelected
               ? 'ring-2 ring-sky-500 ring-offset-2 ring-offset-gray-50 dark:ring-offset-neutral-900'
               : 'hover:scale-105'

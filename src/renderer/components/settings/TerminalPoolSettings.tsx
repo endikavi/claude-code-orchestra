@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Spinner } from '../common/Spinner';
 import type { TerminalPoolConfig, TerminalPoolStats } from '@shared/types/pool';
+import { SpeedIcon, ShieldIcon } from '@renderer/components/icons';
 
 export function TerminalPoolSettings() {
   const { t } = useTranslation();
@@ -63,7 +65,7 @@ export function TerminalPoolSettings() {
   if (loading) {
     return (
       <div className="p-4 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-sky-500"></div>
+        <Spinner />
       </div>
     );
   }
@@ -286,31 +288,5 @@ function StatCard({
       <div className="text-2xl font-bold">{value}</div>
       <div className="text-xs opacity-80">{label}</div>
     </div>
-  );
-}
-
-function SpeedIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M13 10V3L4 14h7v7l9-11h-7z"
-      />
-    </svg>
-  );
-}
-
-function ShieldIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-      />
-    </svg>
   );
 }

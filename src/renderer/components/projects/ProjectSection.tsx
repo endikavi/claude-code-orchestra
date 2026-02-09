@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useUIStore } from '../../stores/uiStore';
@@ -24,7 +25,12 @@ export function ProjectSection({
   badge,
 }: ProjectSectionProps) {
   const { t } = useTranslation();
-  const { collapsedSections, toggleSectionCollapsed } = useUIStore();
+  const { collapsedSections, toggleSectionCollapsed } = useUIStore(
+    useShallow((s) => ({
+      collapsedSections: s.collapsedSections,
+      toggleSectionCollapsed: s.toggleSectionCollapsed,
+    }))
+  );
 
   const isCollapsed =
     sectionId === 'local'
@@ -61,7 +67,7 @@ export function ProjectSection({
 
       {/* Section Content */}
       <div
-        className={`overflow-hidden transition-all duration-200 ease-in-out ${
+        className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-in-out ${
           isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[2000px] opacity-100'
         }`}
       >

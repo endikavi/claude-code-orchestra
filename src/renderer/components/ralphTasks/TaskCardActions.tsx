@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { createPortal } from 'react-dom';
 import { useRalphTaskStore } from '../../stores/ralphTaskStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -9,7 +11,15 @@ interface TaskCardActionsProps {
 }
 
 export function TaskCardActions({ task }: TaskCardActionsProps) {
-  const { startTask, stopTask, moveTask, getTaskPrompt } = useRalphTaskStore();
+  const { t } = useTranslation();
+  const { startTask, stopTask, moveTask, getTaskPrompt } = useRalphTaskStore(
+    useShallow((s) => ({
+      startTask: s.startTask,
+      stopTask: s.stopTask,
+      moveTask: s.moveTask,
+      getTaskPrompt: s.getTaskPrompt,
+    }))
+  );
   const setShowInstanceModal = useUIStore((s) => s.setShowInstanceModal);
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -75,7 +85,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
           onClick={handleMoveToTodo}
           className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
         >
-          Move back to Todo
+          {t('ralphTasks.moveBackToTodo')}
         </button>
       </div>
     );
@@ -101,8 +111,12 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
           />
         </svg>
         <div>
-          <div className="font-medium text-gray-800 dark:text-gray-100">Interactivo</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Mostrar terminal</div>
+          <div className="font-medium text-gray-800 dark:text-gray-100">
+            {t('ralphTasks.interactive')}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {t('ralphTasks.showTerminal')}
+          </div>
         </div>
       </button>
       <button
@@ -123,8 +137,12 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
           />
         </svg>
         <div>
-          <div className="font-medium text-gray-800 dark:text-gray-100">Background</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Ejecutar en segundo plano</div>
+          <div className="font-medium text-gray-800 dark:text-gray-100">
+            {t('ralphTasks.background')}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {t('ralphTasks.runInBackground')}
+          </div>
         </div>
       </button>
       <div className="border-t border-gray-100 dark:border-neutral-700 mt-1 pt-1">
@@ -156,10 +174,10 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
           </svg>
           <div>
             <div className="font-medium text-gray-800 dark:text-gray-100">
-              {copied ? 'Copiado!' : 'Copiar prompt'}
+              {copied ? t('common.copied') : t('ralphTasks.copyPrompt')}
             </div>
             <div className="text-xs text-gray-500 dark:text-gray-400">
-              Copiar y abrir nueva instancia
+              {t('ralphTasks.copyAndOpenNew')}
             </div>
           </div>
         </button>
@@ -212,7 +230,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
           d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
-      {task.status === 'doing' && task.isPaused ? 'Resume' : 'Start'}
+      {task.status === 'doing' && task.isPaused ? t('ralphTasks.resume') : t('ralphTasks.start')}
       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
@@ -254,7 +272,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
                   d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
                 />
               </svg>
-              Stop
+              {t('ralphTasks.stop')}
             </button>
           )}
 
@@ -270,7 +288,7 @@ export function TaskCardActions({ task }: TaskCardActionsProps) {
                 d="M5 13l4 4L19 7"
               />
             </svg>
-            Done
+            {t('common.done')}
           </button>
         </>
       )}

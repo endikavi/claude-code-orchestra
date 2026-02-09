@@ -138,7 +138,11 @@ export class ShellInstance extends EventEmitter {
       this.emit('status', this._status);
 
       this.ptyProcess.onData((data: string) => {
-        this.emit('data', data);
+        // Strip terminal query responses (DA1/DA2/DA3, CPR)
+        /* eslint-disable no-control-regex, no-useless-escape */
+        const clean = data.replace(/\x1b\[[\?>=]\d+(;\d+)*c|\x1b\[\d+(;\d+)*R/g, '');
+        /* eslint-enable no-control-regex, no-useless-escape */
+        if (clean) this.emit('data', clean);
       });
 
       this.ptyProcess.onExit(({ exitCode }) => {
@@ -156,6 +160,50 @@ export class ShellInstance extends EventEmitter {
       this._status = 'error';
       this.emit('status', this._status);
       this.emit('error', error instanceof Error ? error.message : 'Failed to start shell');
+    }
+  }
+
+  /**
+   * Start the shell process with an explicit command and arguments
+   */
+  startWithCommand(command: string, args: string[]): void {
+    try {
+      this.ptyProcess = pty.spawn(command, args, {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 30,
+        cwd: this.projectPath,
+        env: {
+          ...this.getAllowedEnvVars(),
+          TERM: 'xterm-256color',
+        },
+      });
+
+      this._status = 'running';
+      this.emit('status', this._status);
+
+      this.ptyProcess.onData((data: string) => {
+        // Strip terminal query responses (DA1/DA2/DA3, CPR)
+        /* eslint-disable no-control-regex, no-useless-escape */
+        const clean = data.replace(/\x1b\[[\?>=]\d+(;\d+)*c|\x1b\[\d+(;\d+)*R/g, '');
+        /* eslint-enable no-control-regex, no-useless-escape */
+        if (clean) this.emit('data', clean);
+      });
+
+      this.ptyProcess.onExit(({ exitCode }) => {
+        this._hasExited = true;
+
+        if (this._status !== 'killed') {
+          this._status = exitCode === 0 ? 'completed' : 'error';
+        }
+        this.emit('status', this._status);
+        this.emit('exit', exitCode);
+        this.ptyProcess = null;
+      });
+    } catch (error) {
+      this._status = 'error';
+      this.emit('status', this._status);
+      this.emit('error', error instanceof Error ? error.message : 'Failed to start command');
     }
   }
 

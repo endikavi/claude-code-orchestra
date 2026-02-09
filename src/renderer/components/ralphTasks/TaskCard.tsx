@@ -1,14 +1,23 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useRalphTaskStore } from '../../stores/ralphTaskStore';
 import { TaskCardActions } from './TaskCardActions';
 import type { RalphTask } from '@shared/types';
+import { JiraIcon } from '@renderer/components/icons';
 
 interface TaskCardProps {
   task: RalphTask;
 }
 
 export function TaskCard({ task }: TaskCardProps) {
-  const { deleteTask, updateTask } = useRalphTaskStore();
+  const { t } = useTranslation();
+  const { deleteTask, updateTask } = useRalphTaskStore(
+    useShallow((s) => ({
+      deleteTask: s.deleteTask,
+      updateTask: s.updateTask,
+    }))
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(task.name);
   const [editDescription, setEditDescription] = useState(task.description || '');
@@ -36,7 +45,7 @@ export function TaskCard({ task }: TaskCardProps) {
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this task?')) {
+    if (confirm(t('common.confirmDelete'))) {
       await deleteTask(task.id);
     }
   };
@@ -50,7 +59,7 @@ export function TaskCard({ task }: TaskCardProps) {
         ${task.isPaused ? 'border-yellow-400 dark:border-yellow-600' : 'border-gray-200 dark:border-neutral-700'}
         ${task.status === 'doing' && !task.isPaused ? 'ring-2 ring-blue-400' : ''}
         cursor-grab active:cursor-grabbing
-        transition-all hover:shadow-md
+        transition-[color,box-shadow] hover:shadow-md
       `}
     >
       {isEditing ? (
@@ -65,7 +74,7 @@ export function TaskCard({ task }: TaskCardProps) {
           <textarea
             value={editDescription}
             onChange={(e) => setEditDescription(e.target.value)}
-            placeholder="Description (optional)"
+            placeholder={t('ralphTasks.descriptionOptional')}
             className="w-full px-2 py-1 text-sm border rounded dark:bg-neutral-700 dark:border-neutral-600 dark:text-white resize-none"
             rows={2}
           />
@@ -74,13 +83,13 @@ export function TaskCard({ task }: TaskCardProps) {
               onClick={handleCancel}
               className="px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleSave}
               className="px-2 py-1 text-xs bg-sky-500 text-white rounded hover:bg-sky-600"
             >
-              Save
+              {t('common.save')}
             </button>
           </div>
         </div>
@@ -105,7 +114,7 @@ export function TaskCard({ task }: TaskCardProps) {
               <button
                 onClick={() => setIsEditing(true)}
                 className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                title="Edit"
+                title={t('common.edit')}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
@@ -119,7 +128,7 @@ export function TaskCard({ task }: TaskCardProps) {
               <button
                 onClick={handleDelete}
                 className="p-1 text-gray-400 hover:text-red-500"
-                title="Delete"
+                title={t('common.delete')}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
@@ -144,18 +153,18 @@ export function TaskCard({ task }: TaskCardProps) {
           <div className="mt-2 flex items-center gap-2 text-xs">
             {task.loopCount > 0 && (
               <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-neutral-700 rounded text-gray-600 dark:text-gray-400">
-                Loop #{task.loopCount}
+                {t('ralphTasks.loop', { count: task.loopCount })}
               </span>
             )}
             {task.isPaused && (
               <span className="px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 rounded text-yellow-700 dark:text-yellow-400">
-                Paused
+                {t('ralphTasks.paused')}
               </span>
             )}
             {task.status === 'doing' && task.instanceId && !task.isPaused && (
               <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 rounded text-blue-700 dark:text-blue-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
-                Running
+                {t('ralphTasks.running')}
               </span>
             )}
           </div>
@@ -179,18 +188,5 @@ export function TaskCard({ task }: TaskCardProps) {
         </div>
       )}
     </div>
-  );
-}
-
-function JiraIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-      />
-    </svg>
   );
 }

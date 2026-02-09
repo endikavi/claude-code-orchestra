@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useRalphTaskStore } from '../../stores/ralphTaskStore';
 
 interface ProcessAllButtonProps {
@@ -6,7 +8,14 @@ interface ProcessAllButtonProps {
 }
 
 export function ProcessAllButton({ projectId, isProcessing }: ProcessAllButtonProps) {
-  const { processAll, stopAll, getTasksByStatus } = useRalphTaskStore();
+  const { t } = useTranslation();
+  const { processAll, stopAll, getTasksByStatus } = useRalphTaskStore(
+    useShallow((s) => ({
+      processAll: s.processAll,
+      stopAll: s.stopAll,
+      getTasksByStatus: s.getTasksByStatus,
+    }))
+  );
   const todoTasks = getTasksByStatus('todo');
   const hasTodoTasks = todoTasks.length > 0;
 
@@ -38,7 +47,7 @@ export function ProcessAllButton({ projectId, isProcessing }: ProcessAllButtonPr
             d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
           />
         </svg>
-        Stop All
+        {t('ralphTasks.stopAll')}
       </button>
     );
   }
@@ -48,7 +57,11 @@ export function ProcessAllButton({ projectId, isProcessing }: ProcessAllButtonPr
       onClick={handleClick}
       disabled={!hasTodoTasks}
       className="px-3 py-1.5 bg-green-500 text-white rounded text-sm font-medium hover:bg-green-600 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-      title={hasTodoTasks ? `Process ${todoTasks.length} tasks in sequence` : 'No tasks to process'}
+      title={
+        hasTodoTasks
+          ? t('ralphTasks.processTasksHint', { count: todoTasks.length })
+          : t('ralphTasks.noTasksToProcess')
+      }
     >
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -64,7 +77,7 @@ export function ProcessAllButton({ projectId, isProcessing }: ProcessAllButtonPr
           d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
-      Process All ({todoTasks.length})
+      {t('ralphTasks.processAll', { count: todoTasks.length })}
     </button>
   );
 }

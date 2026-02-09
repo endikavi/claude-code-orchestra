@@ -21,7 +21,13 @@
     "add": "Añadir",
     "remove": "Eliminar",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "creating": "Creando...",
+    "sending": "Enviando...",
+    "copied": "¡Copiado!",
+    "enabled": "Habilitado",
+    "disabled": "Deshabilitado",
+    "confirmDelete": "¿Estás seguro de que quieres eliminar esta tarea?"
   },
   "titleBar": {
     "title": "Orchestra",
@@ -432,6 +438,52 @@
     "emptyContent": "El contenido no puede estar vacío",
     "format": "Formatear JSON"
   },
+  "errorBoundary": {
+    "title": "Algo salió mal",
+    "description": "Ocurrió un error inesperado. Puedes intentar recargar este componente o refrescar la página.",
+    "errorDetails": "Detalles del error",
+    "tryAgain": "Reintentar",
+    "reloadPage": "Recargar Página"
+  },
+  "config": {
+    "loading": "Cargando configuración...",
+    "notFound": "No se encontró configuración de Claude",
+    "mcpServers": "Servidores MCP",
+    "tools": "Herramientas",
+    "hooks": "Hooks",
+    "noMcpServers": "No hay servidores MCP configurados",
+    "toolsLabel": "Herramientas:",
+    "noTools": "No hay herramientas personalizadas configuradas",
+    "noHooks": "No hay hooks configurados"
+  },
+  "structuredView": {
+    "instance": "Instancia",
+    "model": "Modelo:",
+    "mode": "Modo:",
+    "prompt": "Prompt:",
+    "session": "Sesión:",
+    "tools": "Herramientas:",
+    "duration": "Duración: {{seconds}}s",
+    "thinking": "Pensando...",
+    "messageTypes": {
+      "system": "Sistema",
+      "assistant": "Asistente",
+      "user": "Usuario",
+      "result": "Resultado"
+    }
+  },
+  "status": {
+    "running": "Ejecutando",
+    "completed": "Completado",
+    "error": "Error",
+    "killed": "Eliminado"
+  },
+  "time": {
+    "justNow": "Ahora mismo",
+    "minutesAgo": "hace {{count}}m",
+    "hoursAgo": "hace {{count}}h",
+    "daysAgo": "hace {{count}}d"
+  },
   "structuredChat": {
     "placeholder": "Escribe un mensaje a Claude...",
     "pendingPlaceholder": "Escribe tu primer mensaje para iniciar la conversación...",
@@ -498,7 +550,14 @@
       "previewSounds": "Previsualizar Sonidos",
       "perType": "Configuración por Tipo",
       "perTypeDesc": "Configura las notificaciones para cada tipo de evento",
-      "show": "Mostrar"
+      "show": "Mostrar",
+      "cliSounds": "Sonidos CLI (Hooks)",
+      "cliSoundsDesc": "Instala hooks de sonido globalmente para eventos de Claude CLI (SessionStart, Notification, Stop, etc.)",
+      "installGlobally": "Instalar Globalmente",
+      "uninstallGlobally": "Desinstalar",
+      "globalSoundsInstalled": "Sonidos instalados globalmente",
+      "globalSoundsNotInstalled": "No instalado",
+      "installing": "Instalando..."
     },
     "sounds": {
       "default": "Por defecto",
@@ -641,6 +700,36 @@
       "completed": "Completadas"
     }
   },
+  "ralphTasks": {
+    "newTask": "Nueva Tarea",
+    "name": "Nombre",
+    "namePlaceholder": "ej., Implementar función X",
+    "descriptionOptional": "Descripción (opcional)",
+    "descriptionPlaceholder": "Descripción detallada de lo que se debe hacer...",
+    "createTask": "Crear Tarea",
+    "helpRequested": "Ayuda Solicitada",
+    "claudeNeedsHelp": "Claude necesita ayuda:",
+    "yourResponse": "Tu respuesta:",
+    "responsePlaceholder": "Proporciona orientación o responde la pregunta...",
+    "sendAndResume": "Enviar y Continuar",
+    "moveBackToTodo": "Mover a Pendiente",
+    "interactive": "Interactivo",
+    "showTerminal": "Mostrar terminal",
+    "background": "Segundo plano",
+    "runInBackground": "Ejecutar en segundo plano",
+    "copyPrompt": "Copiar prompt",
+    "copyAndOpenNew": "Copiar y abrir nueva instancia",
+    "stop": "Detener",
+    "start": "Iniciar",
+    "resume": "Reanudar",
+    "running": "Ejecutando",
+    "paused": "Pausado",
+    "loop": "Ciclo #{{count}}",
+    "stopAll": "Detener Todo",
+    "processAll": "Procesar Todo ({{count}})",
+    "processTasksHint": "Procesar {{count}} tareas en secuencia",
+    "noTasksToProcess": "No hay tareas para procesar"
+  },
   "teams": {
     "title": "Equipos",
     "empty": "No se detectaron equipos",
@@ -701,7 +790,14 @@
     "close": "Cerrar",
     "newInstance": "Nueva instancia",
     "newInstancesTerminal": "Nuevas instancias: Vista terminal",
-    "newInstancesStructured": "Nuevas instancias: Vista estructurada"
+    "newInstancesStructured": "Nuevas instancias: Vista estructurada",
+    "newSession": "Nueva sesión",
+    "shell": "Shell",
+    "viewHistory": "Ver historial de conversaciones",
+    "closeInstance": "Cerrar instancia",
+    "closeShell": "Cerrar shell",
+    "closeSplit": "Cerrar división",
+    "preview": "Vista previa :{{port}}"
   },
   "context": {
     "title": "Contexto Compartido",
@@ -775,6 +871,62 @@
       "custom": "Personalizado"
     }
   },
+  "files": {
+    "title": "Archivos",
+    "gitChanges": "Cambios Git",
+    "staged": "Preparados",
+    "modified": "Modificados",
+    "untracked": "Sin seguimiento",
+    "explorer": "Explorador",
+    "noProject": "Selecciona un proyecto para explorar archivos",
+    "diffTitle": "Revisar cambios",
+    "accept": "Aceptar",
+    "reject": "Rechazar",
+    "fileOpened": "Archivo abierto por Claude",
+    "diffApplied": "Cambios aplicados",
+    "diffRejected": "Cambios rechazados",
+    "linesAdded": "líneas añadidas",
+    "linesRemoved": "líneas eliminadas",
+    "open": "Abrir",
+    "rename": "Renombrar",
+    "delete": "Eliminar",
+    "copyPath": "Copiar ruta",
+    "newFile": "Nuevo archivo",
+    "newFolder": "Nueva carpeta",
+    "refresh": "Actualizar",
+    "confirmDelete": "¿Estás seguro de que deseas eliminar \"{{name}}\"?",
+    "confirmDeleteDir": "¿Estás seguro de que deseas eliminar \"{{name}}\" y todo su contenido?",
+    "fileSaved": "Archivo guardado",
+    "fileSaveError": "Error al guardar archivo",
+    "fileReadError": "Error al leer archivo",
+    "fileTooLarge": "El archivo es demasiado grande para mostrarlo",
+    "binaryFile": "No se puede mostrar archivo binario",
+    "unsavedChanges": "Cambios sin guardar",
+    "save": "Guardar",
+    "dontSave": "No guardar",
+    "unsavedChangesMessage": "¿Deseas guardar los cambios en \"{{name}}\"?",
+    "enterFileName": "Ingrese nombre de archivo",
+    "enterFolderName": "Ingrese nombre de carpeta",
+    "pathCopied": "Ruta copiada al portapapeles",
+    "cancel": "Cancelar",
+    "deleteConfirmTitle": "Confirmar eliminación",
+    "filterPlaceholder": "Filtrar archivos...",
+    "noResults": "No hay archivos coincidentes",
+    "clearFilter": "Limpiar filtro"
+  },
+  "toast": {
+    "fileSaved": "Archivo guardado exitosamente",
+    "fileSaveError": "Error al guardar archivo",
+    "pathCopied": "Ruta copiada al portapapeles",
+    "fileCreated": "Archivo creado exitosamente",
+    "fileDeleted": "Archivo eliminado exitosamente",
+    "fileRenamed": "Archivo renombrado exitosamente"
+  },
+  "quickOpen": {
+    "placeholder": "Escribe para buscar archivos...",
+    "noResults": "No se encontraron archivos",
+    "loading": "Cargando archivos..."
+  },
   "permissions": {
     "title": "Reglas de Permisos",
     "description": "Configura reglas de auto-aprobación para el uso de herramientas de Claude",
@@ -813,5 +965,19 @@
     "priorityHelp": "Las reglas de mayor prioridad se evalúan primero",
     "enableRule": "Habilitar esta regla",
     "confirmDeleteRule": "¿Estás seguro de que quieres eliminar esta regla?"
+  },
+  "tmux": {
+    "detectedSessions": "Sesiones tmux detectadas",
+    "orchestraSession": "Orchestra",
+    "attached": "Conectada",
+    "reconnect": "Reconectar",
+    "created": "Creada",
+    "windows": "ventanas"
+  },
+  "activeProjects": {
+    "collapseOtherProjects": "Colapsar otros proyectos",
+    "expandOtherProjects": "Expandir otros proyectos",
+    "switchTo": "Cambiar a {{project}}",
+    "shell": "Shell"
   }
 }
