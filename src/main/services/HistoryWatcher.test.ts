@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
@@ -13,8 +14,12 @@ vi.mock('fs', async (importOriginal) => {
     openSync: vi.fn(),
     readSync: vi.fn(),
     closeSync: vi.fn(),
-    watch: vi.fn(),
+    watch: vi.fn(() => ({ on: vi.fn(), close: vi.fn() })),
     readdirSync: vi.fn(),
+    promises: {
+      ...actual.promises,
+      stat: vi.fn(),
+    },
   };
 });
 
@@ -41,6 +46,9 @@ describe('HistoryWatcher', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: fs.promises.stat rejects (file doesn't exist) and readdirSync returns []
+    vi.mocked(fs.promises.stat).mockRejectedValue(new Error('ENOENT'));
+    vi.mocked(fs.readdirSync).mockReturnValue([]);
     watcher = new HistoryWatcher('/test/project');
   });
 
@@ -138,6 +146,10 @@ describe('HistoryWatcher', () => {
 
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.statSync).mockReturnValue({
+        size: buffer.length,
+      } as fs.Stats);
+      // checkForChanges() uses fs.promises.stat (async)
+      vi.mocked(fs.promises.stat).mockResolvedValue({
         size: buffer.length,
       } as fs.Stats);
       vi.mocked(fs.openSync).mockReturnValue(42); // mock fd

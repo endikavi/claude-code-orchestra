@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDatabase, createMockStatement } from '@/test/mocks/database';
 
@@ -8,7 +9,9 @@ const mockDb = createMockDatabase({
 });
 
 vi.mock('better-sqlite3', () => ({
-  default: vi.fn(() => mockDb),
+  default: vi.fn(function () {
+    return mockDb;
+  }),
 }));
 
 // Mock the paths module

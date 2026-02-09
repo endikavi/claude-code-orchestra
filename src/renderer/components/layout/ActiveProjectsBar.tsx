@@ -143,7 +143,7 @@ export function ActiveProjectsBar() {
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-700 shrink-0">
+    <div className="bg-[var(--color-bg-subtle)] border-b border-[var(--color-border-default)] shrink-0">
       {/* Collapse toggle */}
       <div className="flex items-center h-6 px-1.5">
         <button

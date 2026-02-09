@@ -28,14 +28,14 @@ export function RightSidebar() {
           className="fixed inset-0 bg-black/50 z-40"
           onClick={() => toggleRightPanel(rightPanelMode)}
         />
-        <div className="fixed inset-0 z-50 bg-white dark:bg-neutral-950">{panelContent}</div>
+        <div className="fixed inset-0 z-50 bg-[var(--color-bg-subtle)]">{panelContent}</div>
       </>
     );
   }
 
   // Desktop: inline side panel
   return (
-    <div className="w-80 shrink-0 border-l border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-950/50 overflow-hidden">
+    <div className="w-80 shrink-0 border-l border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] overflow-hidden">
       {panelContent}
     </div>
   );

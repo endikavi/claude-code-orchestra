@@ -325,7 +325,7 @@ export function FilesPanel({ className = '', onClose }: FilesPanelProps) {
   return (
     <div className={`flex flex-col h-full ${className}`}>
       {/* Header */}
-      <div className="sticky top-0 bg-white dark:bg-neutral-950 z-10 px-4 py-3 border-b border-gray-200 dark:border-neutral-700">
+      <div className="sticky top-0 bg-[var(--color-bg-subtle)] z-10 px-4 py-3 border-b border-[var(--color-border-default)]">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
             <svg

@@ -1,4 +1,4 @@
-import type { ITerminalOptions } from 'xterm';
+import type { ITerminalOptions } from '@xterm/xterm';
 
 export interface XtermOptionsFlags {
   /**
@@ -14,19 +14,20 @@ export interface XtermOptionsFlags {
  *
  * Rationale (tmux):
  * - tmux is a terminal multiplexer; it manages its own screen state, scrollback, and redraws.
- * - Enabling convertEol/windowsMode in tmux sessions can cause inconsistent newline handling
+ * - Enabling convertEol in tmux sessions can cause inconsistent newline handling
  *   and visual corruption, especially around redraws/splits.
  * - xterm scrollback duplicates tmux history; however, we keep a local scrollback buffer
  *   so the user can scroll with the mouse wheel (handled via attachCustomWheelEventHandler
  *   in TerminalView to prevent events from being forwarded to tmux/Claude TUI).
+ *
+ * Note: windowsMode was removed in @xterm/xterm v6 (no longer needed).
  */
 export function getXtermTmuxCompatibleOptions(
   flags: XtermOptionsFlags
-): Pick<ITerminalOptions, 'convertEol' | 'windowsMode' | 'scrollback'> {
+): Pick<ITerminalOptions, 'convertEol' | 'scrollback'> {
   if (flags.isTmuxSession) {
     return {
       convertEol: false,
-      windowsMode: false,
       scrollback: 5000,
     };
   }
@@ -34,7 +35,6 @@ export function getXtermTmuxCompatibleOptions(
   return {
     // Keep default behavior for non-tmux shells.
     convertEol: true,
-    windowsMode: false,
     scrollback: 5000,
   };
 }

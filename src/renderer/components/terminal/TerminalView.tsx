@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Terminal, ITheme } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import { WebLinksAddon } from 'xterm-addon-web-links';
+import { Terminal, ITheme } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -14,7 +14,7 @@ import { Spinner } from '../common/Spinner';
 import { sharedResizeObserver } from '../../utils/sharedResizeObserver';
 import { getTerminalFontFamily } from '../../utils/terminalFonts';
 import { getXtermTmuxCompatibleOptions } from '../../utils/xtermOptions';
-import 'xterm/css/xterm.css';
+import '@xterm/xterm/css/xterm.css';
 
 // Terminal themes for dark and light modes
 const darkTerminalTheme: ITheme = {
@@ -299,10 +299,9 @@ export function TerminalView({ instanceId }: TerminalViewProps) {
         cursorBlink: true,
         cursorStyle: 'bar',
         // tmux compatibility:
-        // - convertEol/windowsMode can cause corruption during redraws/splits when tmux is behind the PTY
+        // - convertEol can cause corruption during redraws/splits when tmux is behind the PTY
         // - tmux has its own scrollback/history; duplicating it in xterm is usually undesirable
         convertEol: tmuxOptions.convertEol,
-        windowsMode: tmuxOptions.windowsMode,
         scrollback: tmuxOptions.scrollback,
         allowProposedApi: true,
         scrollOnUserInput: false, // Prevent auto-scroll on input to reduce flicker

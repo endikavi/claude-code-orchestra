@@ -60,5 +60,7 @@ export function createMockDatabase(overrides?: Partial<MockDatabase>): MockDatab
  */
 export function createMockDatabaseModule() {
   const mockDb = createMockDatabase();
-  return vi.fn(() => mockDb);
+  return vi.fn(function () {
+    return mockDb;
+  });
 }

@@ -224,7 +224,7 @@ export function OrchestraView() {
       {/* Main Content - Projects & Instances */}
       <div className="flex flex-col h-full overflow-hidden w-full">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-950 shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] shrink-0">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
               {t('orchestration.orchestraView')}

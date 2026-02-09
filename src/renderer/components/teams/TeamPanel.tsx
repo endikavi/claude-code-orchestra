@@ -25,7 +25,7 @@ export function TeamPanel({ onClose }: TeamPanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-neutral-700 shrink-0">
+      <div className="flex items-center justify-between p-4 border-b border-[var(--color-border-default)] shrink-0">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">{t('teams.title')}</h3>
           {teamCount > 0 && (
