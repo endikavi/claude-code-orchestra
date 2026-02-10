@@ -60,6 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEBUG: electron-builder
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
