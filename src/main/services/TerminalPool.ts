@@ -561,7 +561,6 @@ export class TerminalPool extends EventEmitter {
    * Called when the app is closing
    */
   shutdown(): void {
-    console.log('[TerminalPool] Shutting down...');
     this.shuttingDown = true;
 
     // Clear replenish timer
@@ -592,7 +591,6 @@ export class TerminalPool extends EventEmitter {
     }
     this.pool.clear();
 
-    console.log('[TerminalPool] Shutdown complete');
     this.emit('shutdown');
   }
 

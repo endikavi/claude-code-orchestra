@@ -230,11 +230,11 @@ export function cleanupVectorSearchHandlers(): void {
   mainWindow = null;
 
   // Unload all models to free memory
-  getLlamaService()
-    .unloadAllModels()
-    .catch((error) => {
-      console.error('[VectorSearch] Error unloading models:', error);
-    });
+  try {
+    getLlamaService().unloadAllModels();
+  } catch (error) {
+    console.error('[VectorSearch] Error unloading models:', error);
+  }
 
   // Remove all IPC handlers
   ipcMain.removeHandler(IPC_CHANNELS.VECTOR_MODEL_STATUS);

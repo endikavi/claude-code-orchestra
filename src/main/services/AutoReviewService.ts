@@ -391,9 +391,6 @@ Start now.`;
 
     // Clear pending reviews
     this.pendingReviews.clear();
-
-    // Note: Active reviews will complete on their own
-    console.log('[AutoReviewService] Shutdown complete');
   }
 }
 

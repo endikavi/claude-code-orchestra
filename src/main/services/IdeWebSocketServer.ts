@@ -134,7 +134,6 @@ class IdeWebSocketServer {
 
     this.pendingDiffs.clear();
     this.started = false;
-    console.log('[IdeWS] IDE WebSocket server stopped');
   }
 
   resolveDiff(requestId: string, applied: boolean): void {

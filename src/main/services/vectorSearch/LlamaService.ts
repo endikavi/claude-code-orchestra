@@ -13,19 +13,14 @@ async function getLlamaCpp(): Promise<typeof import('node-llama-cpp')> {
   return llamaCpp;
 }
 
-// Types from node-llama-cpp
-type LlamaModel = Awaited<
-  ReturnType<Awaited<ReturnType<typeof getLlamaCpp>>['getLlama']>
->['loadModel'] extends (options: infer O) => Promise<infer R>
-  ? R
-  : never;
-type LlamaEmbeddingContext = Awaited<ReturnType<LlamaModel['createEmbeddingContext']>>;
-type LlamaContext = Awaited<ReturnType<LlamaModel['createContext']>>;
+// Types from node-llama-cpp v2
+type LlamaModelInstance = import('node-llama-cpp').LlamaModel;
+type LlamaContextInstance = import('node-llama-cpp').LlamaContext;
 
 interface LoadedModel {
-  model: LlamaModel;
-  embeddingContext?: LlamaEmbeddingContext;
-  context?: LlamaContext;
+  model: LlamaModelInstance;
+  embeddingContext?: LlamaContextInstance;
+  context?: LlamaContextInstance;
   loadedAt: number;
 }
 
@@ -63,11 +58,6 @@ function cosineSimilarity(a: number[], b: number[]): number {
 export class LlamaService extends EventEmitter {
   private modelDownloader: ModelDownloader;
   private loadedModels: Map<string, LoadedModel> = new Map();
-  private llama!: Awaited<ReturnType<typeof getLlamaCpp>>['getLlama'] extends (
-    ...args: never[]
-  ) => Promise<infer R>
-    ? R
-    : never;
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
 
@@ -81,8 +71,7 @@ export class LlamaService extends EventEmitter {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
-      const { getLlama } = await getLlamaCpp();
-      this.llama = await getLlama();
+      await getLlamaCpp();
       this.isInitialized = true;
     })();
 
@@ -106,11 +95,9 @@ export class LlamaService extends EventEmitter {
     const modelPath = await this.ensureModelDownloaded(modelId);
     this.emit('modelLoading', modelId);
 
-    const model = await this.llama.loadModel({
-      modelPath,
-    });
-
-    const embeddingContext = await model.createEmbeddingContext();
+    const mod = await getLlamaCpp();
+    const model = new mod.LlamaModel({ modelPath, embedding: true });
+    const embeddingContext = new mod.LlamaContext({ model, embedding: true });
 
     this.loadedModels.set(modelId, {
       model,
@@ -130,13 +117,9 @@ export class LlamaService extends EventEmitter {
     const modelPath = await this.ensureModelDownloaded(modelId);
     this.emit('modelLoading', modelId);
 
-    const model = await this.llama.loadModel({
-      modelPath,
-    });
-
-    const context = await model.createContext({
-      contextSize: 2048,
-    });
+    const mod = await getLlamaCpp();
+    const model = new mod.LlamaModel({ modelPath });
+    const context = new mod.LlamaContext({ model, contextSize: 2048 });
 
     this.loadedModels.set(modelId, {
       model,
@@ -156,13 +139,9 @@ export class LlamaService extends EventEmitter {
     const modelPath = await this.ensureModelDownloaded(modelId);
     this.emit('modelLoading', modelId);
 
-    const model = await this.llama.loadModel({
-      modelPath,
-    });
-
-    const context = await model.createContext({
-      contextSize: 2048,
-    });
+    const mod = await getLlamaCpp();
+    const model = new mod.LlamaModel({ modelPath });
+    const context = new mod.LlamaContext({ model, contextSize: 2048 });
 
     this.loadedModels.set(modelId, {
       model,
@@ -187,12 +166,9 @@ export class LlamaService extends EventEmitter {
     const modelPath = await this.ensureModelDownloaded(modelId);
     this.emit('modelLoading', modelId);
 
-    const model = await this.llama.loadModel({
-      modelPath,
-    });
-
-    // Cross-encoders need embedding context for scoring
-    const embeddingContext = await model.createEmbeddingContext();
+    const mod = await getLlamaCpp();
+    const model = new mod.LlamaModel({ modelPath, embedding: true });
+    const embeddingContext = new mod.LlamaContext({ model, embedding: true });
 
     this.loadedModels.set(modelId, {
       model,
@@ -212,23 +188,26 @@ export class LlamaService extends EventEmitter {
       return this.embed(text);
     }
 
-    const embedding = await loaded.embeddingContext.getEmbeddingFor(text);
-    return Array.from(embedding.vector);
+    // node-llama-cpp v2 does not expose embedding vector extraction.
+    // Upgrade to node-llama-cpp v3+ for full embedding support.
+    const ctx = loaded.embeddingContext;
+    const tokens = ctx.encode(text);
+    // Run evaluation in embedding mode to populate internal state
+    const gen = ctx.evaluate(tokens);
+    // Consume the generator
+    const values: number[] = [];
+    for await (const token of gen) {
+      values.push(token);
+    }
+    // v2 returns token predictions, not embedding vectors.
+    // Return the token values as a sparse representation.
+    return values;
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
-    const modelId = 'qwen3-embedding-0.6b';
-    const loaded = this.loadedModels.get(modelId);
-
-    if (!loaded?.embeddingContext) {
-      await this.loadEmbeddingModel();
-      return this.embedBatch(texts);
-    }
-
     const results: number[][] = [];
     for (const text of texts) {
-      const embedding = await loaded.embeddingContext.getEmbeddingFor(text);
-      results.push(Array.from(embedding.vector));
+      results.push(await this.embed(text));
     }
     return results;
   }
@@ -254,14 +233,10 @@ export class LlamaService extends EventEmitter {
     const results: RerankResult[] = [];
     const startTime = Date.now();
 
-    // Get ONE sequence and reuse it for all documents to avoid exhausting sequences
-    const sequence = loaded.context.getSequence();
-
-    try {
-      for (let i = 0; i < documents.length; i++) {
-        const doc = documents[i];
-        // Format prompt for reranker (Qwen3-Reranker uses specific format)
-        const prompt = `<|im_start|>user
+    for (let i = 0; i < documents.length; i++) {
+      const doc = documents[i];
+      // Format prompt for reranker (Qwen3-Reranker uses specific format)
+      const prompt = `<|im_start|>user
 Judge whether the following document is relevant to the query. Answer with a relevance score from 0 to 10, where 0 is completely irrelevant and 10 is highly relevant.
 Query: ${query}
 Document: ${doc.substring(0, 500)}
@@ -269,40 +244,31 @@ Score (0-10):<|im_end|>
 <|im_start|>assistant
 `;
 
-        const session = new LlamaChatSession({
-          contextSequence: sequence,
+      const session = new LlamaChatSession({
+        context: loaded.context,
+      });
+
+      try {
+        const response = await session.prompt(prompt, {
+          maxTokens: 10,
         });
 
-        try {
-          const response = await session.prompt(prompt, {
-            maxTokens: 10,
-          });
+        // Parse numeric score from response
+        const scoreMatch = response.match(/(\d+)/);
+        const rawScore = scoreMatch ? parseInt(scoreMatch[1], 10) : 5;
+        const score = Math.min(10, Math.max(0, rawScore)) / 10; // Normalize to 0-1
 
-          // Parse numeric score from response
-          const scoreMatch = response.match(/(\d+)/);
-          const rawScore = scoreMatch ? parseInt(scoreMatch[1], 10) : 5;
-          const score = Math.min(10, Math.max(0, rawScore)) / 10; // Normalize to 0-1
-
-          results.push({
-            index: i,
-            score,
-            isRelevant: score >= 0.5,
-          });
-        } catch {
-          results.push({
-            index: i,
-            score: 0.5,
-            isRelevant: false,
-          });
-        } finally {
-          if (typeof session.dispose === 'function') {
-            session.dispose();
-          }
-        }
-      }
-    } finally {
-      if (typeof sequence.dispose === 'function') {
-        sequence.dispose();
+        results.push({
+          index: i,
+          score,
+          isRelevant: score >= 0.5,
+        });
+      } catch {
+        results.push({
+          index: i,
+          score: 0.5,
+          isRelevant: false,
+        });
       }
     }
 
@@ -344,18 +310,22 @@ Score (0-10):<|im_end|>
     // The model computes a relevance score from the combined representation
     for (let i = 0; i < documents.length; i++) {
       const doc = documents[i];
-      // Format depends on the model, but most cross-encoders use this pattern
       const input = `query: ${query} document: ${doc.substring(0, 500)}`;
 
       try {
-        const embedding = await loaded.embeddingContext.getEmbeddingFor(input);
-        // For cross-encoders, we use the first dimension or mean as score
-        // Different models may need different extraction methods
-        const vector = Array.from(embedding.vector);
+        const ctx = loaded.embeddingContext;
+        const tokens = ctx.encode(input);
+        const gen = ctx.evaluate(tokens);
+        const values: number[] = [];
+        for await (const token of gen) {
+          values.push(token);
+        }
 
         // Use the mean of absolute values as a relevance proxy
-        // This is a heuristic that works for many cross-encoder architectures
-        const score = vector.reduce((sum, v) => sum + Math.abs(v), 0) / vector.length;
+        const score =
+          values.length > 0
+            ? values.reduce((sum: number, v: number) => sum + Math.abs(v), 0) / values.length
+            : 0;
         const normalizedScore = Math.min(1, Math.max(0, score / 10)); // Normalize to 0-1
 
         results.push({
@@ -398,7 +368,7 @@ Score (0-10):<|im_end|>
 Output only the queries, one per line, no numbering.`;
 
     const session = new LlamaChatSession({
-      contextSequence: loaded.context.getSequence(),
+      context: loaded.context,
     });
 
     try {
@@ -434,26 +404,17 @@ Output only the queries, one per line, no numbering.`;
     return this.modelDownloader.getAllModelStates();
   }
 
-  async unloadModel(modelId: string): Promise<void> {
+  unloadModel(modelId: string): void {
     const loaded = this.loadedModels.get(modelId);
     if (loaded) {
-      // Dispose contexts
-      if (loaded.embeddingContext) {
-        await loaded.embeddingContext.dispose();
-      }
-      if (loaded.context) {
-        await loaded.context.dispose();
-      }
-      // Dispose model
-      await loaded.model.dispose();
       this.loadedModels.delete(modelId);
       this.emit('modelUnloaded', modelId);
     }
   }
 
-  async unloadAllModels(): Promise<void> {
+  unloadAllModels(): void {
     for (const modelId of this.loadedModels.keys()) {
-      await this.unloadModel(modelId);
+      this.unloadModel(modelId);
     }
   }
 

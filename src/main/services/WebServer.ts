@@ -1600,7 +1600,6 @@ export class WebServer extends EventEmitter {
         this.httpServer.close(() => {
           this.isRunning = false;
           this.httpServer = null;
-          console.log('[WebServer] Stopped');
           this.emit('stopped');
           resolve();
         });

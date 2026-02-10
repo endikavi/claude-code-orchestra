@@ -282,8 +282,6 @@ export class ClusterManager extends EventEmitter {
    * Stop cluster mode
    */
   public async stop(): Promise<void> {
-    console.log('[ClusterManager] Stopping cluster mode');
-
     // Mark as intentional disconnect to prevent reconnection
     this.intentionalDisconnect = true;
 
@@ -327,8 +325,6 @@ export class ClusterManager extends EventEmitter {
     if (!this.serverRunning) return;
 
     return new Promise((resolve) => {
-      console.log('[ClusterManager] Stopping cluster server...');
-
       // Close Socket.io
       if (this.io) {
         void this.io.close();
@@ -338,7 +334,6 @@ export class ClusterManager extends EventEmitter {
       // Close HTTP server
       if (this.httpServer) {
         this.httpServer.close(() => {
-          console.log('[ClusterManager] Cluster server stopped');
           this.httpServer = null;
           this.serverRunning = false;
           resolve();
