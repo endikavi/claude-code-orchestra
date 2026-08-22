@@ -122,7 +122,7 @@ rl.on('close', () => process.exit(0));
  *
  * IMPORTANT: Claude Code hooks are executed as separate processes that do NOT inherit
  * the environment variables from the pty process. Therefore, we cannot rely on
- * CLAUDE_DASHBOARD_INSTANCE_ID or CLAUDE_DASHBOARD_API_URL being available.
+ * CLAUDE_ORCHESTRA_INSTANCE_ID or CLAUDE_ORCHESTRA_API_URL being available.
  *
  * The solution is to embed these values directly in the script when generating it
  * for each instance. This ensures the hook always has the correct values.
@@ -146,7 +146,7 @@ const INSTANCE_ID = '${instanceId}';
 const API_URL = '${apiUrl}';
 
 // Debug logging to file (since stdout is captured by Claude Code)
-const logFile = path.join(process.env.TEMP || '/tmp', 'claude-dashboard-hook.log');
+const logFile = path.join(process.env.TEMP || '/tmp', 'claude-orchestra-hook.log');
 function log(msg) {
   const timestamp = new Date().toISOString();
   fs.appendFileSync(logFile, timestamp + ' ' + msg + '\\n');
@@ -1065,10 +1065,10 @@ export class ClaudeInstance extends EventEmitter {
         CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
         // Dashboard integration environment variables
         // These are used by hook scripts to communicate with the dashboard
-        CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
-        CLAUDE_DASHBOARD_PROJECT_ID: this.projectId,
-        CLAUDE_DASHBOARD_PROJECT_PATH: this.projectPath,
-        CLAUDE_DASHBOARD_API_URL: apiUrl,
+        CLAUDE_ORCHESTRA_INSTANCE_ID: this.id,
+        CLAUDE_ORCHESTRA_PROJECT_ID: this.projectId,
+        CLAUDE_ORCHESTRA_PROJECT_PATH: this.projectPath,
+        CLAUDE_ORCHESTRA_API_URL: apiUrl,
       };
 
       // Add MCP-specific environment variables if enabled
@@ -1233,10 +1233,10 @@ export class ClaudeInstance extends EventEmitter {
 
     // Build environment variables
     const envVars: Record<string, string> = {
-      CLAUDE_DASHBOARD_INSTANCE_ID: this.id,
-      CLAUDE_DASHBOARD_PROJECT_ID: this.projectId,
-      CLAUDE_DASHBOARD_PROJECT_PATH: this.projectPath,
-      CLAUDE_DASHBOARD_API_URL: apiUrl,
+      CLAUDE_ORCHESTRA_INSTANCE_ID: this.id,
+      CLAUDE_ORCHESTRA_PROJECT_ID: this.projectId,
+      CLAUDE_ORCHESTRA_PROJECT_PATH: this.projectPath,
+      CLAUDE_ORCHESTRA_API_URL: apiUrl,
       // Enable reading CLAUDE.md from additional directories (--add-dir)
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
       // Enable experimental agent teams (Teammate tool with spawnTeam)

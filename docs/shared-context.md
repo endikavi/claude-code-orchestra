@@ -182,7 +182,7 @@ Alternative to MCP tools for shell-based access.
 ```bash
 curl -X POST http://localhost:3847/api/hooks/context/publish \
   -H "Content-Type: application/json" \
-  -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \
+  -H "X-Instance-Id: $CLAUDE_ORCHESTRA_INSTANCE_ID" \
   -d '{
     "workStatus": "implementing",
     "currentTask": "Adding user validation",
@@ -192,12 +192,12 @@ curl -X POST http://localhost:3847/api/hooks/context/publish \
 
 ### Get Active Instances
 ```bash
-curl "http://localhost:3847/api/hooks/context/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl "http://localhost:3847/api/hooks/context/instances?projectId=$CLAUDE_ORCHESTRA_PROJECT_ID"
 ```
 
 ### Get Project Knowledge
 ```bash
-curl "http://localhost:3847/api/hooks/context/project?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl "http://localhost:3847/api/hooks/context/project?projectId=$CLAUDE_ORCHESTRA_PROJECT_ID"
 ```
 
 ### Contribute Knowledge
@@ -205,7 +205,7 @@ curl "http://localhost:3847/api/hooks/context/project?projectId=$CLAUDE_DASHBOAR
 # Add a convention
 curl -X POST http://localhost:3847/api/hooks/context/project/contribute \
   -H "Content-Type: application/json" \
-  -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \
+  -H "X-Instance-Id: $CLAUDE_ORCHESTRA_INSTANCE_ID" \
   -d '{
     "convention": {
       "type": "style",
@@ -216,7 +216,7 @@ curl -X POST http://localhost:3847/api/hooks/context/project/contribute \
 # Add a warning
 curl -X POST http://localhost:3847/api/hooks/context/project/contribute \
   -H "Content-Type: application/json" \
-  -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \
+  -H "X-Instance-Id: $CLAUDE_ORCHESTRA_INSTANCE_ID" \
   -d '{
     "warning": {
       "description": "Database migrations must run in sequence",
@@ -227,7 +227,7 @@ curl -X POST http://localhost:3847/api/hooks/context/project/contribute \
 
 ### Get Context Summary
 ```bash
-curl "http://localhost:3847/api/hooks/context/summary?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl "http://localhost:3847/api/hooks/context/summary?projectId=$CLAUDE_ORCHESTRA_PROJECT_ID"
 ```
 
 ## Configuration
@@ -321,7 +321,7 @@ CREATE TABLE project_knowledge (
 ### Knowledge not persisting
 1. Check database write permissions
 2. Verify retention days setting
-3. Check SQLite database location: `~/.claude-dashboard/data.db`
+3. Check SQLite database location: `~/.claude-orchestra/data.db`
 
 ### UI not updating
 1. Check "Show Context Panel" is enabled

@@ -49,7 +49,7 @@ Use the dashboard notification endpoint to report status:
 curl -sk -X POST "${baseUrl}/api/hooks/status" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "instanceId": "'$CLAUDE_DASHBOARD_INSTANCE_ID'",
+    "instanceId": "'$CLAUDE_ORCHESTRA_INSTANCE_ID'",
     "status": "working",
     "message": "Currently implementing feature X",
     "progress": 50
@@ -76,18 +76,18 @@ curl -sk -X POST "${baseUrl}/api/hooks/status" \\
 \`\`\`bash
 # Starting task
 curl -sk -X POST "${baseUrl}/api/hooks/status" \\
-  -d '{"instanceId":"'$CLAUDE_DASHBOARD_INSTANCE_ID'","status":"starting","message":"Beginning implementation"}'
+  -d '{"instanceId":"'$CLAUDE_ORCHESTRA_INSTANCE_ID'","status":"starting","message":"Beginning implementation"}'
 
 # Progress update
 curl -sk -X POST "${baseUrl}/api/hooks/status" \\
-  -d '{"instanceId":"'$CLAUDE_DASHBOARD_INSTANCE_ID'","status":"working","message":"50% complete","progress":50}'
+  -d '{"instanceId":"'$CLAUDE_ORCHESTRA_INSTANCE_ID'","status":"working","message":"50% complete","progress":50}'
 
 # Completion
 curl -sk -X POST "${baseUrl}/api/hooks/status" \\
-  -d '{"instanceId":"'$CLAUDE_DASHBOARD_INSTANCE_ID'","status":"completed","message":"Task finished"}'
+  -d '{"instanceId":"'$CLAUDE_ORCHESTRA_INSTANCE_ID'","status":"completed","message":"Task finished"}'
 \`\`\`
 
-Note: The \`$CLAUDE_DASHBOARD_INSTANCE_ID\` environment variable is automatically set by the dashboard.
+Note: The \`$CLAUDE_ORCHESTRA_INSTANCE_ID\` environment variable is automatically set by the dashboard.
 `,
     },
 
@@ -111,7 +111,7 @@ Before starting complex tasks, you can fetch context from the dashboard to get:
 
 \`\`\`bash
 # Fetch context for current instance
-curl -sk "${baseUrl}/api/hooks/instance/$CLAUDE_DASHBOARD_INSTANCE_ID/context"
+curl -sk "${baseUrl}/api/hooks/instance/$CLAUDE_ORCHESTRA_INSTANCE_ID/context"
 \`\`\`
 
 ## Response Structure
@@ -152,7 +152,7 @@ The endpoint returns JSON with:
 
 \`\`\`bash
 # Get context and extract relevant info
-CONTEXT=$(curl -sk "${baseUrl}/api/hooks/instance/$CLAUDE_DASHBOARD_INSTANCE_ID/context")
+CONTEXT=$(curl -sk "${baseUrl}/api/hooks/instance/$CLAUDE_ORCHESTRA_INSTANCE_ID/context")
 
 # Check if other instances are active
 ACTIVE_COUNT=$(echo "$CONTEXT" | jq '.activeInstances | length')
@@ -182,7 +182,7 @@ Before making significant changes, check if other instances are active:
 
 \`\`\`bash
 # Get list of active instances for the project
-curl -sk "${baseUrl}/api/hooks/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl -sk "${baseUrl}/api/hooks/instances?projectId=$CLAUDE_ORCHESTRA_PROJECT_ID"
 \`\`\`
 
 ## Response
@@ -209,7 +209,7 @@ Check if the file is being modified by another instance:
 
 \`\`\`bash
 FILE_PATH="src/components/Button.tsx"
-RESPONSE=$(curl -sk "${baseUrl}/api/hooks/file-lock?path=$FILE_PATH&projectId=$CLAUDE_DASHBOARD_PROJECT_ID")
+RESPONSE=$(curl -sk "${baseUrl}/api/hooks/file-lock?path=$FILE_PATH&projectId=$CLAUDE_ORCHESTRA_PROJECT_ID")
 LOCKED=$(echo "$RESPONSE" | jq -r '.locked')
 
 if [ "$LOCKED" = "true" ]; then
@@ -225,7 +225,7 @@ When you start modifying important files:
 curl -sk -X POST "${baseUrl}/api/hooks/activity" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "instanceId": "'$CLAUDE_DASHBOARD_INSTANCE_ID'",
+    "instanceId": "'$CLAUDE_ORCHESTRA_INSTANCE_ID'",
     "action": "editing",
     "files": ["src/index.ts"]
   }'
@@ -236,7 +236,7 @@ curl -sk -X POST "${baseUrl}/api/hooks/activity" \\
 Before committing or pushing changes:
 
 \`\`\`bash
-curl -sk "${baseUrl}/api/hooks/conflicts?instanceId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+curl -sk "${baseUrl}/api/hooks/conflicts?instanceId=$CLAUDE_ORCHESTRA_INSTANCE_ID"
 \`\`\`
 
 ## Best Practices
@@ -250,9 +250,9 @@ curl -sk "${baseUrl}/api/hooks/conflicts?instanceId=$CLAUDE_DASHBOARD_INSTANCE_I
 ## Environment Variables
 
 The dashboard automatically sets these environment variables:
-- \`CLAUDE_DASHBOARD_INSTANCE_ID\` - Your unique instance ID
-- \`CLAUDE_DASHBOARD_PROJECT_ID\` - The project you're working on
-- \`CLAUDE_DASHBOARD_API_URL\` - The dashboard API base URL
+- \`CLAUDE_ORCHESTRA_INSTANCE_ID\` - Your unique instance ID
+- \`CLAUDE_ORCHESTRA_PROJECT_ID\` - The project you're working on
+- \`CLAUDE_ORCHESTRA_API_URL\` - The dashboard API base URL
 `,
     },
 
@@ -277,7 +277,7 @@ When you identify subtasks that should be delegated, propose workers:
 curl -sk -X POST "${baseUrl}/api/orchestration/propose" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "directorId": "'$CLAUDE_DASHBOARD_INSTANCE_ID'",
+    "directorId": "'$CLAUDE_ORCHESTRA_INSTANCE_ID'",
     "workers": [
       {
         "task": "Implement the authentication API endpoints",
@@ -306,7 +306,7 @@ Monitor your workers' progress:
 
 \`\`\`bash
 # Get status of all workers
-curl -sk "${baseUrl}/api/orchestration/workers?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+curl -sk "${baseUrl}/api/orchestration/workers?directorId=$CLAUDE_ORCHESTRA_INSTANCE_ID"
 \`\`\`
 
 Response:
@@ -336,7 +336,7 @@ Response:
 Access the results from completed workers:
 
 \`\`\`bash
-curl -sk "${baseUrl}/api/orchestration/context?directorId=$CLAUDE_DASHBOARD_INSTANCE_ID"
+curl -sk "${baseUrl}/api/orchestration/context?directorId=$CLAUDE_ORCHESTRA_INSTANCE_ID"
 \`\`\`
 
 Response includes:
@@ -369,9 +369,9 @@ Response includes:
 ## Environment Variables
 
 The dashboard automatically sets these environment variables:
-- \`CLAUDE_DASHBOARD_INSTANCE_ID\` - Your unique instance ID (use as directorId)
-- \`CLAUDE_DASHBOARD_PROJECT_ID\` - The project you're working on
-- \`CLAUDE_DASHBOARD_API_URL\` - The dashboard API base URL
+- \`CLAUDE_ORCHESTRA_INSTANCE_ID\` - Your unique instance ID (use as directorId)
+- \`CLAUDE_ORCHESTRA_PROJECT_ID\` - The project you're working on
+- \`CLAUDE_ORCHESTRA_API_URL\` - The dashboard API base URL
 `,
     },
 
@@ -417,21 +417,21 @@ Get a human-readable overview of current project state.
 
 \`\`\`bash
 # Check active peers
-curl -k "${baseUrl}/api/hooks/context/instances?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl -k "${baseUrl}/api/hooks/context/instances?projectId=$CLAUDE_ORCHESTRA_PROJECT_ID"
 
 # Publish your context
 curl -k -X POST "${baseUrl}/api/hooks/context/publish" \\
   -H "Content-Type: application/json" \\
-  -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \\
+  -H "X-Instance-Id: $CLAUDE_ORCHESTRA_INSTANCE_ID" \\
   -d '{"workStatus":"implementing","currentTask":"Refactoring auth","currentFiles":["src/auth.ts"]}'
 
 # Get project knowledge
-curl -k "${baseUrl}/api/hooks/context/project?projectId=$CLAUDE_DASHBOARD_PROJECT_ID"
+curl -k "${baseUrl}/api/hooks/context/project?projectId=$CLAUDE_ORCHESTRA_PROJECT_ID"
 
 # Contribute knowledge
 curl -k -X POST "${baseUrl}/api/hooks/context/project/contribute" \\
   -H "Content-Type: application/json" \\
-  -H "X-Instance-Id: $CLAUDE_DASHBOARD_INSTANCE_ID" \\
+  -H "X-Instance-Id: $CLAUDE_ORCHESTRA_INSTANCE_ID" \\
   -d '{"convention":{"type":"naming","description":"Components use PascalCase"}}'
 \`\`\`
 

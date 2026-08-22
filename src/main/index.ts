@@ -15,9 +15,9 @@ import { getIdeWebSocketServer } from './services/IdeWebSocketServer';
 
 // GPU cache configuration for xterm.js WebGL performance
 // By default, we enable GPU caches for better terminal rendering performance
-// Set CLAUDE_DASHBOARD_DISABLE_GPU_CACHE=1 to disable if you experience issues
+// Set CLAUDE_ORCHESTRA_DISABLE_GPU_CACHE=1 to disable if you experience issues
 // (e.g., multiple Electron instances sharing cache, permission issues)
-if (process.env.CLAUDE_DASHBOARD_DISABLE_GPU_CACHE === '1') {
+if (process.env.CLAUDE_ORCHESTRA_DISABLE_GPU_CACHE === '1') {
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
   app.commandLine.appendSwitch('disable-gpu-program-cache');
 }

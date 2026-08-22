@@ -27,7 +27,7 @@ import type { TrackedTeam } from '@shared/types/teams';
 import type { TrackedPlan } from '@shared/types/plans';
 
 // Storage keys
-const TOKEN_KEY = 'claude_dashboard_token';
+const TOKEN_KEY = 'claude_orchestra_token';
 
 // Get the base URL (same origin in production)
 const getBaseUrl = () => {

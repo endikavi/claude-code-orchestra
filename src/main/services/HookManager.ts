@@ -554,7 +554,7 @@ exit 0
       // Build hooks configuration (flat structure - event types at root level)
       // This matches Claude Code's .claude/settings.json format
       const hooksConfig: HooksConfig = {};
-      const instanceIdEnvVar = 'CLAUDE_DASHBOARD_INSTANCE_ID';
+      const instanceIdEnvVar = 'CLAUDE_ORCHESTRA_INSTANCE_ID';
 
       // Get template if specified
       const template = templateId ? HOOK_TEMPLATES[templateId] : null;
