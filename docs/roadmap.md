@@ -1,6 +1,6 @@
 # Orchestra - Roadmap
 
-> **Nota**: Orchestra está actualmente en **beta (0.1.x)**. Las funcionalidades marcadas como completadas están implementadas pero pueden requerir pulido, corrección de bugs y mejoras de UX.
+> **Note**: Orchestra is currently in **beta (0.1.x)**. Features marked as complete are implemented but may require polish, bug fixes, and UX improvements.
 
 ---
 
@@ -44,24 +44,24 @@
 - [x] Standalone web client (React)
 - [x] JWT-based authentication
 - [x] Real-time instance synchronization
-- [ ] 🔧 Mejorar UX del cliente web
-- [ ] 🔧 Optimizar reconexión WebSocket
+- [ ] 🔧 Improve web client UX
+- [ ] 🔧 Optimize WebSocket reconnection
 
 ### Security ✅
 - [x] Password hashing (bcrypt)
 - [x] IP allowlist/denylist
 - [x] Rate limiting and lockouts
 - [x] Audit logging
-- [ ] 🔧 UI para gestión de reglas IP
-- [ ] 🔧 Exportar audit logs
+- [ ] 🔧 UI for IP rule management
+- [ ] 🔧 Export audit logs
 
 ### Multi-Node Cluster ✅
 - [x] Primary/Secondary node architecture
 - [x] Shared secret authentication
 - [x] Cross-node instance visibility
 - [x] Remote instance creation
-- [ ] 🔧 Mejorar manejo de desconexiones
-- [ ] 🔧 UI de estado del cluster
+- [ ] 🔧 Improve disconnection handling
+- [ ] 🔧 Cluster status UI
 
 ---
 
@@ -80,14 +80,14 @@
 - [x] Tool usage statistics
 - [x] Cost breakdown by model/project
 - [x] Session duration tracking
-- [ ] 🔧 Dashboard de métricas visual
-- [ ] 🔧 Exportar reportes
+- [ ] 🔧 Visual metrics dashboard
+- [ ] 🔧 Export reports
 
 ### Git Integration ✅
 - [x] GitStatusManager service
 - [x] Real-time git status tracking
 - [x] MCP tool for git queries
-- [ ] 🔧 Visualización de git status en UI
+- [ ] 🔧 Git status visualization in UI
 
 ---
 
@@ -98,20 +98,20 @@
 - [x] Scan existing Claude sessions
 - [x] Batch import support
 - [x] Conversation persistence
-- [ ] 🔧 UI de importación mejorada
+- [ ] 🔧 Improved import UI
 
 ### Subagent Tracking ✅
 - [x] SubagentTracker service
 - [x] Monitor Task tool spawns
 - [x] Parent-child relationships
-- [ ] 🔧 Visualización de árbol de subagents
+- [ ] 🔧 Subagent tree visualization
 
 ### Integrated Shell ✅
 - [x] ShellInstance service
 - [x] ShellDetector for available shells
 - [x] Cross-platform support (bash, zsh, PowerShell, cmd)
 - [x] Terminal emulation
-- [ ] 🔧 Selección de shell preferido por proyecto
+- [ ] 🔧 Per-project preferred shell selection
 
 ---
 
@@ -122,20 +122,20 @@
 - [x] Hook templates
 - [x] Real-time hook activity
 - [x] Dashboard integration hooks
-- [ ] 🔧 Editor de hooks en UI
-- [ ] 🔧 Más templates predefinidos
+- [ ] 🔧 Hook editor in UI
+- [ ] 🔧 More predefined templates
 
 ### Permission Management ✅
 - [x] PermissionManager service
 - [x] Rule-based permissions
 - [x] Permission logging
-- [ ] 🔧 UI para gestión de reglas
-- [ ] 🔧 Perfiles de permisos predefinidos
+- [ ] 🔧 UI for rule management
+- [ ] 🔧 Predefined permission profiles
 
 ### Skill Management ✅
 - [x] SkillManager service
 - [x] Install/remove skills
-- [ ] 🔧 Catálogo de skills en UI
+- [ ] 🔧 Skills catalog in UI
 - [ ] 🔧 Skill marketplace integration
 
 ---
@@ -147,8 +147,8 @@
 - [x] Token-based authentication
 - [x] Rate limiting
 - [x] Project tools (git_get_status, project_get_info, project_list_instances)
-- [ ] 🔧 Más herramientas MCP
-- [ ] 🔧 UI de configuración MCP
+- [ ] 🔧 More MCP tools
+- [ ] 🔧 MCP configuration UI
 
 ---
 
@@ -172,12 +172,12 @@
 ### Internationalization ✅
 - [x] i18next integration
 - [x] Language detection
-- [ ] 🔧 Completar traducciones
-- [ ] 🔧 Más idiomas
+- [ ] 🔧 Complete translations
+- [ ] 🔧 More languages
 
 ---
 
-## Próximos Pasos (Post-Beta)
+## Next Steps (Post-Beta)
 
 ### Enhanced UX
 - [ ] Project search and filtering
@@ -206,8 +206,8 @@
 
 ---
 
-## Leyenda
+## Legend
 
-- ✅ Implementado (puede requerir pulido)
-- 🔧 Mejora pendiente de funcionalidad existente
-- [ ] No implementado
+- ✅ Implemented (may require polish)
+- 🔧 Pending improvement to existing functionality
+- [ ] Not implemented

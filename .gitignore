@@ -7,8 +7,6 @@ dist-electron/
 release/
 out/
 
-nul
-
 # Vite
 *.local
 

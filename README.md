@@ -1,5 +1,12 @@
 # Orchestra
 
+[![CI](https://github.com/endikavi/claude-code-orchestra/actions/workflows/ci.yml/badge.svg)](https://github.com/endikavi/claude-code-orchestra/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/endikavi/claude-code-orchestra?sort=semver&label=release)](https://github.com/endikavi/claude-code-orchestra/releases)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://github.com/endikavi/claude-code-orchestra/blob/main/LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://github.com/endikavi/claude-code-orchestra/blob/main/tsconfig.json)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/endikavi/claude-code-orchestra/releases)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/endikavi/claude-code-orchestra/blob/main/CONTRIBUTING.md)
+
 A desktop application for managing multiple Claude Code CLI instances across different projects with real-time visualization.
 
 > **Note:** Orchestra is an independent, community-developed project. It is not affiliated with, endorsed by, or officially connected to Anthropic in any way.
@@ -47,54 +54,9 @@ Orchestra includes a standalone web client that connects via WebSocket, enabling
 - **Metrics & Analytics**: Tool usage, session tracking, and cost metrics
 - **Web Proxy & DevTools**: Preview local dev servers with console capture (in progress)
 
-## Feature Availability by Client
+## Feature Availability
 
-| Feature | App (Electron) | CLI (Headless) | Web | TUI | Mobile |
-|---------|:--------------:|:--------------:|:---:|:---:|:------:|
-| **Instance Management** |
-| Create/spawn instances | ✅ | ✅ | ✅ | 📋 | ✅ |
-| Kill instances | ✅ | ✅ | ✅ | 📋 | ✅ |
-| Monitor output | ✅ | ✅ | ✅ | 📋 | ✅ |
-| Shell instances | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Split terminal view | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Cluster & Remote** |
-| Act as primary node | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Connect to remote cluster | ✅ | ❌ | ✅ | 📋 | ✅ |
-| Multi-node clustering | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Global state sync | ✅ | ✅ | ✅ | 📋 | ✅ |
-| **Terminal & Views** |
-| Full xterm.js terminal | ✅ | ❌ | ✅ | ❌ | ⚠️ |
-| Structured card view | ✅ | ❌ | ✅ | 📋 | ✅ |
-| Interactive input | ✅ | ❌ | ✅ | 📋 | ⚠️ |
-| Permission prompts | ✅ | ❌ | ✅ | 📋 | ✅ |
-| **Configuration** |
-| Project management | ✅ | ✅ | ✅ | 📋 | ✅ |
-| Security settings | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Cluster configuration | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Permission rules | ✅ | ✅ | ❌ | ❌ | ❌ |
-| **Advanced Features** |
-| Metrics & analytics | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Audit logging | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Git status integration | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Notifications | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Web proxy preview | ✅ | 🚧 | ❌ | ❌ | ❌ |
-| DevTools inspector | ✅ | 🚧 | ❌ | ❌ | ❌ |
-| Subagent tracking | ✅ | ✅ | ✅ | 📋 | ✅ |
-| Keyboard shortcuts | ✅ | ❌ | ✅ | 📋 | ❌ |
-
-**Legend:**
-- ✅ Available
-- ⚠️ Limited functionality
-- 🚧 In development
-- 📋 Planned (roadmap)
-- ❌ Not available / Not applicable
-
-**Notes:**
-- **App (Electron)**: Full-featured desktop application with all capabilities
-- **CLI (Headless)**: Server-only mode for deployment without GUI, ideal for running as a cluster primary on servers
-- **Web**: Browser-based remote client connecting via WebSocket, view-only for configuration
-- **TUI**: Terminal UI interface (in development), will provide monitoring in terminal environments
-- **Mobile**: Web client accessed from mobile browsers, limited interaction due to screen size and touch input
+See the [full feature availability matrix](./docs/features.md#feature-availability-by-client) for a breakdown of what's supported in each client (Electron app, headless CLI, web, TUI, mobile).
 
 ## Tech Stack
 
@@ -175,6 +137,8 @@ wget -qO- https://raw.githubusercontent.com/endikavi/claude-code-orchestra/main/
 
 **Windows:**
 Download the installer from [GitHub Releases](https://github.com/endikavi/claude-code-orchestra/releases).
+
+> **Note on unsigned builds:** Orchestra is not code-signed yet. On **macOS**, Gatekeeper will block the DMG — right-click the app and select **Open** (or run `xattr -dr com.apple.quarantine /Applications/Orchestra.app`) the first time. On **Windows**, SmartScreen may show an "Unknown publisher" warning — click **More info → Run anyway**. These are expected until the project ships signed builds.
 
 ## Updating
 

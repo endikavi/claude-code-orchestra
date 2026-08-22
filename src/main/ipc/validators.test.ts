@@ -74,12 +74,33 @@ describe('validators.projectCreate', () => {
     expect(() => validators.projectCreate(data)).toThrow('Invalid or potentially unsafe path');
   });
 
-  it('should throw for relative path', () => {
-    // On some systems, this might be valid; skip strict traversal testing
-    // The validator checks for .. patterns after normalization
-    // Just verify it doesn't throw for a valid relative-looking path that's actually valid
-    // The important thing is that obvious traversal patterns are caught
-    expect(true).toBe(true); // Placeholder assertion
+  it('should throw for path traversal patterns', () => {
+    const traversalPaths = [
+      '../etc/passwd',
+      '..\\..\\Windows\\System32',
+      'foo/../../bar',
+      '....//....//etc/passwd',
+    ];
+    for (const p of traversalPaths) {
+      expect(() => validators.projectCreate({ name: 'Test', path: p })).toThrow(
+        'Invalid or potentially unsafe path'
+      );
+    }
+  });
+
+  it('should normalize same-drive traversal without escaping the drive', () => {
+    // On Windows, C:\projects\..\..\secret normalizes to C:\secret (same drive,
+    // cannot escape the filesystem root). The validator accepts it because the
+    // normalized path no longer contains a '..' segment.
+    const data = { name: 'Test', path: 'C:\\projects\\..\\..\\secret' };
+    const result = validators.projectCreate(data);
+    expect(result.path).toBe('C:\\projects\\..\\..\\secret');
+  });
+
+  it('should accept a safe absolute path', () => {
+    const data = { name: 'Test', path: 'C:\\projects\\safe' };
+    const result = validators.projectCreate(data);
+    expect(result.path).toBe('C:\\projects\\safe');
   });
 
   it('should throw for empty path', () => {

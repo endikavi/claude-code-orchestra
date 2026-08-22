@@ -1,5 +1,54 @@
 # Orchestra - Features
 
+## Feature Availability by Client
+
+| Feature | App (Electron) | CLI (Headless) | Web | TUI | Mobile |
+|---------|:--------------:|:--------------:|:---:|:---:|:------:|
+| **Instance Management** |
+| Create/spawn instances | ✅ | ✅ | ✅ | 📋 | ✅ |
+| Kill instances | ✅ | ✅ | ✅ | 📋 | ✅ |
+| Monitor output | ✅ | ✅ | ✅ | 📋 | ✅ |
+| Shell instances | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Split terminal view | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Cluster & Remote** |
+| Act as primary node | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Connect to remote cluster | ✅ | ❌ | ✅ | 📋 | ✅ |
+| Multi-node clustering | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Global state sync | ✅ | ✅ | ✅ | 📋 | ✅ |
+| **Terminal & Views** |
+| Full xterm.js terminal | ✅ | ❌ | ✅ | ❌ | ⚠️ |
+| Structured card view | ✅ | ❌ | ✅ | 📋 | ✅ |
+| Interactive input | ✅ | ❌ | ✅ | 📋 | ⚠️ |
+| Permission prompts | ✅ | ❌ | ✅ | 📋 | ✅ |
+| **Configuration** |
+| Project management | ✅ | ✅ | ✅ | 📋 | ✅ |
+| Security settings | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Cluster configuration | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Permission rules | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Advanced Features** |
+| Metrics & analytics | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Audit logging | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Git status integration | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Notifications | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Web proxy preview | ✅ | 🚧 | ❌ | ❌ | ❌ |
+| DevTools inspector | ✅ | 🚧 | ❌ | ❌ | ❌ |
+| Subagent tracking | ✅ | ✅ | ✅ | 📋 | ✅ |
+| Keyboard shortcuts | ✅ | ❌ | ✅ | 📋 | ❌ |
+
+**Legend:**
+- ✅ Available
+- ⚠️ Limited functionality
+- 🚧 In development
+- 📋 Planned (roadmap)
+- ❌ Not available / Not applicable
+
+**Notes:**
+- **App (Electron)**: Full-featured desktop application with all capabilities
+- **CLI (Headless)**: Server-only mode for deployment without GUI, ideal for running as a cluster primary on servers
+- **Web**: Browser-based remote client connecting via WebSocket, view-only for configuration
+- **TUI**: Terminal UI interface (in development), will provide monitoring in terminal environments
+- **Mobile**: Web client accessed from mobile browsers, limited interaction due to screen size and touch input
+
 ## Core Features
 
 ### Project Management
